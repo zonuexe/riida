@@ -1,0 +1,7 @@
+.direnv/
+result
+node_modules/
+target/
+dist/
+data/*.db
+data/*.db-*

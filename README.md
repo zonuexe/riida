@@ -21,16 +21,25 @@ direnv allow
 - `sqlite`
 - `pkg-config`
 
-## Assumed MVP
+## Bootstrap the app
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' develop
+npm install
+npm run tauri dev
+```
+
+## MVP
 
 - Watch `/Users/megurine/Dropbox/EBook/`
-- Index PDF files into SQLite
-- Show the library in a Tauri app
+- Index PDF files into SQLite at `data/app.db`
+- Show the library in a Tauri desktop app
 - Open a selected PDF and persist the last reading page
 
 ## Suggested next commands
 
 ```bash
 nix develop
-cargo install create-tauri-app
+npm install
+npm run tauri dev
 ```

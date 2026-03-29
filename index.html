@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>riida</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <main class="app-shell">
+      <section class="hero">
+        <p class="eyebrow">Local PDF Library</p>
+        <h1>Dropbox 配下の PDF を、自動で棚に並べる。</h1>
+        <p class="lede">
+          riida は Tauri と Rust で組み立てる、ローカルファイル中心の蔵書管理アプリです。
+          最初の目標は、Dropbox の電子書籍フォルダを走査して、本棚一覧と読書位置保存の土台を作ることです。
+        </p>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel">
+          <h2>監視対象</h2>
+          <p id="watch-root">Rust 側から設定を読み込み中...</p>
+          <p class="panel-note" id="scan-status">起動時スキャンを実行しています...</p>
+        </article>
+        <article class="panel">
+          <h2>現在の蔵書数</h2>
+          <p class="stat" id="indexed-count">0</p>
+        </article>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel">
+          <h2>最近取り込んだ本</h2>
+          <ul class="books" id="recent-books">
+            <li>読み込み中...</li>
+          </ul>
+        </article>
+        <article class="panel">
+          <h2>今のマイルストーン</h2>
+          <ul class="milestones">
+            <li>PDF ファイルを起動時に再帰スキャンする</li>
+            <li>SQLite に蔵書メタデータを保存する</li>
+            <li>本棚一覧から選んだ本をビューアで開く</li>
+            <li>最終閲覧ページを保存する</li>
+          </ul>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

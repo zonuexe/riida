@@ -31,6 +31,40 @@ function run(command, args, cwd = rootDir) {
   return result.stdout;
 }
 
+function runWithResult(command, args, cwd = rootDir) {
+  return spawnSync(command, args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    maxBuffer: 128 * 1024 * 1024,
+  });
+}
+
+function cargoMetadata(target, { offline }) {
+  const args = [
+    "metadata",
+    "--manifest-path",
+    "src-tauri/Cargo.toml",
+    "--format-version",
+    "1",
+    "--filter-platform",
+    target,
+  ];
+
+  if (offline) {
+    args.push("--offline");
+  }
+
+  const result = runWithResult("cargo", args, rootDir);
+  if (result.status !== 0) {
+    const error = new Error(result.stderr.trim() || `cargo ${args.join(" ")} failed`);
+    error.stderr = result.stderr ?? "";
+    throw error;
+  }
+
+  return JSON.parse(result.stdout);
+}
+
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
@@ -163,18 +197,22 @@ function collectRustPackages() {
   const packages = new Map();
 
   for (const target of rustTargets) {
-    const metadata = JSON.parse(
-      run("cargo", [
-        "metadata",
-        "--manifest-path",
-        "src-tauri/Cargo.toml",
-        "--format-version",
-        "1",
-        "--offline",
-        "--filter-platform",
-        target,
-      ]),
-    );
+    let metadata;
+    try {
+      metadata = cargoMetadata(target, { offline: true });
+    } catch (error) {
+      const stderr = typeof error?.stderr === "string" ? error.stderr : "";
+      const needsOnlineRetry =
+        stderr.includes("you're using offline mode") ||
+        stderr.includes("no matching package named") ||
+        stderr.includes("failed to download");
+
+      if (!needsOnlineRetry) {
+        throw error;
+      }
+
+      metadata = cargoMetadata(target, { offline: false });
+    }
 
     for (const pkg of metadata.packages.filter((candidate) => candidate.source)) {
       if (packages.has(pkg.id)) {

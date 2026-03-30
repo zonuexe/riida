@@ -410,6 +410,37 @@ function getVisualPageOrder(group: number[]) {
   return [...group].reverse();
 }
 
+function buildPrioritizedGroupOrder(pageGroups: number[][], targetPage: number | null) {
+  if (!targetPage) {
+    return pageGroups.map((_, index) => index);
+  }
+
+  const targetGroupIndex = pageGroups.findIndex((group) => group.includes(targetPage));
+  if (targetGroupIndex < 0) {
+    return pageGroups.map((_, index) => index);
+  }
+
+  return pageGroups
+    .map((group, index) => ({
+      index,
+      distance: Math.abs(index - targetGroupIndex),
+      startsAfterTarget: index > targetGroupIndex ? 1 : 0,
+      firstPage: group[0] ?? 0,
+    }))
+    .sort((left, right) => {
+      if (left.distance !== right.distance) {
+        return left.distance - right.distance;
+      }
+
+      if (left.startsAfterTarget !== right.startsAfterTarget) {
+        return left.startsAfterTarget - right.startsAfterTarget;
+      }
+
+      return left.firstPage - right.firstPage;
+    })
+    .map((item) => item.index);
+}
+
 function normalizeSearchText(value: string) {
   return value
     .normalize("NFKC")
@@ -1309,11 +1340,17 @@ async function renderCurrentPage() {
       pdfjsViewerEl.innerHTML = "";
       const pageGroups = buildPageGroups(pdfDocument.numPages);
       const restoreTargetPage = activeReadingPosition?.pageNumber ?? null;
+      const prioritizedGroupOrder = buildPrioritizedGroupOrder(pageGroups, restoreTargetPage);
       const pageGap = viewerSettings.pageMode === "spread" ? 6 : 0;
       const viewerWidth = Math.max(pdfjsViewerEl.clientWidth, 720);
       const viewerHeight = Math.max(pdfjsViewerEl.clientHeight, 600);
       const maxColumns = viewerSettings.pageMode === "spread" ? 2 : 1;
       const availableWidth = viewerWidth - pageGap * (maxColumns - 1) - 32;
+      const renderPlans: Array<{
+        visualOrder: number[];
+        pageSlots: Map<number, HTMLElement>;
+        baseScale: number;
+      }> = [];
 
       for (const group of pageGroups) {
         const visualOrder = getVisualPageOrder(group);
@@ -1341,15 +1378,38 @@ async function renderCurrentPage() {
 
         pdfjsViewerEl.style.setProperty("--scale-factor", String(baseScale));
 
+        const pageSlots = new Map<number, HTMLElement>();
         for (const pageNumber of visualOrder) {
-        const page = await pdfDocument.getPage(pageNumber);
-          const viewport = page.getViewport({ scale: baseScale });
-
+          const estimatedViewport = (await pdfDocument.getPage(pageNumber)).getViewport({ scale: baseScale });
           const pageEl = document.createElement("section");
           pageEl.className = "pdfjs-page page";
           pageEl.dataset.pageNumber = String(pageNumber);
+          pageEl.style.width = `${estimatedViewport.width}px`;
+          pageEl.style.height = `${estimatedViewport.height}px`;
+          spreadEl.appendChild(pageEl);
+          pageSlots.set(pageNumber, pageEl);
+        }
+
+        renderPlans.push({ visualOrder, pageSlots, baseScale });
+      }
+
+      for (const groupIndex of prioritizedGroupOrder) {
+        const plan = renderPlans[groupIndex];
+        if (!plan) {
+          continue;
+        }
+
+        for (const pageNumber of plan.visualOrder) {
+          const pageEl = plan.pageSlots.get(pageNumber);
+          if (!pageEl || pageEl.dataset.rendered === "true") {
+            continue;
+          }
+
+          const page = await pdfDocument.getPage(pageNumber);
+          const viewport = page.getViewport({ scale: plan.baseScale });
           pageEl.style.width = `${viewport.width}px`;
           pageEl.style.height = `${viewport.height}px`;
+          pageEl.innerHTML = "";
 
           const canvasWrapperEl = document.createElement("div");
           canvasWrapperEl.className = "canvasWrapper";
@@ -1369,7 +1429,6 @@ async function renderCurrentPage() {
           const linkLayerEl = document.createElement("div");
           linkLayerEl.className = "annotationLayer";
           pageEl.appendChild(linkLayerEl);
-          spreadEl.appendChild(pageEl);
 
           const context = canvas.getContext("2d");
           if (!context) {
@@ -1393,6 +1452,7 @@ async function renderCurrentPage() {
 
           const annotations = await page.getAnnotations();
           renderPdfJsLinks(linkLayerEl, viewport, annotations as Array<Record<string, unknown>>);
+          pageEl.dataset.rendered = "true";
 
           if (restoreTargetPage === pageNumber) {
             scheduleReadingPositionRestore();

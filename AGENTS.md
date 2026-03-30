@@ -73,7 +73,6 @@ library_roots = ["~/Documents/Ebooks/"]
 excluded_dir_names = ["backup"]
 excluded_file_suffixes = [".bak"]
 pdf_renderer = "pdfjs"
-#debug_open_page = 120
 ```
 
 Important fields:
@@ -82,9 +81,6 @@ Important fields:
 - `excluded_dir_names`: exact directory names to ignore
 - `excluded_file_suffixes`: filename suffixes to ignore
 - `pdf_renderer`: `"pdfjs"` or `"native"`
-- `debug_open_page`: development-only override for forced page jump testing
-
-`debug_open_page` should be treated as a diagnostic switch, not a stable user feature.
 
 ## PDF Viewer Notes
 
@@ -104,7 +100,6 @@ The `pdfjs` path currently includes:
 
 If you touch rendering order or page DOM structure, manually re-check:
 
-- jump via `debug_open_page`
 - restore after changing viewer settings
 - restore after reopening a file
 - restore after back/forward navigation

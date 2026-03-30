@@ -22,7 +22,6 @@ type LibrarySnapshot = {
   excludedDirNames: string[];
   excludedFileSuffixes: string[];
   pdfRenderer: "native" | "pdfjs";
-  debugOpenPage?: number | null;
 };
 
 type NoteDocument = {
@@ -56,7 +55,6 @@ type AppConfigPayload = {
   excludedDirNames: string[];
   excludedFileSuffixes: string[];
   pdfRenderer: "native" | "pdfjs";
-  debugOpenPage?: number | null;
 };
 
 type ViewerSettings = {
@@ -1437,25 +1435,9 @@ async function loadReadingPositionForCurrentBook() {
       (await invoke<ReadingPosition | null>("load_reading_position", {
         filePath: currentBook.filePath,
       }));
-    if (lastSnapshot?.debugOpenPage) {
-      activeReadingPosition = {
-        filePath: currentBook.filePath,
-        pageNumber: lastSnapshot.debugOpenPage,
-        pageOffsetRatio: 0,
-        updatedAt: null,
-      };
-    }
     cacheReadingPosition(activeReadingPosition);
   } catch (error) {
     activeReadingPosition = loadCachedReadingPosition(currentBook.filePath);
-    if (lastSnapshot?.debugOpenPage) {
-      activeReadingPosition = {
-        filePath: currentBook.filePath,
-        pageNumber: lastSnapshot.debugOpenPage,
-        pageOffsetRatio: 0,
-        updatedAt: null,
-      };
-    }
     console.error("Failed to load reading position:", error);
   }
 }
@@ -1505,22 +1487,6 @@ function scheduleReadingPositionRestore() {
   };
 
   window.requestAnimationFrame(run);
-}
-
-function ensureDebugOpenPagePosition() {
-  const currentBook = viewerState.currentBook;
-  const debugOpenPage = lastSnapshot?.debugOpenPage;
-
-  if (!currentBook || !debugOpenPage) {
-    return;
-  }
-
-  activeReadingPosition = {
-    filePath: currentBook.filePath,
-    pageNumber: debugOpenPage,
-    pageOffsetRatio: 0,
-    updatedAt: null,
-  };
 }
 
 function navigateBack() {
@@ -1602,7 +1568,6 @@ async function renderCurrentPage() {
         return;
       }
 
-      ensureDebugOpenPagePosition();
       pdfjsViewerEl.innerHTML = "";
       const pageGroups = buildPageGroups(pdfDocument.numPages);
       const restoreTargetPage = activeReadingPosition?.pageNumber ?? null;
@@ -1729,7 +1694,6 @@ async function renderCurrentPage() {
           }
         }
       }
-      ensureDebugOpenPagePosition();
       scheduleReadingPositionRestore();
     } catch (error) {
       pdfjsViewerEl.innerHTML = "";
@@ -1748,7 +1712,6 @@ async function renderCurrentPage() {
   pdfjsViewerEl.dataset.filePath = "";
   frame.hidden = false;
   frame.dataset.filePath = viewerState.currentBook.filePath;
-  ensureDebugOpenPagePosition();
   frame.src = activeReadingPosition?.pageNumber
     ? `${sourceUrl}#page=${activeReadingPosition.pageNumber}`
     : sourceUrl;
@@ -2180,7 +2143,6 @@ window.addEventListener("DOMContentLoaded", async () => {
         excludedDirNames: lastAppConfig?.excludedDirNames ?? [],
         excludedFileSuffixes: lastAppConfig?.excludedFileSuffixes ?? [],
         pdfRenderer: lastAppConfig?.pdfRenderer ?? "native",
-        debugOpenPage: lastAppConfig?.debugOpenPage ?? null,
       };
       syncAppSettingsUi();
     } catch (error) {

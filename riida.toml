@@ -2,4 +2,3 @@ library_roots = ["~/Documents/Ebooks/"]
 excluded_dir_names = ["backup"]
 excluded_file_suffixes = [".bak"]
 pdf_renderer = "pdfjs"
-#debug_open_page = 120

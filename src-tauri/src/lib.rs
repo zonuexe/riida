@@ -46,7 +46,6 @@ struct LibrarySnapshot {
     excluded_dir_names: Vec<String>,
     excluded_file_suffixes: Vec<String>,
     pdf_renderer: String,
-    debug_open_page: Option<u32>,
 }
 
 #[derive(Clone)]
@@ -55,7 +54,6 @@ struct AppConfig {
     excluded_dir_names: Vec<String>,
     excluded_file_suffixes: Vec<String>,
     pdf_renderer: String,
-    debug_open_page: Option<u32>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -64,7 +62,6 @@ struct AppConfigFile {
     excluded_dir_names: Option<Vec<String>>,
     excluded_file_suffixes: Option<Vec<String>>,
     pdf_renderer: Option<String>,
-    debug_open_page: Option<u32>,
 }
 
 #[derive(Deserialize)]
@@ -150,7 +147,6 @@ struct AppConfigPayload {
     excluded_dir_names: Vec<String>,
     excluded_file_suffixes: Vec<String>,
     pdf_renderer: String,
-    debug_open_page: Option<u32>,
 }
 
 fn collapse_home_path(path: &str) -> String {
@@ -278,7 +274,6 @@ fn default_config() -> AppConfig {
             .map(|value| value.to_string())
             .collect(),
         pdf_renderer: DEFAULT_PDF_RENDERER.to_string(),
-        debug_open_page: None,
     }
 }
 
@@ -337,7 +332,6 @@ fn load_config() -> Result<AppConfig, String> {
         pdf_renderer: normalize_pdf_renderer(
             file_config.pdf_renderer.unwrap_or(defaults.pdf_renderer),
         ),
-        debug_open_page: file_config.debug_open_page.filter(|value| *value > 0),
     })
 }
 
@@ -361,7 +355,6 @@ fn app_config_to_payload(config: &AppConfig) -> AppConfigPayload {
         excluded_dir_names: config.excluded_dir_names.clone(),
         excluded_file_suffixes: config.excluded_file_suffixes.clone(),
         pdf_renderer: config.pdf_renderer.clone(),
-        debug_open_page: config.debug_open_page,
     }
 }
 
@@ -391,7 +384,6 @@ fn normalize_config_input(config: AppConfigFile) -> AppConfig {
             .filter(|value| !value.is_empty())
             .collect(),
         pdf_renderer: normalize_pdf_renderer(config.pdf_renderer.unwrap_or(defaults.pdf_renderer)),
-        debug_open_page: config.debug_open_page.filter(|value| *value > 0),
     }
 }
 
@@ -401,11 +393,10 @@ fn normalize_gui_config_input(config: AppConfigInput) -> AppConfig {
         excluded_dir_names: Some(config.excluded_dir_names),
         excluded_file_suffixes: Some(config.excluded_file_suffixes),
         pdf_renderer: Some(config.pdf_renderer),
-        debug_open_page: None,
     })
 }
 
-fn save_config_input_file(input: &AppConfigInput, debug_open_page: Option<u32>) -> Result<(), String> {
+fn save_config_input_file(input: &AppConfigInput) -> Result<(), String> {
     let payload = AppConfigFile {
         library_roots: Some(
             input.library_roots
@@ -429,7 +420,6 @@ fn save_config_input_file(input: &AppConfigInput, debug_open_page: Option<u32>) 
                 .collect(),
         ),
         pdf_renderer: Some(normalize_pdf_renderer(input.pdf_renderer.clone())),
-        debug_open_page,
     };
     let serialized = toml::to_string_pretty(&payload).map_err(|error| error.to_string())?;
     fs::write(config_file(), serialized).map_err(|error| error.to_string())
@@ -832,7 +822,6 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
         excluded_dir_names: config.excluded_dir_names.clone(),
         excluded_file_suffixes: config.excluded_file_suffixes.clone(),
         pdf_renderer: config.pdf_renderer.clone(),
-        debug_open_page: config.debug_open_page,
     })
 }
 
@@ -1069,9 +1058,7 @@ fn save_app_config(
     config_state: State<'_, ConfigState>,
     input: AppConfigInput,
 ) -> Result<AppConfigPayload, String> {
-    let mut next_config = normalize_gui_config_input(input);
-    let debug_open_page = lock_config(&config_state)?.debug_open_page;
-    next_config.debug_open_page = debug_open_page;
+    let next_config = normalize_gui_config_input(input);
 
     if next_config.library_roots.is_empty() {
         return Err("at least one library root is required".to_string());
@@ -1086,7 +1073,7 @@ fn save_app_config(
         excluded_dir_names: next_config.excluded_dir_names.clone(),
         excluded_file_suffixes: next_config.excluded_file_suffixes.clone(),
         pdf_renderer: next_config.pdf_renderer.clone(),
-    }, debug_open_page)?;
+    })?;
 
     {
         let mut config = lock_config(&config_state)?;

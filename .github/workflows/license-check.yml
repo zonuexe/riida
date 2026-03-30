@@ -30,8 +30,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          cache-all-crates: true
       - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
+        uses: taiki-e/install-action@cargo-deny
       - name: Check Rust dependency licenses
         run: cargo deny --manifest-path src-tauri/Cargo.toml check --config deny.toml licenses
 

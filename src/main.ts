@@ -149,7 +149,7 @@ const viewerSettings: ViewerSettingsState = {
   ...DEFAULT_VIEWER_SETTINGS,
   globalDraft: { ...DEFAULT_VIEWER_SETTINGS },
   fileDraft: { ...DEFAULT_VIEWER_SETTINGS },
-  scope: "global",
+  scope: "file",
   hasFileOverride: false,
   treatFirstPageAsCover: true,
   isSettingsOpen: false,
@@ -2165,7 +2165,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   appAboutBackdropEl?.addEventListener("click", closeAbout);
 
   viewerSettingsToggleEl?.addEventListener("click", () => {
-    viewerSettings.isSettingsOpen = !viewerSettings.isSettingsOpen;
+    const isOpening = !viewerSettings.isSettingsOpen;
+    viewerSettings.isSettingsOpen = isOpening;
+    if (isOpening) {
+      viewerSettings.scope = "file";
+    }
     syncViewerSettingsUi();
   });
 

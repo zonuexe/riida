@@ -1722,14 +1722,11 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
 function renderMain(snapshot: LibrarySnapshot) {
   const appShellEl = document.querySelector<HTMLElement>(".two-pane");
   const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
-  const statusEl = document.querySelector<HTMLElement>("#scan-status");
   const homeViewEl = document.querySelector<HTMLElement>("#home-view");
   const pdfViewEl = document.querySelector<HTMLElement>("#pdf-view");
   const shelfEl = document.querySelector<HTMLElement>("#book-results");
   const searchInput = document.querySelector<HTMLInputElement>("#library-search");
   const homeCountEl = document.querySelector<HTMLElement>("#indexed-count");
-  const watchRootEl = document.querySelector<HTMLElement>("#watch-root");
-  const excludedRulesEl = document.querySelector<HTMLElement>("#excluded-rules");
 
   const books = visibleBooks(snapshot);
 
@@ -1748,22 +1745,8 @@ function renderMain(snapshot: LibrarySnapshot) {
     searchInput.value = viewerState.searchQuery;
   }
 
-  if (watchRootEl) {
-    watchRootEl.textContent = snapshot.libraryRoots.join(" / ");
-  }
-
-  if (excludedRulesEl) {
-    const dirRules = snapshot.excludedDirNames.map((rule) => `dir:${rule}`);
-    const fileRules = snapshot.excludedFileSuffixes.map((rule) => `file:*${rule}`);
-    excludedRulesEl.textContent = [...dirRules, ...fileRules].join(" / ");
-  }
-
   if (homeCountEl) {
     homeCountEl.textContent = String(snapshot.indexedCount);
-  }
-
-  if (statusEl) {
-    statusEl.textContent = "蔵書一覧は最新です。";
   }
 
   if (viewerState.currentBook) {
@@ -1804,7 +1787,6 @@ function renderApp() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
-  const statusEl = document.querySelector<HTMLElement>("#scan-status");
   const searchInput = document.querySelector<HTMLInputElement>("#library-search");
   const viewerStageEl = currentViewerStage();
   const navBackEl = document.querySelector<HTMLButtonElement>("#nav-back");
@@ -2099,9 +2081,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   await listen<string>("library-watch-error", (event) => {
-    if (statusEl) {
-      statusEl.textContent = `監視エラー: ${event.payload}`;
-    }
+    console.error("library-watch-error", event.payload);
   });
 
   await listen<{ filePath: string; thumbnailPath: string }>("thumbnail-ready", (event) => {
@@ -2154,8 +2134,6 @@ window.addEventListener("DOMContentLoaded", async () => {
       });
     })
     .catch((error) => {
-      if (statusEl) {
-        statusEl.textContent = `起動時スキャンに失敗しました: ${error}`;
-      }
+      console.error("failed to load library snapshot", error);
     });
 });

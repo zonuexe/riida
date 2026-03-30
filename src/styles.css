@@ -69,11 +69,6 @@ body {
   margin-bottom: 24px;
 }
 
-.sidebar-copy {
-  color: rgba(31, 27, 22, 0.68);
-  font-size: 0.95rem;
-}
-
 .sidebar-tools {
   margin-bottom: 20px;
 }
@@ -165,15 +160,6 @@ body {
 
 .nav-placeholder {
   color: rgba(31, 27, 22, 0.46);
-}
-
-.eyebrow {
-  margin: 0 0 8px;
-  color: var(--accent);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
 }
 
 h1 {

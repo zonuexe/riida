@@ -21,6 +21,7 @@ type ViewerState = {
   activeDirectory: string | null;
   searchQuery: string;
   expandedDirectories: Set<string>;
+  sidebarCollapsed: boolean;
 };
 
 type DirectoryNode = {
@@ -39,6 +40,7 @@ const viewerState: ViewerState = {
   activeDirectory: null,
   searchQuery: "",
   expandedDirectories: new Set<string>(),
+  sidebarCollapsed: false,
 };
 
 let lastSnapshot: LibrarySnapshot | null = null;
@@ -422,6 +424,8 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
 }
 
 function renderMain(snapshot: LibrarySnapshot) {
+  const appShellEl = document.querySelector<HTMLElement>(".two-pane");
+  const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
   const mainHeaderEl = document.querySelector<HTMLElement>(".main-header");
   const sectionTitleEl = document.querySelector<HTMLElement>("#main-title");
   const sectionDescriptionEl = document.querySelector<HTMLElement>("#main-description");
@@ -435,6 +439,16 @@ function renderMain(snapshot: LibrarySnapshot) {
   const excludedRulesEl = document.querySelector<HTMLElement>("#excluded-rules");
 
   const books = visibleBooks(snapshot);
+
+  appShellEl?.classList.toggle("sidebar-collapsed", viewerState.sidebarCollapsed);
+  if (sidebarToggleEl) {
+    sidebarToggleEl.textContent = viewerState.sidebarCollapsed ? "≫" : "≪";
+    sidebarToggleEl.setAttribute(
+      "aria-label",
+      viewerState.sidebarCollapsed ? "サイドバーを表示" : "サイドバーを隠す",
+    );
+    sidebarToggleEl.setAttribute("aria-expanded", String(!viewerState.sidebarCollapsed));
+  }
 
   if (searchInput && searchInput.value !== viewerState.searchQuery) {
     searchInput.value = viewerState.searchQuery;
@@ -493,11 +507,17 @@ function renderApp() {
 window.addEventListener("DOMContentLoaded", async () => {
   const statusEl = document.querySelector<HTMLElement>("#scan-status");
   const searchInput = document.querySelector<HTMLInputElement>("#library-search");
+  const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
 
   searchInput?.addEventListener("input", () => {
     viewerState.searchQuery = searchInput.value.trim();
     viewerState.currentBook = null;
     viewerState.activeDirectory = null;
+    renderApp();
+  });
+
+  sidebarToggleEl?.addEventListener("click", () => {
+    viewerState.sidebarCollapsed = !viewerState.sidebarCollapsed;
     renderApp();
   });
 

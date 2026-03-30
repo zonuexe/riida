@@ -10,7 +10,7 @@
 
   <body>
     <main class="app-shell two-pane">
-      <aside class="sidebar">
+      <aside class="sidebar" id="sidebar">
         <div class="sidebar-brand">
           <p class="eyebrow">Local PDF Library</p>
           <h1>riida</h1>
@@ -31,6 +31,15 @@
       </aside>
 
       <section class="main-pane">
+        <button
+          id="sidebar-toggle"
+          class="sidebar-edge-toggle"
+          type="button"
+          aria-expanded="true"
+          aria-controls="sidebar"
+        >
+          ≪
+        </button>
         <header class="main-header panel">
           <div>
             <h2 id="main-title">ホーム</h2>

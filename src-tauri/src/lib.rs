@@ -44,6 +44,7 @@ struct LibrarySnapshot {
     excluded_dir_names: Vec<String>,
     excluded_file_suffixes: Vec<String>,
     pdf_renderer: String,
+    debug_open_page: Option<u32>,
 }
 
 #[derive(Clone)]
@@ -52,6 +53,7 @@ struct AppConfig {
     excluded_dir_names: Vec<String>,
     excluded_file_suffixes: Vec<String>,
     pdf_renderer: String,
+    debug_open_page: Option<u32>,
 }
 
 #[derive(Deserialize)]
@@ -60,6 +62,7 @@ struct AppConfigFile {
     excluded_dir_names: Option<Vec<String>>,
     excluded_file_suffixes: Option<Vec<String>>,
     pdf_renderer: Option<String>,
+    debug_open_page: Option<u32>,
 }
 
 struct ConfigState {
@@ -77,6 +80,15 @@ struct NoteDocument {
     file_path: String,
     format: String,
     content: String,
+    updated_at: Option<u64>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadingPosition {
+    file_path: String,
+    page_number: u32,
+    page_offset_ratio: f64,
     updated_at: Option<u64>,
 }
 
@@ -138,6 +150,7 @@ fn default_config() -> AppConfig {
             .map(|value| value.to_string())
             .collect(),
         pdf_renderer: DEFAULT_PDF_RENDERER.to_string(),
+        debug_open_page: None,
     }
 }
 
@@ -191,6 +204,7 @@ fn load_config() -> Result<AppConfig, String> {
         pdf_renderer: normalize_pdf_renderer(
             file_config.pdf_renderer.unwrap_or(defaults.pdf_renderer),
         ),
+        debug_open_page: file_config.debug_open_page.filter(|value| *value > 0),
     })
 }
 
@@ -230,6 +244,12 @@ fn open_database() -> Result<Connection, String> {
               align_mode TEXT NOT NULL,
               vertical_gap_mode TEXT NOT NULL,
               treat_first_page_as_cover INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS reading_positions (
+              file_path TEXT PRIMARY KEY,
+              page_number INTEGER NOT NULL,
+              page_offset_ratio REAL NOT NULL,
               updated_at INTEGER NOT NULL
             );
             ",
@@ -583,6 +603,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
         excluded_dir_names: config.excluded_dir_names.clone(),
         excluded_file_suffixes: config.excluded_file_suffixes.clone(),
         pdf_renderer: config.pdf_renderer.clone(),
+        debug_open_page: config.debug_open_page,
     })
 }
 
@@ -859,6 +880,73 @@ fn save_note(file_path: String, content: String) -> Result<NoteDocument, String>
 }
 
 #[tauri::command]
+fn load_reading_position(file_path: String) -> Result<Option<ReadingPosition>, String> {
+    let connection = open_database()?;
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT
+              page_number,
+              page_offset_ratio,
+              updated_at
+            FROM reading_positions
+            WHERE file_path = ?1
+            ",
+        )
+        .map_err(|error| error.to_string())?;
+
+    let position = statement.query_row(params![&file_path], |row| {
+        Ok(ReadingPosition {
+            file_path: file_path.clone(),
+            page_number: row.get(0)?,
+            page_offset_ratio: row.get(1)?,
+            updated_at: Some(row.get(2)?),
+        })
+    });
+
+    match position {
+        Ok(position) => Ok(Some(position)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+#[tauri::command]
+fn save_reading_position(
+    file_path: String,
+    page_number: u32,
+    page_offset_ratio: f64,
+) -> Result<ReadingPosition, String> {
+    let connection = open_database()?;
+    let updated_at = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs();
+    let normalized_ratio = page_offset_ratio.clamp(0.0, 1.0);
+
+    connection
+        .execute(
+            "
+            INSERT INTO reading_positions (file_path, page_number, page_offset_ratio, updated_at)
+            VALUES (?1, ?2, ?3, ?4)
+            ON CONFLICT(file_path) DO UPDATE SET
+              page_number = excluded.page_number,
+              page_offset_ratio = excluded.page_offset_ratio,
+              updated_at = excluded.updated_at
+            ",
+            params![&file_path, page_number, normalized_ratio, updated_at],
+        )
+        .map_err(|error| error.to_string())?;
+
+    Ok(ReadingPosition {
+        file_path,
+        page_number,
+        page_offset_ratio: normalized_ratio,
+        updated_at: Some(updated_at),
+    })
+}
+
+#[tauri::command]
 fn load_viewer_preferences(file_path: String) -> Result<ViewerPreferencesPayload, String> {
     let connection = open_database()?;
     load_viewer_preferences_payload(&connection, Some(&file_path))
@@ -945,6 +1033,8 @@ pub fn run() {
             book_thumbnail,
             load_note,
             save_note,
+            load_reading_position,
+            save_reading_position,
             load_viewer_preferences,
             save_default_viewer_preferences,
             save_file_viewer_preferences,

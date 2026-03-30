@@ -17,12 +17,20 @@ type LibrarySnapshot = {
   excludedDirNames: string[];
   excludedFileSuffixes: string[];
   pdfRenderer: "native" | "pdfjs";
+  debugOpenPage?: number | null;
 };
 
 type NoteDocument = {
   filePath: string;
   format: string;
   content: string;
+  updatedAt: number | null;
+};
+
+type ReadingPosition = {
+  filePath: string;
+  pageNumber: number;
+  pageOffsetRatio: number;
   updatedAt: number | null;
 };
 
@@ -140,10 +148,16 @@ let noteLoadToken = 0;
 let pdfRenderToken = 0;
 let pdfRenderResizeTimer: number | null = null;
 let viewerSettingsLoadToken = 0;
+let readingPositionSaveTimer: number | null = null;
 let suppressHistoryUpdates = false;
 let navigationHistoryIndex = 0;
 let navigationHistoryMax = 0;
 let navigationEntries: NavigationState[] = [];
+let activeReadingPosition: ReadingPosition | null = null;
+
+function readingPositionStorageKey(filePath: string) {
+  return `riida:reading-position:${filePath}`;
+}
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -692,6 +706,8 @@ async function loadNoteForCurrentBook() {
 }
 
 async function clearCurrentBookSelection() {
+  activeReadingPosition = captureReadingPositionFromViewer();
+  await flushReadingPositionSave();
   await flushPendingNoteSave();
   await destroyNoteEditor();
   noteState.activeFilePath = null;
@@ -979,6 +995,238 @@ function isEditableTarget(target: EventTarget | null) {
   );
 }
 
+function currentViewerStage() {
+  return document.querySelector<HTMLElement>(".viewer-stage");
+}
+
+function captureReadingPositionFromViewer(): ReadingPosition | null {
+  const currentBook = viewerState.currentBook;
+  const stageEl = currentViewerStage();
+  const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
+
+  if (
+    !currentBook ||
+    !stageEl ||
+    !pdfjsViewerEl ||
+    lastSnapshot?.pdfRenderer !== "pdfjs" ||
+    pdfjsViewerEl.dataset.filePath !== currentBook.filePath
+  ) {
+    return activeReadingPosition;
+  }
+
+  const pageEls = Array.from(
+    document.querySelectorAll<HTMLElement>(".pdfjs-page[data-page-number]"),
+  );
+
+  if (pageEls.length === 0) {
+    return activeReadingPosition;
+  }
+
+  const anchorLine = stageEl.scrollTop + 24;
+  let anchorPageEl = pageEls[0];
+
+  for (const pageEl of pageEls) {
+    if (pageEl.offsetTop <= anchorLine) {
+      anchorPageEl = pageEl;
+    } else {
+      break;
+    }
+  }
+
+  const pageNumber = Number(anchorPageEl.dataset.pageNumber ?? "1");
+  const pageHeight = Math.max(anchorPageEl.offsetHeight, 1);
+  const pageOffsetRatio = Math.min(
+    Math.max((stageEl.scrollTop - anchorPageEl.offsetTop) / pageHeight, 0),
+    1,
+  );
+
+  return {
+    filePath: currentBook.filePath,
+    pageNumber,
+    pageOffsetRatio,
+    updatedAt: activeReadingPosition?.updatedAt ?? null,
+  };
+}
+
+function cacheReadingPosition(position: ReadingPosition | null) {
+  if (!position) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(readingPositionStorageKey(position.filePath), JSON.stringify(position));
+  } catch (error) {
+    console.error("Failed to cache reading position:", error);
+  }
+}
+
+function loadCachedReadingPosition(filePath: string): ReadingPosition | null {
+  try {
+    const rawValue = window.localStorage.getItem(readingPositionStorageKey(filePath));
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsed = JSON.parse(rawValue) as Partial<ReadingPosition>;
+    if (
+      typeof parsed.filePath !== "string" ||
+      typeof parsed.pageNumber !== "number" ||
+      typeof parsed.pageOffsetRatio !== "number"
+    ) {
+      return null;
+    }
+
+    return {
+      filePath: parsed.filePath,
+      pageNumber: parsed.pageNumber,
+      pageOffsetRatio: parsed.pageOffsetRatio,
+      updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : null,
+    };
+  } catch (error) {
+    console.error("Failed to read cached reading position:", error);
+    return null;
+  }
+}
+
+async function flushReadingPositionSave() {
+  if (readingPositionSaveTimer !== null) {
+    window.clearTimeout(readingPositionSaveTimer);
+    readingPositionSaveTimer = null;
+  }
+
+  if (!activeReadingPosition || activeReadingPosition.filePath !== viewerState.currentBook?.filePath) {
+    return;
+  }
+
+  try {
+    activeReadingPosition = await invoke<ReadingPosition>("save_reading_position", {
+      filePath: activeReadingPosition.filePath,
+      pageNumber: activeReadingPosition.pageNumber,
+      pageOffsetRatio: activeReadingPosition.pageOffsetRatio,
+    });
+  } catch (error) {
+    console.error("Failed to save reading position:", error);
+  }
+}
+
+function scheduleReadingPositionSave() {
+  activeReadingPosition = captureReadingPositionFromViewer();
+
+  if (!activeReadingPosition) {
+    return;
+  }
+
+  cacheReadingPosition(activeReadingPosition);
+
+  if (readingPositionSaveTimer !== null) {
+    window.clearTimeout(readingPositionSaveTimer);
+  }
+
+  readingPositionSaveTimer = window.setTimeout(() => {
+    void flushReadingPositionSave();
+  }, 300);
+}
+
+async function loadReadingPositionForCurrentBook() {
+  const currentBook = viewerState.currentBook;
+
+  if (!currentBook) {
+    activeReadingPosition = null;
+    return;
+  }
+
+  try {
+    activeReadingPosition =
+      loadCachedReadingPosition(currentBook.filePath) ??
+      (await invoke<ReadingPosition | null>("load_reading_position", {
+        filePath: currentBook.filePath,
+      }));
+    if (lastSnapshot?.debugOpenPage) {
+      activeReadingPosition = {
+        filePath: currentBook.filePath,
+        pageNumber: lastSnapshot.debugOpenPage,
+        pageOffsetRatio: 0,
+        updatedAt: null,
+      };
+    }
+    cacheReadingPosition(activeReadingPosition);
+  } catch (error) {
+    activeReadingPosition = loadCachedReadingPosition(currentBook.filePath);
+    if (lastSnapshot?.debugOpenPage) {
+      activeReadingPosition = {
+        filePath: currentBook.filePath,
+        pageNumber: lastSnapshot.debugOpenPage,
+        pageOffsetRatio: 0,
+        updatedAt: null,
+      };
+    }
+    console.error("Failed to load reading position:", error);
+  }
+}
+
+function restoreReadingPositionAttempt() {
+  const currentBook = viewerState.currentBook;
+  const stageEl = currentViewerStage();
+
+  if (!currentBook || !stageEl || !activeReadingPosition) {
+    return false;
+  }
+
+  if (activeReadingPosition.filePath !== currentBook.filePath) {
+    return false;
+  }
+
+  const pageEl = document.querySelector<HTMLElement>(
+    `.pdfjs-page[data-page-number="${activeReadingPosition.pageNumber}"]`,
+  );
+
+  if (!pageEl) {
+    return false;
+  }
+
+  const stageRect = stageEl.getBoundingClientRect();
+  const pageRect = pageEl.getBoundingClientRect();
+  const pageOffsetRatio = Math.min(Math.max(activeReadingPosition.pageOffsetRatio, 0), 1);
+  const pageTopInStage = stageEl.scrollTop + (pageRect.top - stageRect.top);
+  const targetTop = pageTopInStage + pageEl.offsetHeight * pageOffsetRatio;
+
+  stageEl.scrollTo({
+    top: Math.max(targetTop, 0),
+    behavior: "auto",
+  });
+  return true;
+}
+
+function scheduleReadingPositionRestore() {
+  let attempts = 0;
+  const run = () => {
+    attempts += 1;
+    if (restoreReadingPositionAttempt() || attempts >= 5) {
+      return;
+    }
+
+    window.requestAnimationFrame(run);
+  };
+
+  window.requestAnimationFrame(run);
+}
+
+function ensureDebugOpenPagePosition() {
+  const currentBook = viewerState.currentBook;
+  const debugOpenPage = lastSnapshot?.debugOpenPage;
+
+  if (!currentBook || !debugOpenPage) {
+    return;
+  }
+
+  activeReadingPosition = {
+    filePath: currentBook.filePath,
+    pageNumber: debugOpenPage,
+    pageOffsetRatio: 0,
+    updatedAt: null,
+  };
+}
+
 function navigateBack() {
   if (navigationHistoryIndex <= 0) {
     return;
@@ -1011,11 +1259,17 @@ function navigateForward() {
 
 async function renderCurrentPage() {
   const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
+  const viewerStageEl = currentViewerStage();
   const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
   const snapshot = lastSnapshot;
 
-  if (!frame || !pdfjsViewerEl || !viewerState.currentBook || !snapshot) {
+  if (!frame || !viewerStageEl || !pdfjsViewerEl || !viewerState.currentBook || !snapshot) {
     return;
+  }
+
+  const previousFilePath = pdfjsViewerEl.dataset.filePath;
+  if (previousFilePath && previousFilePath === viewerState.currentBook.filePath) {
+    activeReadingPosition = captureReadingPositionFromViewer();
   }
 
   const sourceUrl = convertFileSrc(viewerState.currentBook.filePath);
@@ -1023,10 +1277,11 @@ async function renderCurrentPage() {
   if (snapshot.pdfRenderer === "pdfjs") {
     frame.hidden = true;
     frame.src = "about:blank";
-  pdfjsViewerEl.hidden = false;
-  pdfjsViewerEl.innerHTML = "";
-  pdfjsViewerEl.dataset.position = viewerSettings.alignMode;
-  pdfjsViewerEl.dataset.verticalGap = viewerSettings.verticalGapMode;
+    pdfjsViewerEl.hidden = false;
+    pdfjsViewerEl.innerHTML = "";
+    pdfjsViewerEl.dataset.filePath = viewerState.currentBook.filePath;
+    pdfjsViewerEl.dataset.position = viewerSettings.alignMode;
+    pdfjsViewerEl.dataset.verticalGap = viewerSettings.verticalGapMode;
 
     pdfRenderToken += 1;
     const currentToken = pdfRenderToken;
@@ -1050,8 +1305,10 @@ async function renderCurrentPage() {
         return;
       }
 
+      ensureDebugOpenPagePosition();
       pdfjsViewerEl.innerHTML = "";
       const pageGroups = buildPageGroups(pdfDocument.numPages);
+      const restoreTargetPage = activeReadingPosition?.pageNumber ?? null;
       const pageGap = viewerSettings.pageMode === "spread" ? 6 : 0;
       const viewerWidth = Math.max(pdfjsViewerEl.clientWidth, 720);
       const viewerHeight = Math.max(pdfjsViewerEl.clientHeight, 600);
@@ -1090,6 +1347,7 @@ async function renderCurrentPage() {
 
           const pageEl = document.createElement("section");
           pageEl.className = "pdfjs-page page";
+          pageEl.dataset.pageNumber = String(pageNumber);
           pageEl.style.width = `${viewport.width}px`;
           pageEl.style.height = `${viewport.height}px`;
 
@@ -1136,11 +1394,17 @@ async function renderCurrentPage() {
           const annotations = await page.getAnnotations();
           renderPdfJsLinks(linkLayerEl, viewport, annotations as Array<Record<string, unknown>>);
 
+          if (restoreTargetPage === pageNumber) {
+            scheduleReadingPositionRestore();
+          }
+
           if (currentToken !== pdfRenderToken) {
             return;
           }
         }
       }
+      ensureDebugOpenPagePosition();
+      scheduleReadingPositionRestore();
     } catch (error) {
       pdfjsViewerEl.innerHTML = "";
       const errorEl = document.createElement("div");
@@ -1155,8 +1419,12 @@ async function renderCurrentPage() {
   pdfRenderToken += 1;
   pdfjsViewerEl.hidden = true;
   pdfjsViewerEl.innerHTML = "";
+  pdfjsViewerEl.dataset.filePath = "";
   frame.hidden = false;
-  frame.src = sourceUrl;
+  ensureDebugOpenPagePosition();
+  frame.src = activeReadingPosition?.pageNumber
+    ? `${sourceUrl}#page=${activeReadingPosition.pageNumber}`
+    : sourceUrl;
 }
 
 async function openBook(
@@ -1166,6 +1434,8 @@ async function openBook(
   const { updateHistory = "none" } = options;
 
   if (viewerState.currentBook?.filePath !== book.filePath) {
+    activeReadingPosition = captureReadingPositionFromViewer();
+    await flushReadingPositionSave();
     await flushPendingNoteSave();
     await destroyNoteEditor();
   }
@@ -1176,6 +1446,7 @@ async function openBook(
     syncNavigationHistory(updateHistory);
   }
 
+  await loadReadingPositionForCurrentBook();
   await loadViewerSettingsForCurrentBook();
   renderApp();
   await loadNoteForCurrentBook();
@@ -1453,6 +1724,7 @@ function renderApp() {
 window.addEventListener("DOMContentLoaded", async () => {
   const statusEl = document.querySelector<HTMLElement>("#scan-status");
   const searchInput = document.querySelector<HTMLInputElement>("#library-search");
+  const viewerStageEl = currentViewerStage();
   const navBackEl = document.querySelector<HTMLButtonElement>("#nav-back");
   const navForwardEl = document.querySelector<HTMLButtonElement>("#nav-forward");
   const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
@@ -1493,6 +1765,14 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   navForwardEl?.addEventListener("click", () => {
     navigateForward();
+  });
+
+  viewerStageEl?.addEventListener("scroll", () => {
+    if (lastSnapshot?.pdfRenderer !== "pdfjs" || !viewerState.currentBook) {
+      return;
+    }
+
+    scheduleReadingPositionSave();
   });
 
   sidebarToggleEl?.addEventListener("click", () => {
@@ -1714,6 +1994,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   window.addEventListener("beforeunload", () => {
+    activeReadingPosition = captureReadingPositionFromViewer();
+    void flushReadingPositionSave();
     if (noteSaveTimer !== null) {
       window.clearTimeout(noteSaveTimer);
     }

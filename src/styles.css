@@ -470,6 +470,90 @@ h1 {
   background: white;
 }
 
+.pdfjs-viewer {
+  width: 100%;
+  min-height: 100%;
+  padding: 20px 0 40px;
+  box-sizing: border-box;
+  --scale-factor: 1;
+}
+
+.pdfjs-page {
+  display: flex;
+  justify-content: center;
+  margin-inline: auto;
+}
+
+.pdfjs-page + .pdfjs-page {
+  margin-top: 20px;
+}
+
+.pdfjs-viewer .page {
+  --user-unit: 1;
+  --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
+  position: relative;
+  background: white;
+  overflow: visible;
+}
+
+.pdfjs-viewer .canvasWrapper canvas {
+  display: block;
+  background: white;
+}
+
+.pdfjs-viewer .textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  transform-origin: 0 0;
+  z-index: 1;
+  user-select: text;
+}
+
+.pdfjs-viewer .textLayer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+}
+
+.pdfjs-viewer .textLayer ::selection {
+  background: rgba(0, 90, 255, 0.22);
+}
+
+.pdfjs-viewer .annotationLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.pdfjs-viewer .annotationLayer section {
+  position: absolute;
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+
+.pdfjs-viewer .annotationLayer .linkAnnotation > a {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.pdfjs-viewer .annotationLayer .linkAnnotation > a:hover {
+  background: rgba(255, 220, 0, 0.18);
+}
+
+.pdfjs-loading {
+  padding: 32px;
+  text-align: center;
+  color: rgba(31, 27, 22, 0.58);
+}
+
 .panel h2 {
   margin: 0 0 12px;
   font-size: 1.1rem;

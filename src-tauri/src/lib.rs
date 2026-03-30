@@ -18,6 +18,7 @@ const DEFAULT_WATCH_ROOT: &str = "/Users/megurine/Dropbox/EBook/";
 const CONFIG_FILE: &str = "riida.toml";
 const DEFAULT_EXCLUDED_DIR_NAMES: &[&str] = &["backup"];
 const DEFAULT_EXCLUDED_FILE_SUFFIXES: &[&str] = &[".bak"];
+const DEFAULT_PDF_RENDERER: &str = "native";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +36,7 @@ struct LibrarySnapshot {
     books: Vec<BookSummary>,
     excluded_dir_names: Vec<String>,
     excluded_file_suffixes: Vec<String>,
+    pdf_renderer: String,
 }
 
 #[derive(Clone)]
@@ -42,6 +44,7 @@ struct AppConfig {
     watch_root: String,
     excluded_dir_names: Vec<String>,
     excluded_file_suffixes: Vec<String>,
+    pdf_renderer: String,
 }
 
 #[derive(Deserialize)]
@@ -49,6 +52,7 @@ struct AppConfigFile {
     watch_root: Option<String>,
     excluded_dir_names: Option<Vec<String>>,
     excluded_file_suffixes: Option<Vec<String>>,
+    pdf_renderer: Option<String>,
 }
 
 struct ConfigState {
@@ -106,6 +110,14 @@ fn default_config() -> AppConfig {
             .iter()
             .map(|value| value.to_string())
             .collect(),
+        pdf_renderer: DEFAULT_PDF_RENDERER.to_string(),
+    }
+}
+
+fn normalize_pdf_renderer(renderer: String) -> String {
+    match renderer.trim().to_lowercase().as_str() {
+        "pdfjs" => "pdfjs".to_string(),
+        _ => DEFAULT_PDF_RENDERER.to_string(),
     }
 }
 
@@ -149,6 +161,9 @@ fn load_config() -> Result<AppConfig, String> {
             .into_iter()
             .map(|value| value.to_lowercase())
             .collect(),
+        pdf_renderer: normalize_pdf_renderer(
+            file_config.pdf_renderer.unwrap_or(defaults.pdf_renderer),
+        ),
     })
 }
 
@@ -317,6 +332,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
         books,
         excluded_dir_names: config.excluded_dir_names.clone(),
         excluded_file_suffixes: config.excluded_file_suffixes.clone(),
+        pdf_renderer: config.pdf_renderer.clone(),
     })
 }
 

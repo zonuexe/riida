@@ -1,5 +1,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { GlobalWorkerOptions, TextLayer, getDocument } from "pdfjs-dist";
+import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { mountNoteEditor, type NoteEditorHandle } from "./note-editor";
 
 type BookSummary = {
@@ -14,6 +16,7 @@ type LibrarySnapshot = {
   books: BookSummary[];
   excludedDirNames: string[];
   excludedFileSuffixes: string[];
+  pdfRenderer: "native" | "pdfjs";
 };
 
 type NoteDocument = {
@@ -82,6 +85,9 @@ let thumbnailObserver: IntersectionObserver | null = null;
 let noteEditor: NoteEditorHandle | null = null;
 let noteSaveTimer: number | null = null;
 let noteLoadToken = 0;
+let pdfRenderToken = 0;
+
+GlobalWorkerOptions.workerSrc = workerUrl;
 
 const noteState: NoteState = {
   isOpen: true,
@@ -239,6 +245,59 @@ function isNodeVisible(node: DirectoryNode) {
   }
 
   return node.parentPath ? viewerState.expandedDirectories.has(node.parentPath) : true;
+}
+
+function renderPdfJsLinks(
+  container: HTMLElement,
+  viewport: { convertToViewportRectangle: (rect: number[]) => number[] },
+  annotations: Array<Record<string, unknown>>,
+) {
+  for (const annotation of annotations) {
+    if (annotation.subtype !== "Link" || !Array.isArray(annotation.rect)) {
+      continue;
+    }
+
+    const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(annotation.rect);
+    const left = Math.min(x1, x2);
+    const top = Math.min(y1, y2);
+    const width = Math.abs(x2 - x1);
+    const height = Math.abs(y2 - y1);
+
+    if (width < 2 || height < 2) {
+      continue;
+    }
+
+    const sectionEl = document.createElement("section");
+    sectionEl.className = "linkAnnotation";
+    sectionEl.style.left = `${left}px`;
+    sectionEl.style.top = `${top}px`;
+    sectionEl.style.width = `${width}px`;
+    sectionEl.style.height = `${height}px`;
+
+    const linkEl = document.createElement("a");
+
+    const maybeUrl =
+      typeof annotation.url === "string"
+        ? annotation.url
+        : typeof annotation.unsafeUrl === "string"
+          ? annotation.unsafeUrl
+          : null;
+
+    if (maybeUrl) {
+      linkEl.href = maybeUrl;
+      linkEl.target = "_blank";
+      linkEl.rel = "noreferrer noopener";
+      linkEl.title = maybeUrl;
+    } else {
+      linkEl.href = "#";
+      linkEl.addEventListener("click", (event) => {
+        event.preventDefault();
+      });
+    }
+
+    sectionEl.appendChild(linkEl);
+    container.appendChild(sectionEl);
+  }
 }
 
 function normalizeSearchText(value: string) {
@@ -536,12 +595,112 @@ function visibleBooks(snapshot: LibrarySnapshot) {
 
 async function renderCurrentPage() {
   const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
+  const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
+  const snapshot = lastSnapshot;
 
-  if (!frame || !viewerState.currentBook) {
+  if (!frame || !pdfjsViewerEl || !viewerState.currentBook || !snapshot) {
     return;
   }
 
-  frame.src = convertFileSrc(viewerState.currentBook.filePath);
+  const sourceUrl = convertFileSrc(viewerState.currentBook.filePath);
+
+  if (snapshot.pdfRenderer === "pdfjs") {
+    frame.hidden = true;
+    frame.src = "about:blank";
+      pdfjsViewerEl.hidden = false;
+      pdfjsViewerEl.innerHTML = "";
+      pdfjsViewerEl.style.setProperty("--scale-factor", "1.35");
+
+      pdfRenderToken += 1;
+    const currentToken = pdfRenderToken;
+    const loadingEl = document.createElement("div");
+    loadingEl.className = "pdfjs-loading";
+    loadingEl.textContent = "PDF を描画中...";
+    pdfjsViewerEl.appendChild(loadingEl);
+
+    try {
+      const documentTask = getDocument({
+        url: sourceUrl,
+        cMapUrl: "/pdfjs/cmaps/node_modules/pdfjs-dist/cmaps/",
+        cMapPacked: true,
+        standardFontDataUrl: "/pdfjs/standard_fonts/node_modules/pdfjs-dist/standard_fonts/",
+        useSystemFonts: true,
+        disableFontFace: true,
+      });
+      const pdfDocument = await documentTask.promise;
+
+      if (currentToken !== pdfRenderToken) {
+        return;
+      }
+
+      pdfjsViewerEl.innerHTML = "";
+
+      for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
+        const page = await pdfDocument.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 1.35 });
+        const pageEl = document.createElement("section");
+        pageEl.className = "pdfjs-page page";
+        pageEl.style.width = `${viewport.width}px`;
+        pageEl.style.height = `${viewport.height}px`;
+
+        const canvasWrapperEl = document.createElement("div");
+        canvasWrapperEl.className = "canvasWrapper";
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        canvasWrapperEl.appendChild(canvas);
+        pageEl.appendChild(canvasWrapperEl);
+
+        const textLayerEl = document.createElement("div");
+        textLayerEl.className = "textLayer";
+        pageEl.appendChild(textLayerEl);
+
+        const linkLayerEl = document.createElement("div");
+        linkLayerEl.className = "annotationLayer";
+        pageEl.appendChild(linkLayerEl);
+        pdfjsViewerEl.appendChild(pageEl);
+
+        const context = canvas.getContext("2d");
+        if (!context) {
+          continue;
+        }
+
+        await page.render({
+          canvas,
+          canvasContext: context,
+          viewport,
+        }).promise;
+
+        const textLayer = new TextLayer({
+          textContentSource: page.streamTextContent(),
+          container: textLayerEl,
+          viewport,
+        });
+        await textLayer.render();
+
+        const annotations = await page.getAnnotations();
+        renderPdfJsLinks(linkLayerEl, viewport, annotations as Array<Record<string, unknown>>);
+
+        if (currentToken !== pdfRenderToken) {
+          return;
+        }
+      }
+    } catch (error) {
+      pdfjsViewerEl.innerHTML = "";
+      const errorEl = document.createElement("div");
+      errorEl.className = "pdfjs-loading";
+      errorEl.textContent = `PDF.js での表示に失敗しました: ${String(error)}`;
+      pdfjsViewerEl.appendChild(errorEl);
+    }
+
+    return;
+  }
+
+  pdfRenderToken += 1;
+  pdfjsViewerEl.hidden = true;
+  pdfjsViewerEl.innerHTML = "";
+  frame.hidden = false;
+  frame.src = sourceUrl;
 }
 
 async function openBook(book: BookSummary) {
@@ -776,6 +935,16 @@ function renderMain(snapshot: LibrarySnapshot) {
   } else {
     pdfViewEl?.setAttribute("hidden", "true");
     homeViewEl?.removeAttribute("hidden");
+    const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
+    const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
+    if (frame) {
+      frame.src = "about:blank";
+      frame.hidden = false;
+    }
+    if (pdfjsViewerEl) {
+      pdfjsViewerEl.innerHTML = "";
+      pdfjsViewerEl.hidden = true;
+    }
     syncNoteUi();
     if (shelfEl) {
       renderBookList(books, shelfEl);

@@ -13,10 +13,12 @@ export default defineConfig(async () => ({
         {
           src: normalizePath(path.resolve("node_modules/pdfjs-dist/cmaps/*")),
           dest: "pdfjs/cmaps",
+          structured: false,
         },
         {
           src: normalizePath(path.resolve("node_modules/pdfjs-dist/standard_fonts/*")),
           dest: "pdfjs/standard_fonts",
+          structured: false,
         },
       ],
     }),

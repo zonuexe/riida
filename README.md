@@ -37,6 +37,16 @@ npm run tauri dev
 - Show the library in a Tauri desktop app
 - Open a selected PDF in the embedded viewer
 
+## Configuration
+
+Settings are loaded from `riida.toml` in the project root.
+
+```toml
+watch_root = "~/Dropbox/EBook/"
+excluded_dir_names = ["backup"]
+excluded_file_suffixes = [".bak"]
+```
+
 ## Suggested next commands
 
 ```bash

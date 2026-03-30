@@ -1,6 +1,6 @@
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::{params, Connection};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{hash_map::DefaultHasher, HashSet},
     fs,
@@ -14,11 +14,12 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager, State};
 use walkdir::WalkDir;
 
-const WATCH_ROOT: &str = "/Users/megurine/Dropbox/EBook/";
+const DEFAULT_WATCH_ROOT: &str = "/Users/megurine/Dropbox/EBook/";
 const DATABASE_PATH: &str = "../data/app.db";
 const THUMBNAIL_DIR: &str = "../data/thumbnails";
-const EXCLUDED_DIR_NAMES: &[&str] = &["backup"];
-const EXCLUDED_FILE_SUFFIXES: &[&str] = &[".bak"];
+const CONFIG_FILE: &str = "riida.toml";
+const DEFAULT_EXCLUDED_DIR_NAMES: &[&str] = &["backup"];
+const DEFAULT_EXCLUDED_FILE_SUFFIXES: &[&str] = &[".bak"];
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,9 +32,27 @@ struct BookSummary {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LibrarySnapshot {
-    watch_root: &'static str,
+    watch_root: String,
     indexed_count: usize,
     books: Vec<BookSummary>,
+}
+
+#[derive(Clone)]
+struct AppConfig {
+    watch_root: String,
+    excluded_dir_names: Vec<String>,
+    excluded_file_suffixes: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct AppConfigFile {
+    watch_root: Option<String>,
+    excluded_dir_names: Option<Vec<String>>,
+    excluded_file_suffixes: Option<Vec<String>>,
+}
+
+struct ConfigState {
+    config: AppConfig,
 }
 
 struct ThumbnailQueue {
@@ -52,8 +71,76 @@ fn database_file() -> Result<PathBuf, String> {
     Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(DATABASE_PATH))
 }
 
+fn project_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+}
+
+fn config_file() -> PathBuf {
+    project_root().join(CONFIG_FILE)
+}
+
 fn thumbnail_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(THUMBNAIL_DIR)
+}
+
+fn default_config() -> AppConfig {
+    AppConfig {
+        watch_root: DEFAULT_WATCH_ROOT.to_string(),
+        excluded_dir_names: DEFAULT_EXCLUDED_DIR_NAMES
+            .iter()
+            .map(|value| value.to_string())
+            .collect(),
+        excluded_file_suffixes: DEFAULT_EXCLUDED_FILE_SUFFIXES
+            .iter()
+            .map(|value| value.to_string())
+            .collect(),
+    }
+}
+
+fn expand_home_path(path: &str) -> String {
+    if path == "~" {
+        return std::env::var("HOME").unwrap_or_else(|_| path.to_string());
+    }
+
+    if let Some(rest) = path.strip_prefix("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home).join(rest).to_string_lossy().into_owned();
+        }
+    }
+
+    path.to_string()
+}
+
+fn load_config() -> Result<AppConfig, String> {
+    let config_path = config_file();
+
+    if !config_path.exists() {
+        return Ok(default_config());
+    }
+
+    let config_contents = fs::read_to_string(&config_path).map_err(|error| error.to_string())?;
+    let file_config: AppConfigFile =
+        toml::from_str(&config_contents).map_err(|error| error.to_string())?;
+    let defaults = default_config();
+
+    Ok(AppConfig {
+        watch_root: expand_home_path(&file_config.watch_root.unwrap_or(defaults.watch_root)),
+        excluded_dir_names: file_config
+            .excluded_dir_names
+            .unwrap_or(defaults.excluded_dir_names)
+            .into_iter()
+            .map(|value| value.to_lowercase())
+            .collect(),
+        excluded_file_suffixes: file_config
+            .excluded_file_suffixes
+            .unwrap_or(defaults.excluded_file_suffixes)
+            .into_iter()
+            .map(|value| value.to_lowercase())
+            .collect(),
+    })
 }
 
 fn open_database() -> Result<Connection, String> {
@@ -90,27 +177,33 @@ fn is_pdf_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn path_contains_excluded_directory(path: &Path) -> bool {
+fn path_contains_excluded_directory(path: &Path, config: &AppConfig) -> bool {
     path.components().any(|component| {
         let name = component.as_os_str().to_string_lossy().to_lowercase();
-        EXCLUDED_DIR_NAMES.iter().any(|excluded| name == *excluded)
+        config
+            .excluded_dir_names
+            .iter()
+            .any(|excluded| name == *excluded)
     })
 }
 
-fn is_excluded_file(path: &Path) -> bool {
+fn is_excluded_file(path: &Path, config: &AppConfig) -> bool {
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
         .map(|name| name.to_lowercase())
         .unwrap_or_default();
 
-    EXCLUDED_FILE_SUFFIXES
+    config
+        .excluded_file_suffixes
         .iter()
         .any(|suffix| file_name.ends_with(suffix))
 }
 
-fn should_include_pdf(path: &Path) -> bool {
-    is_pdf_file(path) && !path_contains_excluded_directory(path) && !is_excluded_file(path)
+fn should_include_pdf(path: &Path, config: &AppConfig) -> bool {
+    is_pdf_file(path)
+        && !path_contains_excluded_directory(path, config)
+        && !is_excluded_file(path, config)
 }
 
 fn modified_unix_seconds(metadata: &fs::Metadata) -> u64 {
@@ -122,16 +215,16 @@ fn modified_unix_seconds(metadata: &fs::Metadata) -> u64 {
         .unwrap_or(0)
 }
 
-fn scan_and_index(connection: &Connection) -> Result<(), String> {
+fn scan_and_index(connection: &Connection, config: &AppConfig) -> Result<(), String> {
     let now = std::time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| error.to_string())?
         .as_secs();
 
-    for entry in WalkDir::new(WATCH_ROOT)
+    for entry in WalkDir::new(&config.watch_root)
         .into_iter()
         .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file() && should_include_pdf(entry.path()))
+        .filter(|entry| entry.file_type().is_file() && should_include_pdf(entry.path(), config))
     {
         let path = entry.path();
         let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
@@ -172,7 +265,7 @@ fn scan_and_index(connection: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn load_snapshot(connection: &Connection) -> Result<LibrarySnapshot, String> {
+fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibrarySnapshot, String> {
     let indexed_count: usize = connection
         .query_row("SELECT COUNT(*) FROM books", [], |row| row.get(0))
         .map_err(|error| error.to_string())?;
@@ -203,20 +296,20 @@ fn load_snapshot(connection: &Connection) -> Result<LibrarySnapshot, String> {
         .map_err(|error| error.to_string())?;
 
     Ok(LibrarySnapshot {
-        watch_root: WATCH_ROOT,
+        watch_root: config.watch_root.clone(),
         indexed_count,
         books,
     })
 }
 
-fn refresh_library_snapshot() -> Result<LibrarySnapshot, String> {
-    if !Path::new(WATCH_ROOT).exists() {
-        return Err(format!("watch root does not exist: {WATCH_ROOT}"));
+fn refresh_library_snapshot(config: &AppConfig) -> Result<LibrarySnapshot, String> {
+    if !Path::new(&config.watch_root).exists() {
+        return Err(format!("watch root does not exist: {}", config.watch_root));
     }
 
     let connection = open_database()?;
-    scan_and_index(&connection)?;
-    load_snapshot(&connection)
+    scan_and_index(&connection, config)?;
+    load_snapshot(&connection, config)
 }
 
 fn thumbnail_cache_dir(file_path: &str) -> PathBuf {
@@ -314,21 +407,22 @@ fn start_thumbnail_worker(app: AppHandle) -> ThumbnailQueue {
     }
 }
 
-fn should_rescan(event: &Event) -> bool {
+fn should_rescan(event: &Event, config: &AppConfig) -> bool {
     event.paths.iter().any(|path| {
-        (path.is_dir() && !path_contains_excluded_directory(path)) || should_include_pdf(path)
+        (path.is_dir() && !path_contains_excluded_directory(path, config))
+            || should_include_pdf(path, config)
     })
 }
 
-fn emit_library_snapshot(app: &AppHandle) -> Result<(), String> {
-    let snapshot = refresh_library_snapshot()?;
+fn emit_library_snapshot(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
+    let snapshot = refresh_library_snapshot(config)?;
 
     app.emit("library-updated", &snapshot)
         .map_err(|error| error.to_string())
 }
 
-fn start_library_watcher(app: AppHandle) -> Result<(), String> {
-    if !Path::new(WATCH_ROOT).exists() {
+fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String> {
+    if !Path::new(&config.watch_root).exists() {
         return Ok(());
     }
 
@@ -348,19 +442,19 @@ fn start_library_watcher(app: AppHandle) -> Result<(), String> {
             }
         };
 
-        if let Err(error) = watcher.watch(Path::new(WATCH_ROOT), RecursiveMode::Recursive) {
+        if let Err(error) = watcher.watch(Path::new(&config.watch_root), RecursiveMode::Recursive) {
             let _ = app.emit("library-watch-error", error.to_string());
             return;
         }
 
         while let Ok(result) = rx.recv() {
             match result {
-                Ok(event) if should_rescan(&event) => {
+                Ok(event) if should_rescan(&event, &config) => {
                     thread::sleep(Duration::from_millis(250));
 
                     while rx.try_recv().is_ok() {}
 
-                    if let Err(error) = emit_library_snapshot(&app) {
+                    if let Err(error) = emit_library_snapshot(&app, &config) {
                         let _ = app.emit("library-watch-error", error);
                     }
                 }
@@ -376,15 +470,19 @@ fn start_library_watcher(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn library_snapshot() -> Result<LibrarySnapshot, String> {
-    refresh_library_snapshot()
+fn library_snapshot(config_state: State<'_, ConfigState>) -> Result<LibrarySnapshot, String> {
+    refresh_library_snapshot(&config_state.config)
 }
 
 #[tauri::command]
-fn book_thumbnail(file_path: String, queue: State<'_, ThumbnailQueue>) -> Result<Option<String>, String> {
+fn book_thumbnail(
+    file_path: String,
+    queue: State<'_, ThumbnailQueue>,
+    config_state: State<'_, ConfigState>,
+) -> Result<Option<String>, String> {
     let pdf_path = PathBuf::from(&file_path);
 
-    if !pdf_path.exists() || !should_include_pdf(&pdf_path) {
+    if !pdf_path.exists() || !should_include_pdf(&pdf_path, &config_state.config) {
         return Ok(None);
     }
 
@@ -413,7 +511,9 @@ fn book_thumbnail(file_path: String, queue: State<'_, ThumbnailQueue>) -> Result
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            start_library_watcher(app.handle().clone())?;
+            let config = load_config()?;
+            start_library_watcher(app.handle().clone(), config.clone())?;
+            app.manage(ConfigState { config });
             app.manage(start_thumbnail_worker(app.handle().clone()));
             Ok(())
         })

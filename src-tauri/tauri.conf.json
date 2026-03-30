@@ -24,7 +24,7 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$HOME/Dropbox/EBook/**",
+          "$HOME/**",
           "/Users/megurine/repo/rust/riida/data/thumbnails/**"
         ]
       },

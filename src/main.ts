@@ -201,7 +201,7 @@ async function collapseHomePath(path: string) {
 GlobalWorkerOptions.workerSrc = workerUrl;
 
 const noteState: NoteState = {
-  isOpen: true,
+  isOpen: false,
   isLoading: false,
   isSaving: false,
   activeFilePath: null,
@@ -1518,6 +1518,7 @@ async function renderCurrentPage() {
   if (snapshot.pdfRenderer === "pdfjs") {
     frame.hidden = true;
     frame.src = "about:blank";
+    frame.dataset.filePath = "";
     pdfjsViewerEl.hidden = false;
     pdfjsViewerEl.innerHTML = "";
     pdfjsViewerEl.dataset.filePath = viewerState.currentBook.filePath;
@@ -1691,10 +1692,31 @@ async function renderCurrentPage() {
   pdfjsViewerEl.innerHTML = "";
   pdfjsViewerEl.dataset.filePath = "";
   frame.hidden = false;
+  frame.dataset.filePath = viewerState.currentBook.filePath;
   ensureDebugOpenPagePosition();
   frame.src = activeReadingPosition?.pageNumber
     ? `${sourceUrl}#page=${activeReadingPosition.pageNumber}`
     : sourceUrl;
+}
+
+function viewerNeedsRender(snapshot: LibrarySnapshot) {
+  const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
+  const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
+  const currentBook = viewerState.currentBook;
+
+  if (!frame || !pdfjsViewerEl || !currentBook) {
+    return false;
+  }
+
+  if (snapshot.pdfRenderer === "pdfjs") {
+    return (
+      pdfjsViewerEl.hidden ||
+      pdfjsViewerEl.dataset.filePath !== currentBook.filePath ||
+      pdfjsViewerEl.childElementCount === 0
+    );
+  }
+
+  return frame.hidden || frame.dataset.filePath !== currentBook.filePath;
 }
 
 async function openBook(
@@ -1940,7 +1962,9 @@ function renderMain(snapshot: LibrarySnapshot) {
   if (viewerState.currentBook) {
     homeViewEl?.setAttribute("hidden", "true");
     pdfViewEl?.removeAttribute("hidden");
-    void renderCurrentPage();
+    if (viewerNeedsRender(snapshot)) {
+      void renderCurrentPage();
+    }
     syncNoteUi();
     if (noteState.isOpen) {
       void loadNoteForCurrentBook();
@@ -1953,6 +1977,7 @@ function renderMain(snapshot: LibrarySnapshot) {
     if (frame) {
       frame.src = "about:blank";
       frame.hidden = false;
+      frame.dataset.filePath = "";
     }
     if (pdfjsViewerEl) {
       pdfjsViewerEl.innerHTML = "";

@@ -211,41 +211,6 @@ function visibleBooks(snapshot: LibrarySnapshot) {
   });
 }
 
-function currentSectionTitle() {
-  if (viewerState.currentBook) {
-    return "PDF ビューア";
-  }
-
-  if (viewerState.searchQuery) {
-    return "検索結果";
-  }
-
-  if (viewerState.activeDirectory) {
-    const segments = viewerState.activeDirectory.split("/");
-    return segments[segments.length - 1] ?? viewerState.activeDirectory;
-  }
-
-  return "ホーム";
-}
-
-function currentSectionDescription(snapshot: LibrarySnapshot, books: BookSummary[]) {
-  if (viewerState.currentBook) {
-    return viewerState.currentBook.fileName;
-  }
-
-  if (viewerState.searchQuery) {
-    return `「${viewerState.searchQuery}」に一致する ${books.length} 件`;
-  }
-
-  if (viewerState.activeDirectory) {
-    return `${viewerState.activeDirectory} 配下の ${books.length} 件`;
-  }
-
-  const dirRules = snapshot.excludedDirNames.map((rule) => `dir:${rule}`);
-  const fileRules = snapshot.excludedFileSuffixes.map((rule) => `file:*${rule}`);
-  return `監視: ${snapshot.watchRoot} / 除外: ${[...dirRules, ...fileRules].join(" / ")}`;
-}
-
 async function renderCurrentPage() {
   const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
 
@@ -426,9 +391,6 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
 function renderMain(snapshot: LibrarySnapshot) {
   const appShellEl = document.querySelector<HTMLElement>(".two-pane");
   const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
-  const mainHeaderEl = document.querySelector<HTMLElement>(".main-header");
-  const sectionTitleEl = document.querySelector<HTMLElement>("#main-title");
-  const sectionDescriptionEl = document.querySelector<HTMLElement>("#main-description");
   const statusEl = document.querySelector<HTMLElement>("#scan-status");
   const homeViewEl = document.querySelector<HTMLElement>("#home-view");
   const pdfViewEl = document.querySelector<HTMLElement>("#pdf-view");
@@ -454,14 +416,6 @@ function renderMain(snapshot: LibrarySnapshot) {
     searchInput.value = viewerState.searchQuery;
   }
 
-  if (sectionTitleEl) {
-    sectionTitleEl.textContent = currentSectionTitle();
-  }
-
-  if (sectionDescriptionEl) {
-    sectionDescriptionEl.textContent = currentSectionDescription(snapshot, books);
-  }
-
   if (watchRootEl) {
     watchRootEl.textContent = snapshot.watchRoot;
   }
@@ -481,12 +435,10 @@ function renderMain(snapshot: LibrarySnapshot) {
   }
 
   if (viewerState.currentBook) {
-    mainHeaderEl?.setAttribute("hidden", "true");
     homeViewEl?.setAttribute("hidden", "true");
     pdfViewEl?.removeAttribute("hidden");
     void renderCurrentPage();
   } else {
-    mainHeaderEl?.removeAttribute("hidden");
     pdfViewEl?.setAttribute("hidden", "true");
     homeViewEl?.removeAttribute("hidden");
     if (shelfEl) {

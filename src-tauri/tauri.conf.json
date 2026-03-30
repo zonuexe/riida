@@ -23,7 +23,10 @@
     "security": {
       "assetProtocol": {
         "enable": true,
-        "scope": ["$HOME/Dropbox/EBook/**"]
+        "scope": [
+          "$HOME/Dropbox/EBook/**",
+          "/Users/megurine/repo/rust/riida/data/thumbnails/**"
+        ]
       },
       "csp": {
         "default-src": "'self' asset: http://asset.localhost blob: data:",

@@ -16,3 +16,4 @@ lerna-debug.log*
 *.local
 data/*.db
 data/*.db-*
+data/thumbnails/

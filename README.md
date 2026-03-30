@@ -32,9 +32,10 @@ npm run tauri dev
 ## MVP
 
 - Watch `/Users/megurine/Dropbox/EBook/`
+- Ignore `backup` directories and `*.bak` files
 - Index PDF files into SQLite at `data/app.db`
 - Show the library in a Tauri desktop app
-- Open a selected PDF and persist the last reading page
+- Open a selected PDF in the embedded viewer
 
 ## Suggested next commands
 

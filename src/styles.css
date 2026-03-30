@@ -153,12 +153,30 @@ h1 {
 
 .book-item {
   display: grid;
-  gap: 4px;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 12px;
   padding: 12px 0;
   border-bottom: 1px solid rgba(96, 70, 33, 0.12);
   cursor: pointer;
   border-radius: 12px;
   padding-inline: 12px;
+  align-items: start;
+}
+
+.book-thumb {
+  width: 72px;
+  height: 102px;
+  border-radius: 8px;
+  object-fit: cover;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(235, 225, 201, 0.9));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+}
+
+.book-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
 }
 
 .book-item strong {

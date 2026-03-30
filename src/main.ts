@@ -24,6 +24,22 @@ const viewerState: ViewerState = {
 };
 
 let lastSnapshot: LibrarySnapshot | null = null;
+const thumbnailUrls = new Map<string, string>();
+let thumbnailObserver: IntersectionObserver | null = null;
+
+function applyThumbnail(filePath: string, thumbnailPath: string) {
+  const thumbnailUrl = convertFileSrc(thumbnailPath);
+  thumbnailUrls.set(filePath, thumbnailUrl);
+
+  const imageEls = document.querySelectorAll<HTMLImageElement>(
+    `.book-thumb[data-file-path="${CSS.escape(filePath)}"]`,
+  );
+
+  for (const imageEl of imageEls) {
+    imageEl.src = thumbnailUrl;
+    imageEl.dataset.loaded = "true";
+  }
+}
 
 function syncSelectedBookHighlight() {
   const bookItems = document.querySelectorAll<HTMLLIElement>(".book-item");
@@ -45,6 +61,55 @@ function formatFileSize(fileSize: number) {
   }
 
   return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+async function loadThumbnail(book: BookSummary, imageEl: HTMLImageElement) {
+  if (thumbnailUrls.has(book.filePath)) {
+    imageEl.src = thumbnailUrls.get(book.filePath) ?? "";
+    imageEl.dataset.loaded = "true";
+    return;
+  }
+
+  const thumbnailPath = await invoke<string | null>("book_thumbnail", {
+    filePath: book.filePath,
+  });
+
+  if (!thumbnailPath) {
+    return;
+  }
+
+  applyThumbnail(book.filePath, thumbnailPath);
+}
+
+function ensureThumbnailObserver() {
+  if (thumbnailObserver) {
+    return thumbnailObserver;
+  }
+
+  thumbnailObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) {
+          continue;
+        }
+
+        const imageEl = entry.target as HTMLImageElement;
+        const filePath = imageEl.dataset.filePath;
+        const book = viewerState.books.find((candidate) => candidate.filePath === filePath);
+
+        if (book && imageEl.dataset.loaded !== "true") {
+          void loadThumbnail(book, imageEl);
+        }
+
+        thumbnailObserver?.unobserve(imageEl);
+      }
+    },
+    {
+      rootMargin: "120px 0px",
+    },
+  );
+
+  return thumbnailObserver;
 }
 
 function filteredBooks() {
@@ -141,6 +206,15 @@ function renderSnapshot(snapshot: LibrarySnapshot) {
       const titleEl = document.createElement("strong");
       titleEl.textContent = book.fileName;
 
+      const thumbEl = document.createElement("img");
+      thumbEl.className = "book-thumb";
+      thumbEl.alt = `${book.fileName} cover thumbnail`;
+      thumbEl.dataset.filePath = book.filePath;
+      thumbEl.dataset.loaded = "false";
+
+      const bodyEl = document.createElement("div");
+      bodyEl.className = "book-copy";
+
       const pathEl = document.createElement("span");
       pathEl.textContent = book.filePath;
 
@@ -148,9 +222,12 @@ function renderSnapshot(snapshot: LibrarySnapshot) {
       metaEl.className = "book-meta";
       metaEl.textContent = formatFileSize(book.fileSize);
 
-      itemEl.appendChild(titleEl);
-      itemEl.appendChild(pathEl);
-      itemEl.appendChild(metaEl);
+      bodyEl.appendChild(titleEl);
+      bodyEl.appendChild(pathEl);
+      bodyEl.appendChild(metaEl);
+
+      itemEl.appendChild(thumbEl);
+      itemEl.appendChild(bodyEl);
       itemEl.addEventListener("click", () => {
         void openBook(book).catch((error) => {
           const viewerStatusEl = document.querySelector<HTMLElement>("#viewer-status");
@@ -171,6 +248,7 @@ function renderSnapshot(snapshot: LibrarySnapshot) {
         }
       });
       recentBooksEl.appendChild(itemEl);
+      ensureThumbnailObserver().observe(thumbEl);
     }
   }
 
@@ -195,6 +273,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (statusEl) {
       statusEl.textContent = `監視エラー: ${event.payload}`;
     }
+  });
+
+  await listen<{ filePath: string; thumbnailPath: string }>("thumbnail-ready", (event) => {
+    applyThumbnail(event.payload.filePath, event.payload.thumbnailPath);
   });
 
   invoke<LibrarySnapshot>("library_snapshot")

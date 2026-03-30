@@ -28,7 +28,7 @@ struct BookSummary {
 struct LibrarySnapshot {
     watch_root: &'static str,
     indexed_count: usize,
-    recent_books: Vec<BookSummary>,
+    books: Vec<BookSummary>,
 }
 
 #[derive(Deserialize)]
@@ -156,13 +156,12 @@ fn load_snapshot(connection: &Connection) -> Result<LibrarySnapshot, String> {
             FROM books
             LEFT JOIN reading_progress
               ON reading_progress.file_path = books.file_path
-            ORDER BY modified_at DESC, file_name ASC
-            LIMIT 8
+            ORDER BY books.modified_at DESC, books.file_name ASC
             ",
         )
         .map_err(|error| error.to_string())?;
 
-    let recent_books = statement
+    let books = statement
         .query_map([], |row| {
             Ok(BookSummary {
                 file_name: row.get(0)?,
@@ -178,7 +177,7 @@ fn load_snapshot(connection: &Connection) -> Result<LibrarySnapshot, String> {
     Ok(LibrarySnapshot {
         watch_root: WATCH_ROOT,
         indexed_count,
-        recent_books,
+        books,
     })
 }
 

@@ -15,7 +15,7 @@ type BookSummary = {
 type LibrarySnapshot = {
   watchRoot: string;
   indexedCount: number;
-  recentBooks: BookSummary[];
+  books: BookSummary[];
 };
 
 type ViewerState = {
@@ -32,6 +32,8 @@ const viewerState: ViewerState = {
   currentPage: 1,
 };
 
+let lastSnapshot: LibrarySnapshot | null = null;
+
 let saveProgressTimer: number | null = null;
 
 function syncSelectedBookHighlight() {
@@ -41,6 +43,34 @@ function syncSelectedBookHighlight() {
     const isSelected = itemEl.dataset.filePath === viewerState.currentBook?.filePath;
     itemEl.classList.toggle("is-selected", isSelected);
   }
+}
+
+function formatFileSize(fileSize: number) {
+  const units = ["B", "KB", "MB", "GB"];
+  let size = fileSize;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function filteredBooks() {
+  const searchInput = document.querySelector<HTMLInputElement>("#library-search");
+  const query = searchInput?.value.trim().toLowerCase() ?? "";
+
+  if (!query) {
+    return viewerState.books;
+  }
+
+  return viewerState.books.filter((book) => {
+    const name = book.fileName.toLowerCase();
+    const path = book.filePath.toLowerCase();
+    return name.includes(query) || path.includes(query);
+  });
 }
 
 function queueSaveReadingProgress() {
@@ -135,7 +165,11 @@ function renderSnapshot(snapshot: LibrarySnapshot) {
   const recentBooksEl = document.querySelector<HTMLElement>("#recent-books");
   const statusEl = document.querySelector<HTMLElement>("#scan-status");
 
-  viewerState.books = snapshot.recentBooks;
+  const previousFilePath = viewerState.currentBook?.filePath;
+  viewerState.books = snapshot.books;
+  viewerState.currentBook =
+    viewerState.books.find((book) => book.filePath === previousFilePath) ?? null;
+  lastSnapshot = snapshot;
 
   if (watchRootEl) {
     watchRootEl.textContent = snapshot.watchRoot;
@@ -152,14 +186,19 @@ function renderSnapshot(snapshot: LibrarySnapshot) {
   if (recentBooksEl) {
     recentBooksEl.innerHTML = "";
 
-    if (snapshot.recentBooks.length === 0) {
+    const books = filteredBooks();
+
+    if (books.length === 0) {
       const emptyEl = document.createElement("li");
-      emptyEl.textContent = "まだ PDF が見つかっていません。";
+      emptyEl.textContent =
+        viewerState.books.length === 0
+          ? "まだ PDF が見つかっていません。"
+          : "検索条件に一致する PDF がありません。";
       recentBooksEl.appendChild(emptyEl);
       return;
     }
 
-    for (const book of snapshot.recentBooks) {
+    for (const book of books) {
       const itemEl = document.createElement("li");
       itemEl.className = "book-item";
       itemEl.tabIndex = 0;
@@ -171,6 +210,10 @@ function renderSnapshot(snapshot: LibrarySnapshot) {
       const pathEl = document.createElement("span");
       pathEl.textContent = book.filePath;
 
+      const metaEl = document.createElement("small");
+      metaEl.className = "book-meta";
+      metaEl.textContent = formatFileSize(book.fileSize);
+
       if (book.lastPage && book.lastPage > 1) {
         const progressEl = document.createElement("small");
         progressEl.className = "book-progress";
@@ -180,6 +223,7 @@ function renderSnapshot(snapshot: LibrarySnapshot) {
 
       itemEl.appendChild(titleEl);
       itemEl.appendChild(pathEl);
+      itemEl.appendChild(metaEl);
       itemEl.addEventListener("click", () => {
         void openBook(book);
       });
@@ -200,6 +244,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const statusEl = document.querySelector<HTMLElement>("#scan-status");
   const prevPageButton = document.querySelector<HTMLButtonElement>("#prev-page");
   const nextPageButton = document.querySelector<HTMLButtonElement>("#next-page");
+  const searchInput = document.querySelector<HTMLInputElement>("#library-search");
 
   prevPageButton?.addEventListener("click", () => {
     if (!viewerState.pdf || viewerState.currentPage <= 1) {
@@ -219,6 +264,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     void renderCurrentPage();
   });
 
+  searchInput?.addEventListener("input", () => {
+    if (lastSnapshot) {
+      renderSnapshot(lastSnapshot);
+    }
+  });
+
   await listen<LibrarySnapshot>("library-updated", (event) => {
     renderSnapshot(event.payload);
   });
@@ -233,8 +284,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     .then((snapshot) => {
       renderSnapshot(snapshot);
 
-      if (snapshot.recentBooks.length > 0) {
-        void openBook(snapshot.recentBooks[0]);
+      if (viewerState.currentBook) {
+        void openBook(viewerState.currentBook);
+      } else if (snapshot.books.length > 0) {
+        void openBook(snapshot.books[0]);
       }
     })
     .catch((error) => {

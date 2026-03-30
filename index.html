@@ -33,7 +33,15 @@
 
       <section class="panel-grid">
         <article class="panel">
-          <h2>最近取り込んだ本</h2>
+          <div class="library-header">
+            <h2>本棚</h2>
+            <input
+              id="library-search"
+              class="library-search"
+              type="search"
+              placeholder="タイトルやパスで検索"
+            />
+          </div>
           <ul class="books" id="recent-books">
             <li>読み込み中...</li>
           </ul>
@@ -53,7 +61,7 @@
           <div class="viewer-stage">
             <canvas id="pdf-canvas"></canvas>
           </div>
-          <p class="panel-note" id="viewer-status">最近取り込んだ本から1冊選んでください。</p>
+          <p class="panel-note" id="viewer-status">本棚から1冊選んでください。</p>
         </article>
       </section>
     </main>

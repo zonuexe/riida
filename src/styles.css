@@ -73,6 +73,23 @@ h1 {
   box-shadow: 0 20px 40px var(--shadow);
 }
 
+.library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.library-search {
+  width: min(100%, 260px);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font: inherit;
+  background: rgba(255, 250, 240, 0.95);
+}
+
 .viewer-header {
   display: flex;
   align-items: flex-start;
@@ -145,6 +162,8 @@ h1 {
   margin: 0;
   padding: 0;
   list-style: none;
+  max-height: 540px;
+  overflow: auto;
 }
 
 .book-item {
@@ -172,6 +191,11 @@ h1 {
   font-size: 0.82rem;
 }
 
+.book-meta {
+  color: rgba(31, 27, 22, 0.48);
+  font-size: 0.8rem;
+}
+
 .book-item:hover strong,
 .book-item:focus strong {
   color: var(--accent);
@@ -193,5 +217,14 @@ li + li {
 
   .panel-grid {
     grid-template-columns: 1fr;
+  }
+
+  .library-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .library-search {
+    width: 100%;
   }
 }

@@ -97,37 +97,22 @@ h1 {
   gap: 16px;
 }
 
-.viewer-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.viewer-actions button {
-  border: 1px solid var(--border);
-  background: rgba(255, 250, 240, 0.95);
-  border-radius: 999px;
-  padding: 8px 14px;
-  font: inherit;
-  cursor: pointer;
-}
-
 .viewer-stage {
   margin-top: 18px;
-  min-height: 360px;
+  min-height: 640px;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: center;
   overflow: auto;
   border-radius: 18px;
   background: rgba(121, 91, 47, 0.08);
-  padding: 18px;
+  padding: 0;
 }
 
-#pdf-canvas {
-  max-width: 100%;
-  height: auto;
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.16);
+#pdf-frame {
+  width: 100%;
+  min-height: 640px;
+  border: 0;
   background: white;
 }
 

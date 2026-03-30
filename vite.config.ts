@@ -1,10 +1,26 @@
-import { defineConfig } from "vite";
+import path from "node:path";
+import { defineConfig, normalizePath } from "vite";
+import { viteStaticCopy } from "vite-plugin-static-copy";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
+  plugins: [
+    viteStaticCopy({
+      targets: [
+        {
+          src: normalizePath(path.resolve("node_modules/pdfjs-dist/cmaps/*")),
+          dest: "pdfjs/cmaps",
+        },
+        {
+          src: normalizePath(path.resolve("node_modules/pdfjs-dist/standard_fonts/*")),
+          dest: "pdfjs/standard_fonts",
+        },
+      ],
+    }),
+  ],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

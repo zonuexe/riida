@@ -21,7 +21,16 @@
       }
     ],
     "security": {
-      "csp": null
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$HOME/Dropbox/EBook/**"]
+      },
+      "csp": {
+        "default-src": "'self' asset: http://asset.localhost blob: data:",
+        "connect-src": "ipc: http://ipc.localhost asset: http://asset.localhost",
+        "img-src": "'self' asset: http://asset.localhost blob: data:",
+        "worker-src": "'self' blob:"
+      }
     }
   },
   "bundle": {

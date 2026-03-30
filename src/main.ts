@@ -1,9 +1,5 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
-
-GlobalWorkerOptions.workerSrc = workerUrl;
 
 type BookSummary = {
   fileName: string;
@@ -21,14 +17,12 @@ type LibrarySnapshot = {
 type ViewerState = {
   books: BookSummary[];
   currentBook: BookSummary | null;
-  pdf: PDFDocumentProxy | null;
   currentPage: number;
 };
 
 const viewerState: ViewerState = {
   books: [],
   currentBook: null,
-  pdf: null,
   currentPage: 1,
 };
 
@@ -97,37 +91,16 @@ function queueSaveReadingProgress() {
 }
 
 async function renderCurrentPage() {
-  const canvas = document.querySelector<HTMLCanvasElement>("#pdf-canvas");
-  const pageIndicatorEl = document.querySelector<HTMLElement>("#page-indicator");
+  const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
   const viewerStatusEl = document.querySelector<HTMLElement>("#viewer-status");
 
-  if (!canvas || !viewerState.pdf) {
+  if (!frame || !viewerState.currentBook) {
     return;
   }
-
-  const page = await viewerState.pdf.getPage(viewerState.currentPage);
-  const viewport = page.getViewport({ scale: 1.15 });
-  const context = canvas.getContext("2d");
-
-  if (!context) {
-    return;
-  }
-
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-
-  await page.render({
-    canvas,
-    canvasContext: context,
-    viewport,
-  }).promise;
-
-  if (pageIndicatorEl) {
-    pageIndicatorEl.textContent = `${viewerState.currentPage} / ${viewerState.pdf.numPages}`;
-  }
+  frame.src = convertFileSrc(viewerState.currentBook.filePath);
 
   if (viewerStatusEl && viewerState.currentBook) {
-    viewerStatusEl.textContent = `${viewerState.currentBook.fileName} を表示中です。`;
+    viewerStatusEl.textContent = `${viewerState.currentBook.fileName} をネイティブビューアで表示中です。`;
   }
 
   queueSaveReadingProgress();
@@ -145,17 +118,9 @@ async function openBook(book: BookSummary) {
     viewerStatusEl.textContent = "PDF を読み込み中...";
   }
 
-  if (viewerState.pdf) {
-    await viewerState.pdf.destroy();
-  }
-
   viewerState.currentBook = book;
   viewerState.currentPage = Math.max(1, book.lastPage ?? 1);
   syncSelectedBookHighlight();
-
-  const pdfUrl = convertFileSrc(book.filePath);
-  viewerState.pdf = await getDocument(pdfUrl).promise;
-  viewerState.currentPage = Math.min(viewerState.currentPage, viewerState.pdf.numPages);
   await renderCurrentPage();
 }
 
@@ -225,12 +190,22 @@ function renderSnapshot(snapshot: LibrarySnapshot) {
       itemEl.appendChild(pathEl);
       itemEl.appendChild(metaEl);
       itemEl.addEventListener("click", () => {
-        void openBook(book);
+        void openBook(book).catch((error) => {
+          const viewerStatusEl = document.querySelector<HTMLElement>("#viewer-status");
+          if (viewerStatusEl) {
+            viewerStatusEl.textContent = `PDF の表示に失敗しました: ${String(error)}`;
+          }
+        });
       });
       itemEl.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          void openBook(book);
+          void openBook(book).catch((error) => {
+            const viewerStatusEl = document.querySelector<HTMLElement>("#viewer-status");
+            if (viewerStatusEl) {
+              viewerStatusEl.textContent = `PDF の表示に失敗しました: ${String(error)}`;
+            }
+          });
         }
       });
       recentBooksEl.appendChild(itemEl);
@@ -242,27 +217,7 @@ function renderSnapshot(snapshot: LibrarySnapshot) {
 
 window.addEventListener("DOMContentLoaded", async () => {
   const statusEl = document.querySelector<HTMLElement>("#scan-status");
-  const prevPageButton = document.querySelector<HTMLButtonElement>("#prev-page");
-  const nextPageButton = document.querySelector<HTMLButtonElement>("#next-page");
   const searchInput = document.querySelector<HTMLInputElement>("#library-search");
-
-  prevPageButton?.addEventListener("click", () => {
-    if (!viewerState.pdf || viewerState.currentPage <= 1) {
-      return;
-    }
-
-    viewerState.currentPage -= 1;
-    void renderCurrentPage();
-  });
-
-  nextPageButton?.addEventListener("click", () => {
-    if (!viewerState.pdf || viewerState.currentPage >= viewerState.pdf.numPages) {
-      return;
-    }
-
-    viewerState.currentPage += 1;
-    void renderCurrentPage();
-  });
 
   searchInput?.addEventListener("input", () => {
     if (lastSnapshot) {
@@ -285,9 +240,17 @@ window.addEventListener("DOMContentLoaded", async () => {
       renderSnapshot(snapshot);
 
       if (viewerState.currentBook) {
-        void openBook(viewerState.currentBook);
+        void openBook(viewerState.currentBook).catch((error) => {
+          if (statusEl) {
+            statusEl.textContent = `PDF の初期表示に失敗しました: ${String(error)}`;
+          }
+        });
       } else if (snapshot.books.length > 0) {
-        void openBook(snapshot.books[0]);
+        void openBook(snapshot.books[0]).catch((error) => {
+          if (statusEl) {
+            statusEl.textContent = `PDF の初期表示に失敗しました: ${String(error)}`;
+          }
+        });
       }
     })
     .catch((error) => {

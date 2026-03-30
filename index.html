@@ -52,14 +52,9 @@
               <h2>PDF ビューア</h2>
               <p class="panel-note" id="viewer-title">本を選ぶとここに表示されます。</p>
             </div>
-            <div class="viewer-actions">
-              <button id="prev-page" type="button">前へ</button>
-              <span id="page-indicator">- / -</span>
-              <button id="next-page" type="button">次へ</button>
-            </div>
           </div>
           <div class="viewer-stage">
-            <canvas id="pdf-canvas"></canvas>
+            <iframe id="pdf-frame" title="PDF preview"></iframe>
           </div>
           <p class="panel-note" id="viewer-status">本棚から1冊選んでください。</p>
         </article>

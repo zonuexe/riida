@@ -899,8 +899,11 @@ async function renderCurrentPage() {
           const canvasWrapperEl = document.createElement("div");
           canvasWrapperEl.className = "canvasWrapper";
           const canvas = document.createElement("canvas");
-          canvas.width = Math.ceil(viewport.width);
-          canvas.height = Math.ceil(viewport.height);
+          const outputScale = Math.max(window.devicePixelRatio || 1, 1);
+          canvas.width = Math.ceil(viewport.width * outputScale);
+          canvas.height = Math.ceil(viewport.height * outputScale);
+          canvas.style.width = `${viewport.width}px`;
+          canvas.style.height = `${viewport.height}px`;
           canvasWrapperEl.appendChild(canvas);
           pageEl.appendChild(canvasWrapperEl);
 
@@ -921,6 +924,8 @@ async function renderCurrentPage() {
           await page.render({
             canvas,
             canvasContext: context,
+            transform:
+              outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
             viewport,
           }).promise;
 

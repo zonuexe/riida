@@ -61,6 +61,13 @@ type ViewerSettingsState = ViewerSettings & {
   isSettingsOpen: boolean;
 };
 
+type NavigationState = {
+  historyIndex: number;
+  bookFilePath: string | null;
+  activeDirectory: string | null;
+  searchQuery: string;
+};
+
 type NoteState = {
   isOpen: boolean;
   isLoading: boolean;
@@ -133,6 +140,10 @@ let noteLoadToken = 0;
 let pdfRenderToken = 0;
 let pdfRenderResizeTimer: number | null = null;
 let viewerSettingsLoadToken = 0;
+let suppressHistoryUpdates = false;
+let navigationHistoryIndex = 0;
+let navigationHistoryMax = 0;
+let navigationEntries: NavigationState[] = [];
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -812,6 +823,192 @@ function visibleBooks(snapshot: LibrarySnapshot) {
   });
 }
 
+function currentNavigationState(): NavigationState {
+  return {
+    historyIndex: navigationHistoryIndex,
+    bookFilePath: viewerState.currentBook?.filePath ?? null,
+    activeDirectory: viewerState.activeDirectory,
+    searchQuery: viewerState.searchQuery,
+  };
+}
+
+function navigationStateSignature(state: NavigationState) {
+  return JSON.stringify({
+    bookFilePath: state.bookFilePath,
+    activeDirectory: state.activeDirectory,
+    searchQuery: state.searchQuery,
+  });
+}
+
+function buildNavigationUrl(state: NavigationState): string {
+  const params = new URLSearchParams();
+
+  if (state.searchQuery) {
+    params.set("q", state.searchQuery);
+  }
+
+  if (state.activeDirectory) {
+    params.set("dir", state.activeDirectory);
+  }
+
+  if (state.bookFilePath) {
+    params.set("book", state.bookFilePath);
+  }
+
+  const query = params.toString();
+  return query ? `/?${query}` : "/";
+}
+
+function syncNavigationHistory(mode: "push" | "replace") {
+  if (suppressHistoryUpdates) {
+    return;
+  }
+
+  syncNavigationHistoryState(currentNavigationState(), mode);
+}
+
+function syncNavigationHistoryState(state: NavigationState, mode: "push" | "replace") {
+  if (suppressHistoryUpdates) {
+    return;
+  }
+
+  const normalizedState = {
+    ...state,
+    historyIndex: navigationHistoryIndex,
+  };
+
+  if (mode === "push") {
+    const currentState = navigationEntries[navigationHistoryIndex];
+    if (
+      currentState &&
+      navigationStateSignature(currentState) === navigationStateSignature(normalizedState)
+    ) {
+      syncNavigationControlsUi();
+      return;
+    }
+
+    navigationEntries = navigationEntries.slice(0, navigationHistoryIndex + 1);
+    navigationEntries.push({
+      ...normalizedState,
+      historyIndex: navigationHistoryIndex + 1,
+    });
+    navigationHistoryIndex = navigationEntries.length - 1;
+  } else if (navigationEntries.length === 0) {
+    navigationEntries = [{ ...normalizedState, historyIndex: 0 }];
+    navigationHistoryIndex = 0;
+  } else {
+    navigationEntries[navigationHistoryIndex] = {
+      ...normalizedState,
+      historyIndex: navigationHistoryIndex,
+    };
+  }
+
+  navigationHistoryMax = Math.max(0, navigationEntries.length - 1);
+  const historyState = navigationEntries[navigationHistoryIndex];
+  const url = buildNavigationUrl(historyState);
+
+  if (mode === "push") {
+    window.history.pushState(historyState, "", url);
+  } else {
+    window.history.replaceState(historyState, "", url);
+  }
+
+  syncNavigationControlsUi();
+}
+
+async function navigateToState(state: Omit<NavigationState, "historyIndex">, mode: "push" | "replace") {
+  const nextState: NavigationState = {
+    historyIndex: navigationHistoryIndex,
+    ...state,
+  };
+
+  syncNavigationHistoryState(nextState, mode);
+  await applyNavigationState({
+    ...nextState,
+    historyIndex: navigationHistoryIndex,
+  });
+}
+
+async function applyNavigationState(state: NavigationState) {
+  const snapshot = lastSnapshot;
+
+  if (!snapshot) {
+    return;
+  }
+
+  viewerState.searchQuery = state.searchQuery;
+  viewerState.activeDirectory = state.activeDirectory;
+
+  const nextBook = state.bookFilePath
+    ? snapshot.books.find((book) => book.filePath === state.bookFilePath) ?? null
+    : null;
+
+  if (nextBook) {
+    await openBook(nextBook, { updateHistory: "none" });
+    return;
+  }
+
+  await clearCurrentBookSelection();
+  renderApp();
+}
+
+function syncNavigationControlsUi() {
+  const backButtonEl = document.querySelector<HTMLButtonElement>("#nav-back");
+  const forwardButtonEl = document.querySelector<HTMLButtonElement>("#nav-forward");
+
+  if (backButtonEl) {
+    backButtonEl.disabled = navigationHistoryIndex <= 0;
+  }
+
+  if (forwardButtonEl) {
+    forwardButtonEl.disabled = navigationHistoryIndex >= navigationHistoryMax;
+  }
+}
+
+function isEditableTarget(target: EventTarget | null) {
+  const element = target instanceof HTMLElement ? target : null;
+
+  if (!element) {
+    return false;
+  }
+
+  return Boolean(
+    element.closest(
+      'input, textarea, select, [contenteditable="true"], .ProseMirror, .milkdown',
+    ),
+  );
+}
+
+function navigateBack() {
+  if (navigationHistoryIndex <= 0) {
+    return;
+  }
+
+  navigationHistoryIndex -= 1;
+  const nextState = navigationEntries[navigationHistoryIndex];
+  window.history.replaceState(nextState, "", buildNavigationUrl(nextState));
+  syncNavigationControlsUi();
+  suppressHistoryUpdates = true;
+  void applyNavigationState(nextState).finally(() => {
+    suppressHistoryUpdates = false;
+  });
+}
+
+function navigateForward() {
+  if (navigationHistoryIndex >= navigationHistoryMax) {
+    return;
+  }
+
+  navigationHistoryIndex += 1;
+  const nextState = navigationEntries[navigationHistoryIndex];
+  window.history.replaceState(nextState, "", buildNavigationUrl(nextState));
+  syncNavigationControlsUi();
+  suppressHistoryUpdates = true;
+  void applyNavigationState(nextState).finally(() => {
+    suppressHistoryUpdates = false;
+  });
+}
+
 async function renderCurrentPage() {
   const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
   const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
@@ -962,13 +1159,23 @@ async function renderCurrentPage() {
   frame.src = sourceUrl;
 }
 
-async function openBook(book: BookSummary) {
+async function openBook(
+  book: BookSummary,
+  options: { updateHistory?: "push" | "replace" | "none" } = {},
+) {
+  const { updateHistory = "none" } = options;
+
   if (viewerState.currentBook?.filePath !== book.filePath) {
     await flushPendingNoteSave();
     await destroyNoteEditor();
   }
 
   viewerState.currentBook = book;
+
+  if (updateHistory !== "none") {
+    syncNavigationHistory(updateHistory);
+  }
+
   await loadViewerSettingsForCurrentBook();
   renderApp();
   await loadNoteForCurrentBook();
@@ -991,10 +1198,14 @@ function renderSidebar(snapshot: LibrarySnapshot) {
     viewerState.currentBook === null && viewerState.activeDirectory === null,
   );
   homeButton.addEventListener("click", () => {
-    void clearCurrentBookSelection().then(() => {
-      viewerState.activeDirectory = null;
-      renderApp();
-    });
+    void navigateToState(
+      {
+        bookFilePath: null,
+        activeDirectory: null,
+        searchQuery: viewerState.searchQuery,
+      },
+      "push",
+    );
   });
   navEl.appendChild(homeButton);
 
@@ -1026,11 +1237,15 @@ function renderSidebar(snapshot: LibrarySnapshot) {
     button.appendChild(labelEl);
     button.appendChild(countEl);
     button.addEventListener("click", () => {
-      void clearCurrentBookSelection().then(() => {
-        viewerState.activeDirectory = node.path;
-        ensureExpandedPath(node.path);
-        renderApp();
-      });
+      void navigateToState(
+        {
+          bookFilePath: null,
+          activeDirectory: node.path,
+          searchQuery: viewerState.searchQuery,
+        },
+        "push",
+      );
+      ensureExpandedPath(node.path);
     });
 
     if (node.hasChildren) {
@@ -1121,12 +1336,26 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     itemEl.appendChild(bodyEl);
 
     itemEl.addEventListener("click", () => {
-      void openBook(book);
+      void navigateToState(
+        {
+          bookFilePath: book.filePath,
+          activeDirectory: viewerState.activeDirectory,
+          searchQuery: viewerState.searchQuery,
+        },
+        "push",
+      );
     });
     itemEl.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        void openBook(book);
+        void navigateToState(
+          {
+            bookFilePath: book.filePath,
+            activeDirectory: viewerState.activeDirectory,
+            searchQuery: viewerState.searchQuery,
+          },
+          "push",
+        );
       }
     });
 
@@ -1224,6 +1453,8 @@ function renderApp() {
 window.addEventListener("DOMContentLoaded", async () => {
   const statusEl = document.querySelector<HTMLElement>("#scan-status");
   const searchInput = document.querySelector<HTMLInputElement>("#library-search");
+  const navBackEl = document.querySelector<HTMLButtonElement>("#nav-back");
+  const navForwardEl = document.querySelector<HTMLButtonElement>("#nav-forward");
   const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
   const noteToggleEl = document.querySelector<HTMLButtonElement>("#note-toggle");
   const noteCloseEl = document.querySelector<HTMLButtonElement>("#note-close");
@@ -1246,11 +1477,22 @@ window.addEventListener("DOMContentLoaded", async () => {
   const noteResizeEls = document.querySelectorAll<HTMLElement>(".note-resize-handle");
 
   searchInput?.addEventListener("input", () => {
-    viewerState.searchQuery = searchInput.value.trim();
-    void clearCurrentBookSelection().then(() => {
-      viewerState.activeDirectory = null;
-      renderApp();
-    });
+    void navigateToState(
+      {
+        bookFilePath: null,
+        activeDirectory: null,
+        searchQuery: searchInput.value.trim(),
+      },
+      "replace",
+    );
+  });
+
+  navBackEl?.addEventListener("click", () => {
+    navigateBack();
+  });
+
+  navForwardEl?.addEventListener("click", () => {
+    navigateForward();
   });
 
   sidebarToggleEl?.addEventListener("click", () => {
@@ -1427,6 +1669,35 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  window.addEventListener("keydown", (event) => {
+    if (isEditableTarget(event.target)) {
+      return;
+    }
+
+    const isMac = navigator.platform.toUpperCase().includes("MAC");
+    const wantsBack =
+      event.key === "BrowserBack" ||
+      (isMac && event.metaKey && !event.shiftKey && !event.ctrlKey && !event.altKey &&
+        (event.key === "[" || event.key === "ArrowLeft")) ||
+      (!isMac && event.altKey && !event.metaKey && !event.ctrlKey && event.key === "ArrowLeft");
+    const wantsForward =
+      event.key === "BrowserForward" ||
+      (isMac && event.metaKey && !event.shiftKey && !event.ctrlKey && !event.altKey &&
+        (event.key === "]" || event.key === "ArrowRight")) ||
+      (!isMac && event.altKey && !event.metaKey && !event.ctrlKey && event.key === "ArrowRight");
+
+    if (wantsBack) {
+      event.preventDefault();
+      navigateBack();
+      return;
+    }
+
+    if (wantsForward) {
+      event.preventDefault();
+      navigateForward();
+    }
+  });
+
   window.addEventListener("resize", () => {
     clampNoteWindow();
     syncNoteUi();
@@ -1473,11 +1744,50 @@ window.addEventListener("DOMContentLoaded", async () => {
     applyThumbnail(event.payload.filePath, event.payload.thumbnailPath);
   });
 
+  window.addEventListener("popstate", (event) => {
+    const state = event.state as NavigationState | null;
+    const nextState: NavigationState = state ?? {
+      historyIndex: 0,
+      bookFilePath: null,
+      activeDirectory: null,
+      searchQuery: "",
+    };
+
+    if (navigationEntries.length === 0) {
+      navigationEntries = [{ ...nextState, historyIndex: 0 }];
+    }
+
+    navigationHistoryIndex = Math.max(0, Math.min(nextState.historyIndex ?? 0, navigationEntries.length - 1));
+    navigationHistoryMax = Math.max(0, navigationEntries.length - 1);
+    syncNavigationControlsUi();
+
+    suppressHistoryUpdates = true;
+    void applyNavigationState(nextState).finally(() => {
+      suppressHistoryUpdates = false;
+    });
+  });
+
   invoke<LibrarySnapshot>("library_snapshot")
     .then((snapshot) => {
       lastSnapshot = snapshot;
       viewerState.books = snapshot.books;
-      renderApp();
+      const params = new URLSearchParams(window.location.search);
+      const initialState: NavigationState = {
+        historyIndex: 0,
+        bookFilePath: params.get("book"),
+        activeDirectory: params.get("dir"),
+        searchQuery: params.get("q") ?? "",
+      };
+
+      navigationEntries = [{ ...initialState, historyIndex: 0 }];
+      navigationHistoryIndex = 0;
+      navigationHistoryMax = 0;
+      syncNavigationControlsUi();
+      suppressHistoryUpdates = true;
+      void applyNavigationState(initialState).finally(() => {
+        suppressHistoryUpdates = false;
+        syncNavigationHistory("replace");
+      });
     })
     .catch((error) => {
       if (statusEl) {

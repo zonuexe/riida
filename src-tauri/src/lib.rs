@@ -295,41 +295,51 @@ fn default_viewer_preferences() -> ViewerPreferences {
     }
 }
 
-fn normalize_viewer_preferences(preferences: ViewerPreferences) -> ViewerPreferences {
-    let page_mode = match preferences.page_mode.trim().to_lowercase().as_str() {
+fn normalize_page_mode(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
         "single" => "single".to_string(),
         _ => DEFAULT_VIEWER_PAGE_MODE.to_string(),
-    };
+    }
+}
 
-    let binding_direction = match preferences.binding_direction.trim().to_lowercase().as_str() {
+fn normalize_binding_direction(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
         "right" => "right".to_string(),
         _ => DEFAULT_VIEWER_BINDING_DIRECTION.to_string(),
-    };
+    }
+}
 
-    let zoom_mode = match preferences.zoom_mode.trim().to_lowercase().as_str() {
+fn normalize_zoom_mode(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
         "fit-width" => "fit-width".to_string(),
         "original" => "original".to_string(),
         _ => DEFAULT_VIEWER_ZOOM_MODE.to_string(),
-    };
+    }
+}
 
-    let align_mode = match preferences.align_mode.trim().to_lowercase().as_str() {
+fn normalize_align_mode(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
         "left" => "left".to_string(),
         "right" => "right".to_string(),
         _ => DEFAULT_VIEWER_ALIGN_MODE.to_string(),
-    };
+    }
+}
 
-    let vertical_gap_mode = match preferences.vertical_gap_mode.trim().to_lowercase().as_str() {
+fn normalize_vertical_gap_mode(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
         "wide" => "wide".to_string(),
         "none" => "none".to_string(),
         _ => DEFAULT_VIEWER_VERTICAL_GAP_MODE.to_string(),
-    };
+    }
+}
 
+fn normalize_viewer_preferences(preferences: ViewerPreferences) -> ViewerPreferences {
     ViewerPreferences {
-        page_mode,
-        binding_direction,
-        zoom_mode,
-        align_mode,
-        vertical_gap_mode,
+        page_mode: normalize_page_mode(&preferences.page_mode),
+        binding_direction: normalize_binding_direction(&preferences.binding_direction),
+        zoom_mode: normalize_zoom_mode(&preferences.zoom_mode),
+        align_mode: normalize_align_mode(&preferences.align_mode),
+        vertical_gap_mode: normalize_vertical_gap_mode(&preferences.vertical_gap_mode),
         treat_first_page_as_cover: preferences.treat_first_page_as_cover,
     }
 }
@@ -366,9 +376,39 @@ fn load_saved_viewer_preferences(
     });
 
     match preferences {
-        Ok(preferences) => Ok(Some(normalize_viewer_preferences(preferences))),
+        Ok(preferences) => Ok(Some(preferences)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(error) => Err(error.to_string()),
+    }
+}
+
+fn merge_file_viewer_preferences(
+    global: &ViewerPreferences,
+    file: &ViewerPreferences,
+) -> ViewerPreferences {
+    ViewerPreferences {
+        page_mode: if file.page_mode.trim().is_empty() {
+            global.page_mode.clone()
+        } else {
+            normalize_page_mode(&file.page_mode)
+        },
+        binding_direction: normalize_binding_direction(&file.binding_direction),
+        zoom_mode: if file.zoom_mode.trim().is_empty() {
+            global.zoom_mode.clone()
+        } else {
+            normalize_zoom_mode(&file.zoom_mode)
+        },
+        align_mode: if file.align_mode.trim().is_empty() {
+            global.align_mode.clone()
+        } else {
+            normalize_align_mode(&file.align_mode)
+        },
+        vertical_gap_mode: if file.vertical_gap_mode.trim().is_empty() {
+            global.vertical_gap_mode.clone()
+        } else {
+            normalize_vertical_gap_mode(&file.vertical_gap_mode)
+        },
+        treat_first_page_as_cover: file.treat_first_page_as_cover,
     }
 }
 
@@ -435,13 +475,17 @@ fn load_viewer_preferences_payload(
     file_path: Option<&str>,
 ) -> Result<ViewerPreferencesPayload, String> {
     let global = load_saved_viewer_preferences(connection, VIEWER_DEFAULT_SCOPE_KEY)?
+        .map(normalize_viewer_preferences)
         .unwrap_or_else(default_viewer_preferences);
-    let file = if let Some(file_path) = file_path {
+    let file_raw = if let Some(file_path) = file_path {
         load_saved_viewer_preferences(connection, file_path)?
     } else {
         None
     };
-    let uses_file_override = file.is_some();
+    let file = file_raw
+        .as_ref()
+        .map(|preferences| merge_file_viewer_preferences(&global, preferences));
+    let uses_file_override = file_raw.is_some();
     let effective = file.clone().unwrap_or_else(|| global.clone());
 
     Ok(ViewerPreferencesPayload {
@@ -841,7 +885,35 @@ fn save_file_viewer_preferences(
     preferences: ViewerPreferences,
 ) -> Result<ViewerPreferencesPayload, String> {
     let connection = open_database()?;
-    save_viewer_preferences_record(&connection, &file_path, Some(&file_path), preferences)?;
+    let global = load_saved_viewer_preferences(&connection, VIEWER_DEFAULT_SCOPE_KEY)?
+        .map(normalize_viewer_preferences)
+        .unwrap_or_else(default_viewer_preferences);
+    let normalized = normalize_viewer_preferences(preferences);
+    let stored_preferences = ViewerPreferences {
+        page_mode: if normalized.page_mode == global.page_mode {
+            String::new()
+        } else {
+            normalized.page_mode
+        },
+        binding_direction: normalized.binding_direction,
+        zoom_mode: if normalized.zoom_mode == global.zoom_mode {
+            String::new()
+        } else {
+            normalized.zoom_mode
+        },
+        align_mode: if normalized.align_mode == global.align_mode {
+            String::new()
+        } else {
+            normalized.align_mode
+        },
+        vertical_gap_mode: if normalized.vertical_gap_mode == global.vertical_gap_mode {
+            String::new()
+        } else {
+            normalized.vertical_gap_mode
+        },
+        treat_first_page_as_cover: normalized.treat_first_page_as_cover,
+    };
+    save_viewer_preferences_record(&connection, &file_path, Some(&file_path), stored_preferences)?;
     load_viewer_preferences_payload(&connection, Some(&file_path))
 }
 

@@ -195,6 +195,36 @@ h1 {
   position: relative;
 }
 
+.navigation-controls {
+  position: absolute;
+  top: 16px;
+  left: 28px;
+  z-index: 3;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.navigation-button {
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(96, 70, 33, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.78);
+  color: rgba(125, 78, 33, 0.85);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0;
+  box-shadow: 0 8px 18px rgba(74, 44, 18, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.navigation-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .sidebar-edge-toggle {
   position: absolute;
   top: 18px;

@@ -1,27 +1,67 @@
 # riida
 
-Tauri + Rust based ebook library manager for local PDF files under Dropbox.
+`riida` is a Tauri + Rust desktop app for managing and reading local PDF libraries.
 
-## Development shell
+It was created to meet the needs of an author who owns more than 1,000 ebooks and wants to reach the right book quickly through a single bookshelf app with a built-in PDF reader.
 
-```bash
-nix develop
+The name "Riida" comes from "Reader", reflecting that primary goal.
+
+It is currently focused on:
+
+- indexing PDFs from a watched local folder
+- browsing the library by directory and search
+- reading with either native PDF rendering or PDF.js
+- keeping per-file notes and viewer preferences locally
+
+## Current Status
+
+This project is still in active development.
+
+The current working setup assumes a local PDF collection such as:
+
+```toml
+watch_root = "~/Dropbox/EBook/"
 ```
 
-If you use `direnv`, allow the project once:
+## Configuration
 
-```bash
-direnv allow
+Configuration is loaded from `riida.toml`.
+
+The app prefers:
+
+- `~/.config/riida/riida.toml` when `~/.config` exists
+- otherwise the OS-native config directory
+
+Example:
+
+```toml
+watch_root = "~/Dropbox/EBook/"
+excluded_dir_names = ["backup"]
+excluded_file_suffixes = [".bak"]
+pdf_renderer = "pdfjs"
 ```
 
-## Included tools
+## Local Storage
 
-- `rustc`, `cargo`, `clippy`, `rustfmt`, `rust-analyzer`
-- `nodejs`
-- `sqlite`
-- `pkg-config`
+The app separates storage by role:
 
-## Bootstrap the app
+- config: config directory
+- data: app data directory, including SQLite
+- cache: cache directory, including thumbnails
+
+Legacy project-root files are migrated forward automatically on startup when possible.
+
+## License and Copyright
+
+This project is licensed under the [Mozilla Public License 2.0](https://www.mozilla.org/en-US/MPL/2.0/). See [`LICENSE`](LICENSE).
+
+> This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of the MPL was not distributed with this file, You can obtain one at <https://mozilla.org/MPL/2.0/>.
+
+Copyright belongs to the contributors to this repository unless otherwise noted.
+
+## Development
+
+The project includes a Nix flake-based development shell.
 
 ```bash
 nix --extra-experimental-features 'nix-command flakes' develop
@@ -29,46 +69,14 @@ npm install
 npm run tauri dev
 ```
 
-## MVP
-
-- Watch `/Users/megurine/Dropbox/EBook/`
-- Ignore `backup` directories and `*.bak` files
-- Index PDF files into a platform-specific application data directory
-- Show the library in a Tauri desktop app
-- Open a selected PDF in the embedded viewer
-
-## Configuration
-
-Settings, database files, and caches now follow OS-specific app directory conventions.
-
-- Config: `~/.config/riida/riida.toml` is preferred when `~/.config` exists; otherwise the OS config directory is used
-- Data: OS app data directory as `app.db`
-- Cache: OS cache directory under `thumbnails/`
-
-On first launch, legacy files from the project root are copied forward automatically:
-
-- `riida.toml`
-- `data/app.db`
-- `data/thumbnails/`
-
-Typical locations are:
-
-- Linux: `~/.config/riida/riida.toml`, `~/.local/share/riida/app.db`, `~/.cache/riida/thumbnails/`
-- macOS: `~/.config/riida/riida.toml` when `~/.config` exists, otherwise `~/Library/Application Support/riida/riida.toml`; cache stays under `~/Library/Caches/riida/thumbnails/`
-- Windows: `%APPDATA%\\riida\\riida.toml`, `%APPDATA%\\riida\\app.db`, `%LOCALAPPDATA%\\riida\\thumbnails\\`
-
-For local development, a project-root `riida.toml` is still accepted as a legacy fallback and will be migrated automatically.
-
-```toml
-watch_root = "~/Dropbox/EBook/"
-excluded_dir_names = ["backup"]
-excluded_file_suffixes = [".bak"]
-```
-
-## Suggested next commands
+Basic verification:
 
 ```bash
-nix develop
-npm install
-npm run tauri dev
+npm run build
+cargo check --manifest-path src-tauri/Cargo.toml
 ```
+
+## Contributing
+
+- Minimum contributor workflow: [CONTRIBUTING.md](/Users/megurine/repo/rust/riida/CONTRIBUTING.md)
+- Development details and implementation notes: [AGENTS.md](/Users/megurine/repo/rust/riida/AGENTS.md)

@@ -73,6 +73,47 @@ h1 {
   box-shadow: 0 20px 40px var(--shadow);
 }
 
+.viewer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.viewer-actions button {
+  border: 1px solid var(--border);
+  background: rgba(255, 250, 240, 0.95);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.viewer-stage {
+  margin-top: 18px;
+  min-height: 360px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  border-radius: 18px;
+  background: rgba(121, 91, 47, 0.08);
+  padding: 18px;
+}
+
+#pdf-canvas {
+  max-width: 100%;
+  height: auto;
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.16);
+  background: white;
+}
+
 .panel h2 {
   margin: 0 0 12px;
   font-size: 1.1rem;
@@ -111,6 +152,7 @@ h1 {
   gap: 4px;
   padding: 12px 0;
   border-bottom: 1px solid rgba(96, 70, 33, 0.12);
+  cursor: pointer;
 }
 
 .book-item strong {
@@ -121,6 +163,11 @@ h1 {
   color: rgba(31, 27, 22, 0.62);
   font-size: 0.88rem;
   word-break: break-all;
+}
+
+.book-item:hover strong,
+.book-item:focus strong {
+  color: var(--accent);
 }
 
 li + li {

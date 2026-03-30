@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-03-31
+
+### Changed
+
+- Release automation and bundled license notice generation were corrected for CI and cross-platform packaging.
+- No user-visible feature changes were included in this release.
+
 ## [0.0.1] - 2026-03-31
 
 ### Added
@@ -34,5 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/zonuexe/riida/releases/tag/v0.0.2
 [0.0.1]: https://github.com/zonuexe/riida/releases/tag/v0.0.1

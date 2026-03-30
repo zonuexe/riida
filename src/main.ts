@@ -173,7 +173,7 @@ let activeReadingPosition: ReadingPosition | null = null;
 let lastAppConfig: AppConfigPayload | null = null;
 let cachedHomeDir: string | null = null;
 let cachedAppName = "riida";
-let cachedAppVersion = "0.0.1";
+let cachedAppVersion = "0.0.2";
 const buildDate = __BUILD_DATE__;
 let cachedThirdPartyText = "Loading third-party notices...";
 

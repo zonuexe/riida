@@ -15,12 +15,12 @@
           <h1>riida</h1>
         </div>
         <section class="sidebar-tools">
-          <label class="sidebar-search-label" for="library-search">蔵書を検索</label>
+          <label class="sidebar-search-label" for="library-search">Search library</label>
           <input
             id="library-search"
             class="library-search sidebar-search"
             type="search"
-            placeholder="タイトルやパスで検索"
+            placeholder="Search by title or path"
           />
         </section>
         <nav class="sidebar-nav" id="sidebar-nav"></nav>
@@ -36,11 +36,11 @@
         >
           ≪
         </button>
-        <div class="navigation-controls" aria-label="履歴移動">
-          <button id="nav-back" class="navigation-button" type="button" aria-label="戻る">
+        <div class="navigation-controls" aria-label="History">
+          <button id="nav-back" class="navigation-button" type="button" aria-label="Back">
             &lt;
           </button>
-          <button id="nav-forward" class="navigation-button" type="button" aria-label="進む">
+          <button id="nav-forward" class="navigation-button" type="button" aria-label="Forward">
             &gt;
           </button>
         </div>
@@ -48,17 +48,17 @@
         <section id="home-view">
           <section class="panel-grid">
             <article class="panel">
-              <h2>現在の蔵書数</h2>
+              <h2>Books</h2>
               <p class="stat" id="indexed-count">0</p>
             </article>
           </section>
 
           <section class="panel">
             <div class="library-header">
-              <h2>本棚</h2>
+              <h2>Library</h2>
             </div>
             <div id="book-results">
-              <div class="empty-state">読み込み中...</div>
+              <div class="empty-state">Loading...</div>
             </div>
           </section>
         </section>
@@ -142,12 +142,12 @@
         </section>
 
         <button id="note-toggle" class="note-toggle-button" type="button" hidden>
-          ノート
+          Notes
         </button>
         <aside id="note-panel" class="note-panel" hidden>
           <div class="note-panel-header" id="note-drag-handle">
-            <p class="note-panel-label">ノート</p>
-            <button id="note-close" class="note-close-button" type="button" aria-label="ノートを閉じる">
+            <p class="note-panel-label">Notes</p>
+            <button id="note-close" class="note-close-button" type="button" aria-label="Close notes">
               ×
             </button>
           </div>

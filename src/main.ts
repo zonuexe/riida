@@ -168,7 +168,7 @@ const noteState: NoteState = {
   activeFilePath: null,
   currentContent: "",
   savedContent: "",
-  statusMessage: "ノートは自動保存されます。",
+  statusMessage: "Notes are saved automatically.",
   x: null,
   y: null,
   width: 420,
@@ -497,7 +497,7 @@ function syncNoteUi() {
 
   if (noteToggleEl) {
     noteToggleEl.hidden = !hasBook || noteState.isOpen;
-    noteToggleEl.textContent = "ノート";
+    noteToggleEl.textContent = "Notes";
   }
 
   if (notePanelEl) {
@@ -662,7 +662,7 @@ async function saveNoteNow() {
 
   noteSaveTimer = null;
   noteState.isSaving = true;
-  noteState.statusMessage = "ノートを保存中...";
+  noteState.statusMessage = "Saving notes...";
   syncNoteUi();
 
   try {
@@ -672,9 +672,9 @@ async function saveNoteNow() {
     });
 
     noteState.savedContent = note.content;
-    noteState.statusMessage = "自動保存済み";
+    noteState.statusMessage = "Saved";
   } catch (error) {
-    noteState.statusMessage = `保存に失敗しました: ${String(error)}`;
+    noteState.statusMessage = `Failed to save notes: ${String(error)}`;
   } finally {
     noteState.isSaving = false;
     syncNoteUi();
@@ -683,7 +683,7 @@ async function saveNoteNow() {
 
 function scheduleNoteSave(markdown: string) {
   noteState.currentContent = markdown;
-  noteState.statusMessage = "保存待ち...";
+  noteState.statusMessage = "Waiting to save...";
   syncNoteUi();
 
   if (noteSaveTimer !== null) {
@@ -725,7 +725,7 @@ async function loadNoteForCurrentBook() {
   noteState.activeFilePath = currentBook.filePath;
   noteState.currentContent = "";
   noteState.savedContent = "";
-  noteState.statusMessage = "ノートを読み込み中...";
+  noteState.statusMessage = "Loading notes...";
   syncNoteUi();
 
   try {
@@ -740,7 +740,7 @@ async function loadNoteForCurrentBook() {
     noteState.activeFilePath = note.filePath;
     noteState.currentContent = note.content;
     noteState.savedContent = note.content;
-    noteState.statusMessage = note.updatedAt ? "自動保存済み" : "ノートは自動保存されます。";
+    noteState.statusMessage = note.updatedAt ? "Saved" : "Notes are saved automatically.";
 
     noteEditor = await mountNoteEditor({
       root: noteRootEl,
@@ -750,7 +750,7 @@ async function loadNoteForCurrentBook() {
       },
     });
   } catch (error) {
-    noteState.statusMessage = `ノートの読み込みに失敗しました: ${String(error)}`;
+    noteState.statusMessage = `Failed to load notes: ${String(error)}`;
   } finally {
     if (currentToken === noteLoadToken) {
       noteState.isLoading = false;
@@ -767,7 +767,7 @@ async function clearCurrentBookSelection() {
   noteState.activeFilePath = null;
   noteState.currentContent = "";
   noteState.savedContent = "";
-  noteState.statusMessage = "ノートは自動保存されます。";
+  noteState.statusMessage = "Notes are saved automatically.";
   viewerState.currentBook = null;
   applyViewerPreferences(DEFAULT_VIEWER_SETTINGS, "global", false);
   viewerSettings.globalDraft = { ...DEFAULT_VIEWER_SETTINGS };
@@ -1340,7 +1340,7 @@ async function renderCurrentPage() {
     const currentToken = pdfRenderToken;
     const loadingEl = document.createElement("div");
     loadingEl.className = "pdfjs-loading";
-    loadingEl.textContent = "PDF を描画中...";
+    loadingEl.textContent = "Rendering PDF...";
     pdfjsViewerEl.appendChild(loadingEl);
 
     try {
@@ -1491,7 +1491,7 @@ async function renderCurrentPage() {
       pdfjsViewerEl.innerHTML = "";
       const errorEl = document.createElement("div");
       errorEl.className = "pdfjs-loading";
-      errorEl.textContent = `PDF.js での表示に失敗しました: ${String(error)}`;
+      errorEl.textContent = `Failed to render with PDF.js: ${String(error)}`;
       pdfjsViewerEl.appendChild(errorEl);
     }
 
@@ -1545,7 +1545,7 @@ function renderSidebar(snapshot: LibrarySnapshot) {
   const homeButton = document.createElement("button");
   homeButton.type = "button";
   homeButton.className = "nav-link";
-  homeButton.textContent = "ホーム";
+  homeButton.textContent = "Home";
   homeButton.classList.toggle(
     "is-active",
     viewerState.currentBook === null && viewerState.activeDirectory === null,
@@ -1564,7 +1564,7 @@ function renderSidebar(snapshot: LibrarySnapshot) {
 
   const directoryHeader = document.createElement("p");
   directoryHeader.className = "nav-section-title";
-  directoryHeader.textContent = "ディレクトリ";
+  directoryHeader.textContent = "Directories";
   navEl.appendChild(directoryHeader);
 
   for (const node of deriveDirectories(snapshot)) {
@@ -1606,7 +1606,7 @@ function renderSidebar(snapshot: LibrarySnapshot) {
       toggle.type = "button";
       toggle.className = "nav-toggle";
       toggle.textContent = viewerState.expandedDirectories.has(node.path) ? "▾" : "▸";
-      toggle.setAttribute("aria-label", `${node.label} を展開または折り畳み`);
+      toggle.setAttribute("aria-label", `Expand or collapse ${node.label}`);
       toggle.addEventListener("click", (event) => {
         event.stopPropagation();
         if (viewerState.expandedDirectories.has(node.path)) {
@@ -1630,12 +1630,12 @@ function renderSidebar(snapshot: LibrarySnapshot) {
 
   const futureHeader = document.createElement("p");
   futureHeader.className = "nav-section-title";
-  futureHeader.textContent = "今後";
+  futureHeader.textContent = "Later";
   navEl.appendChild(futureHeader);
 
   const futureTag = document.createElement("div");
   futureTag.className = "nav-placeholder";
-  futureTag.textContent = "タグ";
+  futureTag.textContent = "Tags";
   navEl.appendChild(futureTag);
 }
 
@@ -1647,8 +1647,8 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     emptyEl.className = "empty-state";
     emptyEl.textContent =
       viewerState.searchQuery || viewerState.activeDirectory
-        ? "条件に一致する PDF がありません。"
-        : "まだ PDF が見つかっていません。";
+        ? "No matching PDFs."
+        : "No PDFs yet.";
     container.appendChild(emptyEl);
     return;
   }
@@ -1735,7 +1735,7 @@ function renderMain(snapshot: LibrarySnapshot) {
     sidebarToggleEl.textContent = viewerState.sidebarCollapsed ? "≫" : "≪";
     sidebarToggleEl.setAttribute(
       "aria-label",
-      viewerState.sidebarCollapsed ? "サイドバーを表示" : "サイドバーを隠す",
+      viewerState.sidebarCollapsed ? "Show sidebar" : "Hide sidebar",
     );
     sidebarToggleEl.setAttribute("aria-expanded", String(!viewerState.sidebarCollapsed));
   }

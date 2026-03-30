@@ -1,5 +1,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { homeDir } from "@tauri-apps/api/path";
+import { open } from "@tauri-apps/plugin-dialog";
 import { GlobalWorkerOptions, TextLayer, getDocument } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { mountNoteEditor, type NoteEditorHandle } from "./note-editor";
@@ -41,6 +43,16 @@ type ViewerState = {
   searchQuery: string;
   expandedDirectories: Set<string>;
   sidebarCollapsed: boolean;
+  isAppSettingsOpen: boolean;
+};
+
+type AppConfigPayload = {
+  configPath: string;
+  libraryRoots: string[];
+  excludedDirNames: string[];
+  excludedFileSuffixes: string[];
+  pdfRenderer: "native" | "pdfjs";
+  debugOpenPage?: number | null;
 };
 
 type ViewerSettings = {
@@ -118,6 +130,7 @@ const viewerState: ViewerState = {
   searchQuery: "",
   expandedDirectories: new Set<string>(),
   sidebarCollapsed: false,
+  isAppSettingsOpen: false,
 };
 
 const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
@@ -154,9 +167,35 @@ let navigationHistoryIndex = 0;
 let navigationHistoryMax = 0;
 let navigationEntries: NavigationState[] = [];
 let activeReadingPosition: ReadingPosition | null = null;
+let lastAppConfig: AppConfigPayload | null = null;
+let cachedHomeDir: string | null = null;
 
 function readingPositionStorageKey(filePath: string) {
   return `riida:reading-position:${filePath}`;
+}
+
+async function collapseHomePath(path: string) {
+  if (!cachedHomeDir) {
+    try {
+      cachedHomeDir = (await homeDir()).replace(/\/+$/, "");
+    } catch {
+      cachedHomeDir = "";
+    }
+  }
+
+  if (!cachedHomeDir) {
+    return path;
+  }
+
+  if (path === cachedHomeDir) {
+    return "~";
+  }
+
+  if (path.startsWith(`${cachedHomeDir}/`)) {
+    return `~/${path.slice(cachedHomeDir.length + 1)}`;
+  }
+
+  return path;
 }
 
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -513,6 +552,155 @@ function syncNoteUi() {
 
   if (noteEditorEl) {
     noteEditorEl.dataset.empty = noteState.currentContent ? "false" : "true";
+  }
+}
+
+function renderLibraryRootsList() {
+  const listEl = document.querySelector<HTMLElement>("#config-library-roots-list");
+  if (!listEl) {
+    return;
+  }
+
+  listEl.innerHTML = "";
+  const roots = lastAppConfig?.libraryRoots ?? [];
+
+  if (roots.length === 0) {
+    const emptyEl = document.createElement("div");
+    emptyEl.className = "settings-root-empty";
+    emptyEl.textContent = "No library folders selected yet.";
+    listEl.appendChild(emptyEl);
+    return;
+  }
+
+  roots.forEach((root, index) => {
+    const itemEl = document.createElement("div");
+    itemEl.className = "settings-root-item";
+
+    const codeEl = document.createElement("code");
+    codeEl.textContent = root;
+
+    const removeEl = document.createElement("button");
+    removeEl.type = "button";
+    removeEl.className = "settings-root-remove";
+    removeEl.textContent = "Remove";
+    removeEl.disabled = roots.length <= 1;
+    removeEl.addEventListener("click", () => {
+      if (!lastAppConfig) {
+        return;
+      }
+
+      if (lastAppConfig.libraryRoots.length <= 1) {
+        setAppSettingsStatus("At least one library root is required.", "error");
+        return;
+      }
+
+      lastAppConfig = {
+        ...lastAppConfig,
+        libraryRoots: lastAppConfig.libraryRoots.filter((_, candidateIndex) => candidateIndex !== index),
+      };
+      setAppSettingsStatus("");
+      syncAppSettingsUi();
+    });
+
+    itemEl.appendChild(codeEl);
+    itemEl.appendChild(removeEl);
+    listEl.appendChild(itemEl);
+  });
+}
+
+function setAppSettingsStatus(message: string, tone: "neutral" | "success" | "error" = "neutral") {
+  const statusEl = document.querySelector<HTMLElement>("#app-settings-status");
+  if (!statusEl) {
+    return;
+  }
+
+  statusEl.hidden = message.length === 0;
+  statusEl.textContent = message;
+  if (tone === "neutral") {
+    delete statusEl.dataset.tone;
+  } else {
+    statusEl.dataset.tone = tone;
+  }
+}
+
+function syncAppSettingsUi() {
+  const modalEl = document.querySelector<HTMLElement>("#app-settings-modal");
+  const excludedDirNamesEl = document.querySelector<HTMLTextAreaElement>("#config-excluded-dir-names");
+  const excludedFileSuffixesEl = document.querySelector<HTMLTextAreaElement>(
+    "#config-excluded-file-suffixes",
+  );
+  const pdfRendererEl = document.querySelector<HTMLSelectElement>("#config-pdf-renderer");
+  const configPathEl = document.querySelector<HTMLElement>("#app-settings-config-path");
+
+  if (modalEl) {
+    modalEl.hidden = !viewerState.isAppSettingsOpen;
+  }
+
+  if (lastAppConfig) {
+    if (excludedDirNamesEl) {
+      excludedDirNamesEl.value = lastAppConfig.excludedDirNames.join("\n");
+    }
+    if (excludedFileSuffixesEl) {
+      excludedFileSuffixesEl.value = lastAppConfig.excludedFileSuffixes.join("\n");
+    }
+    if (pdfRendererEl) {
+      pdfRendererEl.value = lastAppConfig.pdfRenderer;
+    }
+    if (configPathEl) {
+      configPathEl.innerHTML = `Config file: <code>${lastAppConfig.configPath}</code>`;
+    }
+  } else if (configPathEl) {
+    configPathEl.textContent = "";
+  }
+
+  renderLibraryRootsList();
+}
+
+async function loadAppConfig() {
+  lastAppConfig = await invoke<AppConfigPayload>("load_app_config");
+  syncAppSettingsUi();
+}
+
+async function saveAppSettingsFromForm() {
+  const excludedDirNamesEl = document.querySelector<HTMLTextAreaElement>("#config-excluded-dir-names");
+  const excludedFileSuffixesEl = document.querySelector<HTMLTextAreaElement>(
+    "#config-excluded-file-suffixes",
+  );
+  const pdfRendererEl = document.querySelector<HTMLSelectElement>("#config-pdf-renderer");
+
+  const libraryRoots = [...(lastAppConfig?.libraryRoots ?? [])];
+
+  if (libraryRoots.length === 0) {
+    setAppSettingsStatus("At least one library root is required.", "error");
+    return;
+  }
+
+  try {
+    const payload = await invoke<AppConfigPayload>("save_app_config", {
+      input: {
+        libraryRoots,
+        excludedDirNames: (excludedDirNamesEl?.value ?? "")
+          .split("\n")
+          .map((value) => value.trim())
+          .filter(Boolean),
+        excludedFileSuffixes: (excludedFileSuffixesEl?.value ?? "")
+          .split("\n")
+          .map((value) => value.trim())
+          .filter(Boolean),
+        pdfRenderer: pdfRendererEl?.value ?? "native",
+      },
+    });
+
+    lastAppConfig = payload;
+    const snapshot = await invoke<LibrarySnapshot>("library_snapshot");
+    lastSnapshot = snapshot;
+    viewerState.books = snapshot.books;
+    renderApp();
+    viewerState.isAppSettingsOpen = false;
+    setAppSettingsStatus("");
+    syncAppSettingsUi();
+  } catch (error) {
+    setAppSettingsStatus(`Failed to save settings: ${String(error)}`, "error");
   }
 }
 
@@ -1792,6 +1980,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   const navBackEl = document.querySelector<HTMLButtonElement>("#nav-back");
   const navForwardEl = document.querySelector<HTMLButtonElement>("#nav-forward");
   const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
+  const appSettingsOpenEl = document.querySelector<HTMLButtonElement>("#app-settings-open");
+  const appSettingsCloseEl = document.querySelector<HTMLButtonElement>("#app-settings-close");
+  const appSettingsCancelEl = document.querySelector<HTMLButtonElement>("#app-settings-cancel");
+  const appSettingsSaveEl = document.querySelector<HTMLButtonElement>("#app-settings-save");
+  const appSettingsBackdropEl = document.querySelector<HTMLElement>("#app-settings-backdrop");
+  const appSettingsAddRootEl = document.querySelector<HTMLButtonElement>("#config-library-roots-add");
   const noteToggleEl = document.querySelector<HTMLButtonElement>("#note-toggle");
   const noteCloseEl = document.querySelector<HTMLButtonElement>("#note-close");
   const viewerSettingsToggleEl = document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
@@ -1842,6 +2036,67 @@ window.addEventListener("DOMContentLoaded", async () => {
   sidebarToggleEl?.addEventListener("click", () => {
     viewerState.sidebarCollapsed = !viewerState.sidebarCollapsed;
     renderApp();
+  });
+
+  const closeAppSettings = () => {
+    viewerState.isAppSettingsOpen = false;
+    setAppSettingsStatus("");
+    syncAppSettingsUi();
+  };
+
+  appSettingsOpenEl?.addEventListener("click", async () => {
+    viewerState.isAppSettingsOpen = true;
+    setAppSettingsStatus("");
+    syncAppSettingsUi();
+    try {
+      await loadAppConfig();
+    } catch (error) {
+      setAppSettingsStatus(`Failed to load settings: ${String(error)}`, "error");
+    }
+  });
+
+  appSettingsCloseEl?.addEventListener("click", closeAppSettings);
+  appSettingsCancelEl?.addEventListener("click", closeAppSettings);
+  appSettingsBackdropEl?.addEventListener("click", closeAppSettings);
+  appSettingsSaveEl?.addEventListener("click", () => {
+    void saveAppSettingsFromForm();
+  });
+
+  appSettingsAddRootEl?.addEventListener("click", async () => {
+    const defaultPath = lastAppConfig?.libraryRoots[lastAppConfig.libraryRoots.length - 1] ?? "~/";
+
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        defaultPath,
+        title: "Choose a library folder",
+      });
+
+      if (!selected) {
+        return;
+      }
+
+      const normalizedSelection = Array.isArray(selected) ? selected[0] : selected;
+      if (!normalizedSelection) {
+        return;
+      }
+
+      const collapsedSelection = await collapseHomePath(normalizedSelection);
+      const currentRoots = new Set(lastAppConfig?.libraryRoots ?? []);
+      currentRoots.add(collapsedSelection);
+      lastAppConfig = {
+        configPath: lastAppConfig?.configPath ?? "",
+        libraryRoots: [...currentRoots],
+        excludedDirNames: lastAppConfig?.excludedDirNames ?? [],
+        excludedFileSuffixes: lastAppConfig?.excludedFileSuffixes ?? [],
+        pdfRenderer: lastAppConfig?.pdfRenderer ?? "native",
+        debugOpenPage: lastAppConfig?.debugOpenPage ?? null,
+      };
+      syncAppSettingsUi();
+    } catch (error) {
+      setAppSettingsStatus(`Failed to choose a folder: ${String(error)}`, "error");
+    }
   });
 
   viewerSettingsToggleEl?.addEventListener("click", () => {
@@ -2014,6 +2269,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && viewerState.isAppSettingsOpen) {
+      closeAppSettings();
+      return;
+    }
+
     if (isEditableTarget(event.target)) {
       return;
     }
@@ -2136,4 +2396,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     .catch((error) => {
       console.error("failed to load library snapshot", error);
     });
+
+  try {
+    await loadAppConfig();
+  } catch (error) {
+    console.error("failed to load app config", error);
+  }
 });

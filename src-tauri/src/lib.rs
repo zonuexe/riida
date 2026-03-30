@@ -58,7 +58,7 @@ struct AppConfig {
     debug_open_page: Option<u32>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct AppConfigFile {
     library_roots: Option<Vec<String>>,
     excluded_dir_names: Option<Vec<String>>,
@@ -67,8 +67,17 @@ struct AppConfigFile {
     debug_open_page: Option<u32>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AppConfigInput {
+    library_roots: Vec<String>,
+    excluded_dir_names: Vec<String>,
+    excluded_file_suffixes: Vec<String>,
+    pdf_renderer: String,
+}
+
 struct ConfigState {
-    config: AppConfig,
+    config: Mutex<AppConfig>,
 }
 
 struct ThumbnailQueue {
@@ -131,6 +140,31 @@ struct ViewerPreferencesPayload {
 struct ThumbnailReadyEvent {
     file_path: String,
     thumbnail_path: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppConfigPayload {
+    config_path: String,
+    library_roots: Vec<String>,
+    excluded_dir_names: Vec<String>,
+    excluded_file_suffixes: Vec<String>,
+    pdf_renderer: String,
+    debug_open_page: Option<u32>,
+}
+
+fn collapse_home_path(path: &str) -> String {
+    if let Ok(home) = std::env::var("HOME") {
+        if path == home {
+            return "~".to_string();
+        }
+
+        if let Some(rest) = path.strip_prefix(&(home.clone() + "/")) {
+            return format!("~/{}", rest);
+        }
+    }
+
+    path.to_string()
 }
 
 fn database_file() -> Result<PathBuf, String> {
@@ -305,6 +339,100 @@ fn load_config() -> Result<AppConfig, String> {
         ),
         debug_open_page: file_config.debug_open_page.filter(|value| *value > 0),
     })
+}
+
+fn lock_config<'a>(
+    config_state: &'a State<'a, ConfigState>,
+) -> Result<std::sync::MutexGuard<'a, AppConfig>, String> {
+    config_state
+        .config
+        .lock()
+        .map_err(|_| "failed to lock app config".to_string())
+}
+
+fn app_config_to_payload(config: &AppConfig) -> AppConfigPayload {
+    AppConfigPayload {
+        config_path: config_file().to_string_lossy().into_owned(),
+        library_roots: config
+            .library_roots
+            .iter()
+            .map(|value| collapse_home_path(value))
+            .collect(),
+        excluded_dir_names: config.excluded_dir_names.clone(),
+        excluded_file_suffixes: config.excluded_file_suffixes.clone(),
+        pdf_renderer: config.pdf_renderer.clone(),
+        debug_open_page: config.debug_open_page,
+    }
+}
+
+fn normalize_config_input(config: AppConfigFile) -> AppConfig {
+    let defaults = default_config();
+
+    AppConfig {
+        library_roots: config
+            .library_roots
+            .unwrap_or(defaults.library_roots)
+            .into_iter()
+            .map(|value| expand_home_path(value.trim()))
+            .filter(|value| !value.trim().is_empty())
+            .collect(),
+        excluded_dir_names: config
+            .excluded_dir_names
+            .unwrap_or(defaults.excluded_dir_names)
+            .into_iter()
+            .map(|value| value.trim().to_lowercase())
+            .filter(|value| !value.is_empty())
+            .collect(),
+        excluded_file_suffixes: config
+            .excluded_file_suffixes
+            .unwrap_or(defaults.excluded_file_suffixes)
+            .into_iter()
+            .map(|value| value.trim().to_lowercase())
+            .filter(|value| !value.is_empty())
+            .collect(),
+        pdf_renderer: normalize_pdf_renderer(config.pdf_renderer.unwrap_or(defaults.pdf_renderer)),
+        debug_open_page: config.debug_open_page.filter(|value| *value > 0),
+    }
+}
+
+fn normalize_gui_config_input(config: AppConfigInput) -> AppConfig {
+    normalize_config_input(AppConfigFile {
+        library_roots: Some(config.library_roots),
+        excluded_dir_names: Some(config.excluded_dir_names),
+        excluded_file_suffixes: Some(config.excluded_file_suffixes),
+        pdf_renderer: Some(config.pdf_renderer),
+        debug_open_page: None,
+    })
+}
+
+fn save_config_input_file(input: &AppConfigInput, debug_open_page: Option<u32>) -> Result<(), String> {
+    let payload = AppConfigFile {
+        library_roots: Some(
+            input.library_roots
+                .iter()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect(),
+        ),
+        excluded_dir_names: Some(
+            input.excluded_dir_names
+                .iter()
+                .map(|value| value.trim().to_lowercase())
+                .filter(|value| !value.is_empty())
+                .collect(),
+        ),
+        excluded_file_suffixes: Some(
+            input.excluded_file_suffixes
+                .iter()
+                .map(|value| value.trim().to_lowercase())
+                .filter(|value| !value.is_empty())
+                .collect(),
+        ),
+        pdf_renderer: Some(normalize_pdf_renderer(input.pdf_renderer.clone())),
+        debug_open_page,
+    };
+    let serialized = toml::to_string_pretty(&payload).map_err(|error| error.to_string())?;
+    fs::write(config_file(), serialized).map_err(|error| error.to_string())
 }
 
 fn open_database() -> Result<Connection, String> {
@@ -891,7 +1019,8 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
 
 #[tauri::command]
 fn library_snapshot(config_state: State<'_, ConfigState>) -> Result<LibrarySnapshot, String> {
-    refresh_library_snapshot(&config_state.config)
+    let config = lock_config(&config_state)?.clone();
+    refresh_library_snapshot(&config)
 }
 
 #[tauri::command]
@@ -901,8 +1030,9 @@ fn book_thumbnail(
     config_state: State<'_, ConfigState>,
 ) -> Result<Option<String>, String> {
     let pdf_path = PathBuf::from(&file_path);
+    let config = lock_config(&config_state)?.clone();
 
-    if !pdf_path.exists() || !should_include_pdf(&pdf_path, &config_state.config) {
+    if !pdf_path.exists() || !should_include_pdf(&pdf_path, &config) {
         return Ok(None);
     }
 
@@ -925,6 +1055,46 @@ fn book_thumbnail(
     }
 
     Ok(None)
+}
+
+#[tauri::command]
+fn load_app_config(config_state: State<'_, ConfigState>) -> Result<AppConfigPayload, String> {
+    let config = lock_config(&config_state)?.clone();
+    Ok(app_config_to_payload(&config))
+}
+
+#[tauri::command]
+fn save_app_config(
+    app: AppHandle,
+    config_state: State<'_, ConfigState>,
+    input: AppConfigInput,
+) -> Result<AppConfigPayload, String> {
+    let mut next_config = normalize_gui_config_input(input);
+    let debug_open_page = lock_config(&config_state)?.debug_open_page;
+    next_config.debug_open_page = debug_open_page;
+
+    if next_config.library_roots.is_empty() {
+        return Err("at least one library root is required".to_string());
+    }
+
+    save_config_input_file(&AppConfigInput {
+        library_roots: next_config
+            .library_roots
+            .iter()
+            .map(|value| collapse_home_path(value))
+            .collect(),
+        excluded_dir_names: next_config.excluded_dir_names.clone(),
+        excluded_file_suffixes: next_config.excluded_file_suffixes.clone(),
+        pdf_renderer: next_config.pdf_renderer.clone(),
+    }, debug_open_page)?;
+
+    {
+        let mut config = lock_config(&config_state)?;
+        *config = next_config.clone();
+    }
+
+    emit_library_snapshot(&app, &next_config)?;
+    Ok(app_config_to_payload(&next_config))
 }
 
 #[tauri::command]
@@ -1141,13 +1311,18 @@ pub fn run() {
             prepare_storage(&paths)?;
             let config = load_config()?;
             start_library_watcher(app.handle().clone(), config.clone())?;
-            app.manage(ConfigState { config });
+            app.manage(ConfigState {
+                config: Mutex::new(config),
+            });
             app.manage(start_thumbnail_worker(app.handle().clone()));
             Ok(())
         })
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             library_snapshot,
+            load_app_config,
+            save_app_config,
             book_thumbnail,
             load_note,
             save_note,

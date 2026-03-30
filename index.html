@@ -22,6 +22,9 @@
             type="search"
             placeholder="Search by title or path"
           />
+          <button id="app-settings-open" class="sidebar-settings-button" type="button">
+            Settings
+          </button>
         </section>
         <nav class="sidebar-nav" id="sidebar-nav"></nav>
       </aside>
@@ -163,5 +166,53 @@
         </aside>
       </section>
     </main>
+
+    <div id="app-settings-modal" class="app-settings-modal" hidden>
+      <div id="app-settings-backdrop" class="app-settings-backdrop"></div>
+      <section class="app-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="app-settings-title">
+        <div class="app-settings-header">
+          <div>
+            <p class="app-settings-kicker">Configuration</p>
+            <h2 id="app-settings-title">Settings</h2>
+          </div>
+          <button id="app-settings-close" class="app-settings-close" type="button" aria-label="Close settings">
+            ×
+          </button>
+        </div>
+        <div class="app-settings-body">
+          <section class="app-settings-field">
+            <span>Library roots</span>
+            <div id="config-library-roots-list" class="settings-root-list"></div>
+            <button id="config-library-roots-add" class="app-settings-secondary app-settings-inline" type="button">
+              Add folder
+            </button>
+            <small>Changes to file watching may require an app restart.</small>
+          </section>
+          <label class="app-settings-field">
+            <span>Excluded directory names</span>
+            <textarea id="config-excluded-dir-names" rows="3" spellcheck="false"></textarea>
+            <small>One directory name per line.</small>
+          </label>
+          <label class="app-settings-field">
+            <span>Excluded file suffixes</span>
+            <textarea id="config-excluded-file-suffixes" rows="3" spellcheck="false"></textarea>
+            <small>One suffix per line, for example <code>.bak</code>.</small>
+          </label>
+          <label class="app-settings-field">
+            <span>PDF renderer</span>
+            <select id="config-pdf-renderer">
+              <option value="native">Native</option>
+              <option value="pdfjs">PDF.js</option>
+            </select>
+          </label>
+          <p id="app-settings-config-path" class="app-settings-path"></p>
+          <p id="app-settings-status" class="app-settings-status" hidden></p>
+        </div>
+        <div class="app-settings-actions">
+          <button id="app-settings-cancel" class="app-settings-secondary" type="button">Cancel</button>
+          <button id="app-settings-save" class="app-settings-primary" type="button">Save and close</button>
+        </div>
+      </section>
+    </div>
   </body>
 </html>

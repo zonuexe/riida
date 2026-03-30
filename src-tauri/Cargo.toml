@@ -22,6 +22,7 @@ tauri-build = { version = "2", features = [] }
 directories = "6"
 notify = "8"
 tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }

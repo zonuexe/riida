@@ -35,6 +35,14 @@ type ViewerState = {
   sidebarCollapsed: boolean;
 };
 
+type ViewerSettings = {
+  pageMode: "single" | "spread";
+  bindingDirection: "left" | "right";
+  zoomMode: "fit-width" | "fit-height" | "original";
+  treatFirstPageAsCover: boolean;
+  isSettingsOpen: boolean;
+};
+
 type NoteState = {
   isOpen: boolean;
   isLoading: boolean;
@@ -79,6 +87,14 @@ const viewerState: ViewerState = {
   sidebarCollapsed: false,
 };
 
+const viewerSettings: ViewerSettings = {
+  pageMode: "spread",
+  bindingDirection: "left",
+  zoomMode: "fit-width",
+  treatFirstPageAsCover: true,
+  isSettingsOpen: false,
+};
+
 let lastSnapshot: LibrarySnapshot | null = null;
 const thumbnailUrls = new Map<string, string>();
 let thumbnailObserver: IntersectionObserver | null = null;
@@ -86,6 +102,7 @@ let noteEditor: NoteEditorHandle | null = null;
 let noteSaveTimer: number | null = null;
 let noteLoadToken = 0;
 let pdfRenderToken = 0;
+let pdfRenderResizeTimer: number | null = null;
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -300,6 +317,44 @@ function renderPdfJsLinks(
   }
 }
 
+function buildPageGroups(totalPages: number) {
+  const groups: number[][] = [];
+
+  if (viewerSettings.pageMode === "single") {
+    for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+      groups.push([pageNumber]);
+    }
+    return groups;
+  }
+
+  let pageNumber = 1;
+
+  if (viewerSettings.treatFirstPageAsCover && totalPages > 0) {
+    groups.push([1]);
+    pageNumber = 2;
+  }
+
+  while (pageNumber <= totalPages) {
+    if (pageNumber === totalPages) {
+      groups.push([pageNumber]);
+      break;
+    }
+
+    groups.push([pageNumber, pageNumber + 1]);
+    pageNumber += 2;
+  }
+
+  return groups;
+}
+
+function getVisualPageOrder(group: number[]) {
+  if (group.length < 2 || viewerSettings.bindingDirection === "left") {
+    return group;
+  }
+
+  return [...group].reverse();
+}
+
 function normalizeSearchText(value: string) {
   return value
     .normalize("NFKC")
@@ -349,6 +404,41 @@ function syncNoteUi() {
 
   if (noteEditorEl) {
     noteEditorEl.dataset.empty = noteState.currentContent ? "false" : "true";
+  }
+}
+
+function syncViewerSettingsUi() {
+  const settingsToggleEl = document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
+  const settingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
+  const pageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
+  const bindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
+  const zoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
+  const coverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
+  const isPdfJs = lastSnapshot?.pdfRenderer === "pdfjs" && Boolean(viewerState.currentBook);
+
+  if (settingsToggleEl) {
+    settingsToggleEl.hidden = !isPdfJs;
+    settingsToggleEl.setAttribute("aria-expanded", String(viewerSettings.isSettingsOpen));
+  }
+
+  if (settingsPanelEl) {
+    settingsPanelEl.hidden = !isPdfJs || !viewerSettings.isSettingsOpen;
+  }
+
+  if (pageModeEl) {
+    pageModeEl.value = viewerSettings.pageMode;
+  }
+
+  if (bindingEl) {
+    bindingEl.value = viewerSettings.bindingDirection;
+  }
+
+  if (zoomModeEl) {
+    zoomModeEl.value = viewerSettings.zoomMode;
+  }
+
+  if (coverModeEl) {
+    coverModeEl.checked = viewerSettings.treatFirstPageAsCover;
   }
 }
 
@@ -607,11 +697,10 @@ async function renderCurrentPage() {
   if (snapshot.pdfRenderer === "pdfjs") {
     frame.hidden = true;
     frame.src = "about:blank";
-      pdfjsViewerEl.hidden = false;
-      pdfjsViewerEl.innerHTML = "";
-      pdfjsViewerEl.style.setProperty("--scale-factor", "1.35");
+    pdfjsViewerEl.hidden = false;
+    pdfjsViewerEl.innerHTML = "";
 
-      pdfRenderToken += 1;
+    pdfRenderToken += 1;
     const currentToken = pdfRenderToken;
     const loadingEl = document.createElement("div");
     loadingEl.className = "pdfjs-loading";
@@ -634,55 +723,89 @@ async function renderCurrentPage() {
       }
 
       pdfjsViewerEl.innerHTML = "";
+      const pageGroups = buildPageGroups(pdfDocument.numPages);
+      const pageGap = viewerSettings.pageMode === "spread" ? 6 : 0;
+      const viewerWidth = Math.max(pdfjsViewerEl.clientWidth, 720);
+      const viewerHeight = Math.max(pdfjsViewerEl.clientHeight, 600);
+      const maxColumns = viewerSettings.pageMode === "spread" ? 2 : 1;
+      const availableWidth = viewerWidth - pageGap * (maxColumns - 1) - 32;
 
-      for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
-        const page = await pdfDocument.getPage(pageNumber);
-        const viewport = page.getViewport({ scale: 1.35 });
-        const pageEl = document.createElement("section");
-        pageEl.className = "pdfjs-page page";
-        pageEl.style.width = `${viewport.width}px`;
-        pageEl.style.height = `${viewport.height}px`;
+      for (const group of pageGroups) {
+        const visualOrder = getVisualPageOrder(group);
+        const spreadEl = document.createElement("section");
+        spreadEl.className = "pdfjs-spread";
+        spreadEl.dataset.pageCount = String(visualOrder.length);
+        spreadEl.dataset.binding = viewerSettings.bindingDirection;
+        spreadEl.dataset.cover = String(group.length === 1);
+        pdfjsViewerEl.appendChild(spreadEl);
 
-        const canvasWrapperEl = document.createElement("div");
-        canvasWrapperEl.className = "canvasWrapper";
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.ceil(viewport.width);
-        canvas.height = Math.ceil(viewport.height);
-        canvasWrapperEl.appendChild(canvas);
-        pageEl.appendChild(canvasWrapperEl);
+        const samplePage = await pdfDocument.getPage(group[0]);
+        const sampleViewport = samplePage.getViewport({ scale: 1 });
+        const targetWidth =
+          viewerSettings.pageMode === "spread"
+            ? Math.max(220, Math.floor(availableWidth / Math.max(visualOrder.length, 1)))
+            : Math.max(320, availableWidth);
+        const targetHeight = Math.max(260, viewerHeight - 56);
 
-        const textLayerEl = document.createElement("div");
-        textLayerEl.className = "textLayer";
-        pageEl.appendChild(textLayerEl);
-
-        const linkLayerEl = document.createElement("div");
-        linkLayerEl.className = "annotationLayer";
-        pageEl.appendChild(linkLayerEl);
-        pdfjsViewerEl.appendChild(pageEl);
-
-        const context = canvas.getContext("2d");
-        if (!context) {
-          continue;
+        let baseScale = 1;
+        if (viewerSettings.zoomMode === "fit-width") {
+          baseScale = targetWidth / Math.max(sampleViewport.width, 1);
+        } else if (viewerSettings.zoomMode === "fit-height") {
+          baseScale = targetHeight / Math.max(sampleViewport.height, 1);
         }
 
-        await page.render({
-          canvas,
-          canvasContext: context,
-          viewport,
-        }).promise;
+        pdfjsViewerEl.style.setProperty("--scale-factor", String(baseScale));
 
-        const textLayer = new TextLayer({
-          textContentSource: page.streamTextContent(),
-          container: textLayerEl,
-          viewport,
-        });
-        await textLayer.render();
+        for (const pageNumber of visualOrder) {
+        const page = await pdfDocument.getPage(pageNumber);
+          const viewport = page.getViewport({ scale: baseScale });
 
-        const annotations = await page.getAnnotations();
-        renderPdfJsLinks(linkLayerEl, viewport, annotations as Array<Record<string, unknown>>);
+          const pageEl = document.createElement("section");
+          pageEl.className = "pdfjs-page page";
+          pageEl.style.width = `${viewport.width}px`;
+          pageEl.style.height = `${viewport.height}px`;
 
-        if (currentToken !== pdfRenderToken) {
-          return;
+          const canvasWrapperEl = document.createElement("div");
+          canvasWrapperEl.className = "canvasWrapper";
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.ceil(viewport.width);
+          canvas.height = Math.ceil(viewport.height);
+          canvasWrapperEl.appendChild(canvas);
+          pageEl.appendChild(canvasWrapperEl);
+
+          const textLayerEl = document.createElement("div");
+          textLayerEl.className = "textLayer";
+          pageEl.appendChild(textLayerEl);
+
+          const linkLayerEl = document.createElement("div");
+          linkLayerEl.className = "annotationLayer";
+          pageEl.appendChild(linkLayerEl);
+          spreadEl.appendChild(pageEl);
+
+          const context = canvas.getContext("2d");
+          if (!context) {
+            continue;
+          }
+
+          await page.render({
+            canvas,
+            canvasContext: context,
+            viewport,
+          }).promise;
+
+          const textLayer = new TextLayer({
+            textContentSource: page.streamTextContent(),
+            container: textLayerEl,
+            viewport,
+          });
+          await textLayer.render();
+
+          const annotations = await page.getAnnotations();
+          renderPdfJsLinks(linkLayerEl, viewport, annotations as Array<Record<string, unknown>>);
+
+          if (currentToken !== pdfRenderToken) {
+            return;
+          }
         }
       }
     } catch (error) {
@@ -901,6 +1024,7 @@ function renderMain(snapshot: LibrarySnapshot) {
     );
     sidebarToggleEl.setAttribute("aria-expanded", String(!viewerState.sidebarCollapsed));
   }
+  syncViewerSettingsUi();
 
   if (searchInput && searchInput.value !== viewerState.searchQuery) {
     searchInput.value = viewerState.searchQuery;
@@ -967,6 +1091,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
   const noteToggleEl = document.querySelector<HTMLButtonElement>("#note-toggle");
   const noteCloseEl = document.querySelector<HTMLButtonElement>("#note-close");
+  const viewerSettingsToggleEl = document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
+  const viewerSettingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
+  const viewerPageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
+  const viewerBindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
+  const viewerZoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
+  const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
   const noteDragHandleEl = document.querySelector<HTMLElement>("#note-drag-handle");
   const noteResizeEls = document.querySelectorAll<HTMLElement>(".note-resize-handle");
 
@@ -981,6 +1111,38 @@ window.addEventListener("DOMContentLoaded", async () => {
   sidebarToggleEl?.addEventListener("click", () => {
     viewerState.sidebarCollapsed = !viewerState.sidebarCollapsed;
     renderApp();
+  });
+
+  viewerSettingsToggleEl?.addEventListener("click", () => {
+    viewerSettings.isSettingsOpen = !viewerSettings.isSettingsOpen;
+    syncViewerSettingsUi();
+  });
+
+  const rerenderPdfJs = () => {
+    syncViewerSettingsUi();
+    if (lastSnapshot?.pdfRenderer === "pdfjs" && viewerState.currentBook) {
+      void renderCurrentPage();
+    }
+  };
+
+  viewerPageModeEl?.addEventListener("change", () => {
+    viewerSettings.pageMode = viewerPageModeEl.value as ViewerSettings["pageMode"];
+    rerenderPdfJs();
+  });
+
+  viewerBindingEl?.addEventListener("change", () => {
+    viewerSettings.bindingDirection = viewerBindingEl.value as ViewerSettings["bindingDirection"];
+    rerenderPdfJs();
+  });
+
+  viewerZoomModeEl?.addEventListener("change", () => {
+    viewerSettings.zoomMode = viewerZoomModeEl.value as ViewerSettings["zoomMode"];
+    rerenderPdfJs();
+  });
+
+  viewerCoverModeEl?.addEventListener("change", () => {
+    viewerSettings.treatFirstPageAsCover = viewerCoverModeEl.checked;
+    rerenderPdfJs();
   });
 
   noteToggleEl?.addEventListener("click", () => {
@@ -1019,9 +1181,32 @@ window.addEventListener("DOMContentLoaded", async () => {
     endNoteInteraction();
   });
 
+  window.addEventListener("click", (event) => {
+    const target = event.target as Node | null;
+    if (
+      viewerSettings.isSettingsOpen &&
+      target &&
+      !viewerSettingsPanelEl?.contains(target) &&
+      !viewerSettingsToggleEl?.contains(target)
+    ) {
+      viewerSettings.isSettingsOpen = false;
+      syncViewerSettingsUi();
+    }
+  });
+
   window.addEventListener("resize", () => {
     clampNoteWindow();
     syncNoteUi();
+
+    if (pdfRenderResizeTimer !== null) {
+      window.clearTimeout(pdfRenderResizeTimer);
+    }
+
+    if (lastSnapshot?.pdfRenderer === "pdfjs" && viewerState.currentBook) {
+      pdfRenderResizeTimer = window.setTimeout(() => {
+        void renderCurrentPage();
+      }, 120);
+    }
   });
 
   window.addEventListener("beforeunload", () => {

@@ -447,6 +447,57 @@ h1 {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.viewer-settings-toggle {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  border: 1px solid rgba(96, 70, 33, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.9);
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 12px;
+}
+
+.viewer-settings-panel {
+  position: absolute;
+  top: 56px;
+  right: 14px;
+  z-index: 6;
+  width: 240px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(96, 70, 33, 0.16);
+  border-radius: 18px;
+  background: rgba(255, 250, 240, 0.96);
+  box-shadow: 0 18px 34px rgba(74, 44, 18, 0.16);
+}
+
+.viewer-setting {
+  display: grid;
+  gap: 6px;
+  color: rgba(31, 27, 22, 0.78);
+  font-size: 0.9rem;
+}
+
+.viewer-setting select {
+  border: 1px solid rgba(96, 70, 33, 0.16);
+  border-radius: 12px;
+  background: white;
+  font: inherit;
+  padding: 8px 10px;
+}
+
+.viewer-checkbox {
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  gap: 10px;
 }
 
 .viewer-stage {
@@ -478,14 +529,34 @@ h1 {
   --scale-factor: 1;
 }
 
+.pdfjs-spread {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  align-items: start;
+  justify-items: center;
+}
+
+.pdfjs-spread[data-page-count="1"] {
+  grid-template-columns: 1fr;
+}
+
+.pdfjs-spread[data-page-count="1"][data-cover="true"][data-binding="left"] {
+  justify-items: start;
+}
+
+.pdfjs-spread[data-page-count="1"][data-cover="true"][data-binding="right"] {
+  justify-items: end;
+}
+
+.pdfjs-spread + .pdfjs-spread {
+  margin-top: 36px;
+}
+
 .pdfjs-page {
   display: flex;
   justify-content: center;
   margin-inline: auto;
-}
-
-.pdfjs-page + .pdfjs-page {
-  margin-top: 20px;
 }
 
 .pdfjs-viewer .page {
@@ -690,6 +761,10 @@ li + li {
   .note-panel {
     width: min(420px, calc(100vw - 32px));
     height: min(52vh, 480px);
+  }
+
+  .pdfjs-spread {
+    grid-template-columns: 1fr;
   }
 
   .note-toggle-button {

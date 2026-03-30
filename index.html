@@ -67,6 +67,37 @@
 
         <section id="pdf-view" class="pdf-view" hidden>
           <article class="viewer-panel">
+            <button id="viewer-settings-toggle" class="viewer-settings-toggle" type="button" hidden>
+              表示
+            </button>
+            <section id="viewer-settings-panel" class="viewer-settings-panel" hidden>
+              <label class="viewer-setting">
+                <span>ページ表示</span>
+                <select id="viewer-page-mode">
+                  <option value="spread">2ページ</option>
+                  <option value="single">単ページ</option>
+                </select>
+              </label>
+              <label class="viewer-setting">
+                <span>綴じ方向</span>
+                <select id="viewer-binding-direction">
+                  <option value="left">左綴じ</option>
+                  <option value="right">右綴じ</option>
+                </select>
+              </label>
+              <label class="viewer-setting">
+                <span>ズーム</span>
+                <select id="viewer-zoom-mode">
+                  <option value="fit-width">幅に合わせる</option>
+                  <option value="fit-height">高さに合わせる</option>
+                  <option value="original">オリジナル</option>
+                </select>
+              </label>
+              <label class="viewer-setting viewer-checkbox">
+                <input id="viewer-cover-mode" type="checkbox" checked />
+                <span>1ページ目を表紙にする</span>
+              </label>
+            </section>
             <div class="viewer-stage">
               <iframe id="pdf-frame" title="PDF preview"></iframe>
               <div id="pdfjs-viewer" class="pdfjs-viewer pdfViewer" hidden></div>

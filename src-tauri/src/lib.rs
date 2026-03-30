@@ -60,6 +60,15 @@ struct ThumbnailQueue {
     pending: Arc<Mutex<HashSet<String>>>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NoteDocument {
+    file_path: String,
+    format: String,
+    content: String,
+    updated_at: Option<u64>,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ThumbnailReadyEvent {
@@ -162,6 +171,13 @@ fn open_database() -> Result<Connection, String> {
               file_size INTEGER NOT NULL,
               modified_at INTEGER NOT NULL,
               indexed_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS notes (
+              id INTEGER PRIMARY KEY,
+              file_path TEXT NOT NULL UNIQUE,
+              format TEXT NOT NULL,
+              content TEXT NOT NULL,
+              updated_at INTEGER NOT NULL
             );
             ",
         )
@@ -509,6 +525,73 @@ fn book_thumbnail(
     Ok(None)
 }
 
+#[tauri::command]
+fn load_note(file_path: String) -> Result<NoteDocument, String> {
+    let connection = open_database()?;
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT
+              format,
+              content,
+              updated_at
+            FROM notes
+            WHERE file_path = ?1
+            ",
+        )
+        .map_err(|error| error.to_string())?;
+
+    let note = statement.query_row(params![&file_path], |row| {
+        Ok(NoteDocument {
+            file_path: file_path.clone(),
+            format: row.get(0)?,
+            content: row.get(1)?,
+            updated_at: Some(row.get(2)?),
+        })
+    });
+
+    match note {
+        Ok(note) => Ok(note),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(NoteDocument {
+            file_path,
+            format: "markdown".to_string(),
+            content: String::new(),
+            updated_at: None,
+        }),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+#[tauri::command]
+fn save_note(file_path: String, content: String) -> Result<NoteDocument, String> {
+    let connection = open_database()?;
+    let updated_at = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs();
+
+    connection
+        .execute(
+            "
+            INSERT INTO notes (file_path, format, content, updated_at)
+            VALUES (?1, ?2, ?3, ?4)
+            ON CONFLICT(file_path) DO UPDATE SET
+              format = excluded.format,
+              content = excluded.content,
+              updated_at = excluded.updated_at
+            ",
+            params![&file_path, "markdown", &content, updated_at],
+        )
+        .map_err(|error| error.to_string())?;
+
+    Ok(NoteDocument {
+        file_path,
+        format: "markdown".to_string(),
+        content,
+        updated_at: Some(updated_at),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -520,7 +603,12 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![library_snapshot, book_thumbnail])
+        .invoke_handler(tauri::generate_handler![
+            library_snapshot,
+            book_thumbnail,
+            load_note,
+            save_note
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

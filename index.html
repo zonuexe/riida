@@ -72,6 +72,27 @@
             </div>
           </article>
         </section>
+
+        <button id="note-toggle" class="note-toggle-button" type="button" hidden>
+          ノート
+        </button>
+        <aside id="note-panel" class="note-panel" hidden>
+          <div class="note-panel-header" id="note-drag-handle">
+            <p class="note-panel-label">ノート</p>
+            <button id="note-close" class="note-close-button" type="button" aria-label="ノートを閉じる">
+              ×
+            </button>
+          </div>
+          <div id="note-editor" class="note-editor"></div>
+          <div class="note-resize-handle note-resize-handle-n" data-resize="n"></div>
+          <div class="note-resize-handle note-resize-handle-e" data-resize="e"></div>
+          <div class="note-resize-handle note-resize-handle-s" data-resize="s"></div>
+          <div class="note-resize-handle note-resize-handle-w" data-resize="w"></div>
+          <div class="note-resize-handle note-resize-handle-ne" data-resize="ne"></div>
+          <div class="note-resize-handle note-resize-handle-se" data-resize="se"></div>
+          <div class="note-resize-handle note-resize-handle-sw" data-resize="sw"></div>
+          <div class="note-resize-handle note-resize-handle-nw" data-resize="nw"></div>
+        </aside>
       </section>
     </main>
   </body>

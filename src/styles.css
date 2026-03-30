@@ -265,6 +265,183 @@ h1 {
   min-height: 0;
 }
 
+.note-toggle-button {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 20;
+  border: 1px solid rgba(96, 70, 33, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.9);
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 10px 14px;
+  box-shadow: 0 12px 28px rgba(74, 44, 18, 0.14);
+}
+
+.note-panel {
+  position: fixed;
+  left: calc(100vw - 444px);
+  top: calc(100vh - 564px);
+  z-index: 24;
+  width: 420px;
+  height: 540px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 12px;
+  border: 1px solid rgba(96, 70, 33, 0.16);
+  border-radius: 20px;
+  background: rgba(255, 250, 240, 0.95);
+  box-shadow: 0 24px 56px rgba(74, 44, 18, 0.2);
+  backdrop-filter: blur(18px);
+  box-sizing: border-box;
+  user-select: none;
+  opacity: 0.1;
+  transition:
+    opacity 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.note-panel:hover,
+.note-panel:focus-within {
+  opacity: 0.98;
+  box-shadow: 0 24px 56px rgba(74, 44, 18, 0.24);
+}
+
+.note-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  padding: 0 2px 0 6px;
+  cursor: move;
+}
+
+.note-panel-label {
+  margin: 0;
+  color: rgba(125, 78, 33, 0.76);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.note-close-button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(31, 27, 22, 0.56);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.note-close-button:hover {
+  background: rgba(125, 78, 33, 0.1);
+  color: var(--accent);
+}
+
+.note-editor {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(96, 70, 33, 0.1);
+  user-select: text;
+}
+
+.note-editor .milkdown {
+  height: 100%;
+}
+
+.note-editor .milkdown .editor {
+  height: 100%;
+}
+
+.note-editor .ProseMirror {
+  min-height: 100%;
+  padding: 18px;
+  color: #1f1b16;
+}
+
+.note-resize-handle {
+  position: absolute;
+  z-index: 2;
+}
+
+.note-resize-handle-n,
+.note-resize-handle-s {
+  left: 12px;
+  right: 12px;
+  height: 8px;
+}
+
+.note-resize-handle-e,
+.note-resize-handle-w {
+  top: 12px;
+  bottom: 12px;
+  width: 8px;
+}
+
+.note-resize-handle-n {
+  top: -4px;
+  cursor: ns-resize;
+}
+
+.note-resize-handle-e {
+  right: -4px;
+  cursor: ew-resize;
+}
+
+.note-resize-handle-s {
+  bottom: -4px;
+  cursor: ns-resize;
+}
+
+.note-resize-handle-w {
+  left: -4px;
+  cursor: ew-resize;
+}
+
+.note-resize-handle-ne,
+.note-resize-handle-se,
+.note-resize-handle-sw,
+.note-resize-handle-nw {
+  width: 14px;
+  height: 14px;
+}
+
+.note-resize-handle-ne {
+  top: -4px;
+  right: -4px;
+  cursor: nesw-resize;
+}
+
+.note-resize-handle-se {
+  right: -4px;
+  bottom: -4px;
+  cursor: nwse-resize;
+}
+
+.note-resize-handle-sw {
+  left: -4px;
+  bottom: -4px;
+  cursor: nesw-resize;
+}
+
+.note-resize-handle-nw {
+  top: -4px;
+  left: -4px;
+  cursor: nwse-resize;
+}
+
 .viewer-panel {
   height: calc(100vh - 56px);
   min-height: 0;
@@ -424,6 +601,16 @@ li + li {
 
   .viewer-stage {
     min-height: 70vh;
+  }
+
+  .note-panel {
+    width: min(420px, calc(100vw - 32px));
+    height: min(52vh, 480px);
+  }
+
+  .note-toggle-button {
+    right: 16px;
+    bottom: 16px;
   }
 
   .library-header,

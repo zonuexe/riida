@@ -1,0 +1,38 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.0.1] - 2026-03-31
+
+### Added
+
+- Initial desktop release of `riida` as a local PDF library manager and built-in reader.
+- Automatic library indexing for PDF files under configurable `library_roots`.
+- Background library watching for new, changed, and removed PDF files.
+- Searchable library browsing with a collapsible sidebar and directory tree.
+- Built-in PDF reading with a choice between native WebView rendering and `pdf.js`.
+- Configurable PDF.js reading modes including single-page and two-page spreads, binding direction, zoom mode, alignment, cover handling, and vertical spacing.
+- Reader navigation with on-screen back and forward controls plus platform-native keyboard shortcuts.
+- Reading position restore for reopened files and viewer reconfiguration.
+- Floating per-book notes with Milkdown-based rich editing and automatic SQLite persistence.
+- Thumbnail generation and caching for library items.
+- In-app settings for library roots, exclusions, and PDF renderer selection.
+- In-app About dialog with version, build date, project license, repository link, and third-party license notices.
+
+### Changed
+
+- Viewer preferences can now be stored either globally or per file.
+- Storage paths now follow platform-aware config, data, and cache conventions.
+- The primary user interface is now presented in simplified English.
+
+### Removed
+
+- Reading progress counters and page-tracking UI were removed in favor of position restore only.
+
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/zonuexe/riida/releases/tag/v0.0.1

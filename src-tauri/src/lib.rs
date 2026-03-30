@@ -15,7 +15,6 @@ use std::{
 use tauri::{AppHandle, Emitter, Manager, State};
 use walkdir::WalkDir;
 
-const DEFAULT_WATCH_ROOT: &str = "/Users/megurine/Dropbox/EBook/";
 const CONFIG_FILE: &str = "riida.toml";
 const DEFAULT_EXCLUDED_DIR_NAMES: &[&str] = &["backup"];
 const DEFAULT_EXCLUDED_FILE_SUFFIXES: &[&str] = &[".bak"];
@@ -41,7 +40,7 @@ struct BookSummary {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LibrarySnapshot {
-    watch_root: String,
+    library_roots: Vec<String>,
     indexed_count: usize,
     books: Vec<BookSummary>,
     excluded_dir_names: Vec<String>,
@@ -52,7 +51,7 @@ struct LibrarySnapshot {
 
 #[derive(Clone)]
 struct AppConfig {
-    watch_root: String,
+    library_roots: Vec<String>,
     excluded_dir_names: Vec<String>,
     excluded_file_suffixes: Vec<String>,
     pdf_renderer: String,
@@ -61,7 +60,7 @@ struct AppConfig {
 
 #[derive(Deserialize)]
 struct AppConfigFile {
-    watch_root: Option<String>,
+    library_roots: Option<Vec<String>>,
     excluded_dir_names: Option<Vec<String>>,
     excluded_file_suffixes: Option<Vec<String>>,
     pdf_renderer: Option<String>,
@@ -235,7 +234,7 @@ fn prepare_storage(paths: &AppPaths) -> Result<(), String> {
 
 fn default_config() -> AppConfig {
     AppConfig {
-        watch_root: DEFAULT_WATCH_ROOT.to_string(),
+        library_roots: Vec::new(),
         excluded_dir_names: DEFAULT_EXCLUDED_DIR_NAMES
             .iter()
             .map(|value| value.to_string())
@@ -283,7 +282,12 @@ fn load_config() -> Result<AppConfig, String> {
     let defaults = default_config();
 
     Ok(AppConfig {
-        watch_root: expand_home_path(&file_config.watch_root.unwrap_or(defaults.watch_root)),
+        library_roots: file_config
+            .library_roots
+            .unwrap_or(defaults.library_roots)
+            .into_iter()
+            .map(|value| expand_home_path(&value))
+            .collect(),
         excluded_dir_names: file_config
             .excluded_dir_names
             .unwrap_or(defaults.excluded_dir_names)
@@ -617,41 +621,43 @@ fn scan_and_index(connection: &Connection, config: &AppConfig) -> Result<(), Str
         .map_err(|error| error.to_string())?
         .as_secs();
 
-    for entry in WalkDir::new(&config.watch_root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file() && should_include_pdf(entry.path(), config))
-    {
-        let path = entry.path();
-        let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
-        let file_size = metadata.len();
+    for root in &config.library_roots {
+        for entry in WalkDir::new(root)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_type().is_file() && should_include_pdf(entry.path(), config))
+        {
+            let path = entry.path();
+            let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
+            let file_size = metadata.len();
 
-        if file_size == 0 {
-            continue;
+            if file_size == 0 {
+                continue;
+            }
+
+            let file_path = path.to_string_lossy().into_owned();
+            let file_name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("unknown.pdf")
+                .to_string();
+            let modified_at = modified_unix_seconds(&metadata);
+
+            connection
+                .execute(
+                    "
+                    INSERT INTO books (file_path, file_name, file_size, modified_at, indexed_at)
+                    VALUES (?1, ?2, ?3, ?4, ?5)
+                    ON CONFLICT(file_path) DO UPDATE SET
+                      file_name = excluded.file_name,
+                      file_size = excluded.file_size,
+                      modified_at = excluded.modified_at,
+                      indexed_at = excluded.indexed_at
+                    ",
+                    params![file_path, file_name, file_size, modified_at, now],
+                )
+                .map_err(|error| error.to_string())?;
         }
-
-        let file_path = path.to_string_lossy().into_owned();
-        let file_name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("unknown.pdf")
-            .to_string();
-        let modified_at = modified_unix_seconds(&metadata);
-
-        connection
-            .execute(
-                "
-                INSERT INTO books (file_path, file_name, file_size, modified_at, indexed_at)
-                VALUES (?1, ?2, ?3, ?4, ?5)
-                ON CONFLICT(file_path) DO UPDATE SET
-                  file_name = excluded.file_name,
-                  file_size = excluded.file_size,
-                  modified_at = excluded.modified_at,
-                  indexed_at = excluded.indexed_at
-                ",
-                params![file_path, file_name, file_size, modified_at, now],
-            )
-            .map_err(|error| error.to_string())?;
     }
 
     connection
@@ -692,7 +698,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
         .map_err(|error| error.to_string())?;
 
     Ok(LibrarySnapshot {
-        watch_root: config.watch_root.clone(),
+        library_roots: config.library_roots.clone(),
         indexed_count,
         books,
         excluded_dir_names: config.excluded_dir_names.clone(),
@@ -703,8 +709,12 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
 }
 
 fn refresh_library_snapshot(config: &AppConfig) -> Result<LibrarySnapshot, String> {
-    if !Path::new(&config.watch_root).exists() {
-        return Err(format!("watch root does not exist: {}", config.watch_root));
+    if let Some(missing_root) = config
+        .library_roots
+        .iter()
+        .find(|root| !Path::new(root).exists())
+    {
+        return Err(format!("library root does not exist: {missing_root}"));
     }
 
     let connection = open_database()?;
@@ -822,7 +832,11 @@ fn emit_library_snapshot(app: &AppHandle, config: &AppConfig) -> Result<(), Stri
 }
 
 fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String> {
-    if !Path::new(&config.watch_root).exists() {
+    if config
+        .library_roots
+        .iter()
+        .all(|root| !Path::new(root).exists())
+    {
         return Ok(());
     }
 
@@ -842,9 +856,15 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
             }
         };
 
-        if let Err(error) = watcher.watch(Path::new(&config.watch_root), RecursiveMode::Recursive) {
-            let _ = app.emit("library-watch-error", error.to_string());
-            return;
+        for root in &config.library_roots {
+            if !Path::new(root).exists() {
+                continue;
+            }
+
+            if let Err(error) = watcher.watch(Path::new(root), RecursiveMode::Recursive) {
+                let _ = app.emit("library-watch-error", error.to_string());
+                return;
+            }
         }
 
         while let Ok(result) = rx.recv() {

@@ -11,7 +11,7 @@ type BookSummary = {
 };
 
 type LibrarySnapshot = {
-  watchRoot: string;
+  libraryRoots: string[];
   indexedCount: number;
   books: BookSummary[];
   excludedDirNames: string[];
@@ -267,14 +267,27 @@ function ensureThumbnailObserver() {
 
 function deriveDirectories(snapshot: LibrarySnapshot): DirectoryNode[] {
   const counts = new Map<string, number>();
-  const watchRoot = snapshot.watchRoot.replace(/\/+$/, "");
+  const normalizedRoots = snapshot.libraryRoots
+    .map((root) => root.replace(/\/+$/, ""))
+    .sort((a, b) => b.length - a.length);
+  const findRootForPath = (filePath: string) =>
+    normalizedRoots.find(
+      (candidate) => filePath === candidate || filePath.startsWith(`${candidate}/`),
+    );
 
   for (const book of snapshot.books) {
-    const relative = book.filePath.startsWith(`${watchRoot}/`)
-      ? book.filePath.slice(watchRoot.length + 1)
-      : book.filePath;
+    const root = findRootForPath(book.filePath);
+
+    if (!root) {
+      continue;
+    }
+
+    counts.set(root, (counts.get(root) ?? 0) + 1);
+    const relative = book.filePath.startsWith(`${root}/`)
+      ? book.filePath.slice(root.length + 1)
+      : "";
     const parts = relative.split("/").slice(0, -1);
-    let current = "";
+    let current = root;
 
     for (const part of parts) {
       current = current ? `${current}/${part}` : part;
@@ -286,15 +299,22 @@ function deriveDirectories(snapshot: LibrarySnapshot): DirectoryNode[] {
 
   return [...counts.entries()]
     .sort(([a], [b]) => a.localeCompare(b, "ja"))
-    .map(([path, count]) => ({
-      id: path,
-      label: path.split("/")[path.split("/").length - 1] ?? path,
-      path,
-      depth: path.split("/").length - 1,
-      count,
-      parentPath: path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : null,
-      hasChildren: paths.some((candidate) => candidate.startsWith(`${path}/`)),
-    }));
+    .map(([path, count]) => {
+      const root = findRootForPath(path);
+      const isRoot = normalizedRoots.includes(path);
+      const relativePath =
+        root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : "";
+
+      return {
+        id: path,
+        label: path.split("/").filter(Boolean).pop() ?? path,
+        path,
+        depth: isRoot ? 0 : relativePath.split("/").length - 1,
+        count,
+        parentPath: isRoot ? null : path.slice(0, path.lastIndexOf("/")),
+        hasChildren: paths.some((candidate) => candidate.startsWith(`${path}/`)),
+      };
+    });
 }
 
 function ensureExpandedPath(path: string | null) {
@@ -302,12 +322,15 @@ function ensureExpandedPath(path: string | null) {
     return;
   }
 
-  const parts = path.split("/");
-  let current = "";
+  let currentPath = path;
+  while (true) {
+    const separator = currentPath.lastIndexOf("/");
+    if (separator <= 0) {
+      break;
+    }
 
-  for (const part of parts.slice(0, -1)) {
-    current = current ? `${current}/${part}` : part;
-    viewerState.expandedDirectories.add(current);
+    currentPath = currentPath.slice(0, separator);
+    viewerState.expandedDirectories.add(currentPath);
   }
 }
 
@@ -847,8 +870,7 @@ function visibleBooks(snapshot: LibrarySnapshot) {
   return snapshot.books.filter((book) => {
     if (viewerState.activeDirectory) {
       const directory = viewerState.activeDirectory.replace(/\/+$/, "");
-      const watchRoot = snapshot.watchRoot.replace(/\/+$/, "");
-      const prefix = `${watchRoot}/${directory}/`;
+      const prefix = `${directory}/`;
 
       if (!book.filePath.startsWith(prefix)) {
         return false;
@@ -1727,7 +1749,7 @@ function renderMain(snapshot: LibrarySnapshot) {
   }
 
   if (watchRootEl) {
-    watchRootEl.textContent = snapshot.watchRoot;
+    watchRootEl.textContent = snapshot.libraryRoots.join(" / ");
   }
 
   if (excludedRulesEl) {

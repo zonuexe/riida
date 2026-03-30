@@ -43,7 +43,7 @@ When changing this logic, preserve migration behavior unless there is an explici
 Example development config in [riida.toml](/Users/megurine/repo/rust/riida/riida.toml):
 
 ```toml
-watch_root = "~/Dropbox/EBook/"
+library_roots = ["~/Dropbox/EBook/"]
 excluded_dir_names = ["backup"]
 excluded_file_suffixes = [".bak"]
 pdf_renderer = "pdfjs"
@@ -52,7 +52,7 @@ pdf_renderer = "pdfjs"
 
 Important fields:
 
-- `watch_root`: recursively scanned and watched
+- `library_roots`: recursively scanned and watched
 - `excluded_dir_names`: exact directory names to ignore
 - `excluded_file_suffixes`: filename suffixes to ignore
 - `pdf_renderer`: `"pdfjs"` or `"native"`

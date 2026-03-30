@@ -472,11 +472,15 @@ h1 {
   width: 240px;
   display: grid;
   gap: 12px;
-  padding: 14px;
+  padding: 12px 14px 14px;
   border: 1px solid rgba(96, 70, 33, 0.16);
   border-radius: 18px;
   background: rgba(255, 250, 240, 0.96);
   box-shadow: 0 18px 34px rgba(74, 44, 18, 0.16);
+}
+
+.viewer-settings-panel[data-scope="file"] {
+  background: rgba(243, 235, 214, 0.98);
 }
 
 .viewer-setting {
@@ -484,6 +488,58 @@ h1 {
   gap: 6px;
   color: rgba(31, 27, 22, 0.78);
   font-size: 0.9rem;
+}
+
+.viewer-setting-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin: -12px -14px 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 18px 18px 0 0;
+}
+
+.viewer-setting-tab {
+  border: 0;
+  border-right: 1px solid rgba(96, 70, 33, 0.12);
+  border-radius: 0;
+  background: rgba(214, 195, 156, 0.32);
+  color: rgba(31, 27, 22, 0.7);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.3;
+  min-width: 0;
+  padding: 10px 14px;
+  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease,
+    border-color 120ms ease;
+}
+
+.viewer-setting-tab:last-child {
+  border-right: 0;
+}
+
+.viewer-setting-tab:first-child {
+  border-top-left-radius: 18px;
+}
+
+.viewer-setting-tab:last-child {
+  border-top-right-radius: 18px;
+}
+
+.viewer-setting-tab.is-active {
+  background: rgba(255, 250, 240, 0.98);
+  color: var(--accent);
+  box-shadow: inset 0 -1px 0 rgba(255, 250, 240, 0.98);
+}
+
+.viewer-settings-panel[data-scope="file"] .viewer-setting-tab.is-active {
+  background: rgba(250, 238, 203, 0.98);
+  box-shadow: inset 0 -1px 0 rgba(250, 238, 203, 0.98);
+}
+
+.viewer-settings-panel[data-scope="file"] .viewer-setting-tab {
+  background: rgba(192, 160, 101, 0.22);
 }
 
 .viewer-setting select {

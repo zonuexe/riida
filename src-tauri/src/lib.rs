@@ -19,6 +19,13 @@ const CONFIG_FILE: &str = "riida.toml";
 const DEFAULT_EXCLUDED_DIR_NAMES: &[&str] = &["backup"];
 const DEFAULT_EXCLUDED_FILE_SUFFIXES: &[&str] = &[".bak"];
 const DEFAULT_PDF_RENDERER: &str = "native";
+const VIEWER_DEFAULT_SCOPE_KEY: &str = "__default__";
+const DEFAULT_VIEWER_PAGE_MODE: &str = "spread";
+const DEFAULT_VIEWER_BINDING_DIRECTION: &str = "left";
+const DEFAULT_VIEWER_ZOOM_MODE: &str = "fit-height";
+const DEFAULT_VIEWER_ALIGN_MODE: &str = "center";
+const DEFAULT_VIEWER_VERTICAL_GAP_MODE: &str = "compact";
+const DEFAULT_VIEWER_TREAT_FIRST_PAGE_AS_COVER: bool = true;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,6 +78,26 @@ struct NoteDocument {
     format: String,
     content: String,
     updated_at: Option<u64>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ViewerPreferences {
+    page_mode: String,
+    binding_direction: String,
+    zoom_mode: String,
+    align_mode: String,
+    vertical_gap_mode: String,
+    treat_first_page_as_cover: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ViewerPreferencesPayload {
+    global: ViewerPreferences,
+    file: Option<ViewerPreferences>,
+    effective: ViewerPreferences,
+    uses_file_override: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -194,6 +221,17 @@ fn open_database() -> Result<Connection, String> {
               content TEXT NOT NULL,
               updated_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS viewer_preferences (
+              scope_key TEXT PRIMARY KEY,
+              file_path TEXT UNIQUE,
+              page_mode TEXT NOT NULL,
+              binding_direction TEXT NOT NULL,
+              zoom_mode TEXT NOT NULL,
+              align_mode TEXT NOT NULL,
+              vertical_gap_mode TEXT NOT NULL,
+              treat_first_page_as_cover INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
             ",
         )
         .map_err(|error| error.to_string())?;
@@ -244,6 +282,174 @@ fn modified_unix_seconds(metadata: &fs::Metadata) -> u64 {
         .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
+}
+
+fn default_viewer_preferences() -> ViewerPreferences {
+    ViewerPreferences {
+        page_mode: DEFAULT_VIEWER_PAGE_MODE.to_string(),
+        binding_direction: DEFAULT_VIEWER_BINDING_DIRECTION.to_string(),
+        zoom_mode: DEFAULT_VIEWER_ZOOM_MODE.to_string(),
+        align_mode: DEFAULT_VIEWER_ALIGN_MODE.to_string(),
+        vertical_gap_mode: DEFAULT_VIEWER_VERTICAL_GAP_MODE.to_string(),
+        treat_first_page_as_cover: DEFAULT_VIEWER_TREAT_FIRST_PAGE_AS_COVER,
+    }
+}
+
+fn normalize_viewer_preferences(preferences: ViewerPreferences) -> ViewerPreferences {
+    let page_mode = match preferences.page_mode.trim().to_lowercase().as_str() {
+        "single" => "single".to_string(),
+        _ => DEFAULT_VIEWER_PAGE_MODE.to_string(),
+    };
+
+    let binding_direction = match preferences.binding_direction.trim().to_lowercase().as_str() {
+        "right" => "right".to_string(),
+        _ => DEFAULT_VIEWER_BINDING_DIRECTION.to_string(),
+    };
+
+    let zoom_mode = match preferences.zoom_mode.trim().to_lowercase().as_str() {
+        "fit-width" => "fit-width".to_string(),
+        "original" => "original".to_string(),
+        _ => DEFAULT_VIEWER_ZOOM_MODE.to_string(),
+    };
+
+    let align_mode = match preferences.align_mode.trim().to_lowercase().as_str() {
+        "left" => "left".to_string(),
+        "right" => "right".to_string(),
+        _ => DEFAULT_VIEWER_ALIGN_MODE.to_string(),
+    };
+
+    let vertical_gap_mode = match preferences.vertical_gap_mode.trim().to_lowercase().as_str() {
+        "wide" => "wide".to_string(),
+        "none" => "none".to_string(),
+        _ => DEFAULT_VIEWER_VERTICAL_GAP_MODE.to_string(),
+    };
+
+    ViewerPreferences {
+        page_mode,
+        binding_direction,
+        zoom_mode,
+        align_mode,
+        vertical_gap_mode,
+        treat_first_page_as_cover: preferences.treat_first_page_as_cover,
+    }
+}
+
+fn load_saved_viewer_preferences(
+    connection: &Connection,
+    scope_key: &str,
+) -> Result<Option<ViewerPreferences>, String> {
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT
+              page_mode,
+              binding_direction,
+              zoom_mode,
+              align_mode,
+              vertical_gap_mode,
+              treat_first_page_as_cover
+            FROM viewer_preferences
+            WHERE scope_key = ?1
+            ",
+        )
+        .map_err(|error| error.to_string())?;
+
+    let preferences = statement.query_row(params![scope_key], |row| {
+        Ok(ViewerPreferences {
+            page_mode: row.get(0)?,
+            binding_direction: row.get(1)?,
+            zoom_mode: row.get(2)?,
+            align_mode: row.get(3)?,
+            vertical_gap_mode: row.get(4)?,
+            treat_first_page_as_cover: row.get::<_, i64>(5)? != 0,
+        })
+    });
+
+    match preferences {
+        Ok(preferences) => Ok(Some(normalize_viewer_preferences(preferences))),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn save_viewer_preferences_record(
+    connection: &Connection,
+    scope_key: &str,
+    file_path: Option<&str>,
+    preferences: ViewerPreferences,
+) -> Result<ViewerPreferences, String> {
+    let normalized = normalize_viewer_preferences(preferences);
+    let updated_at = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs();
+
+    connection
+        .execute(
+            "
+            INSERT INTO viewer_preferences (
+              scope_key,
+              file_path,
+              page_mode,
+              binding_direction,
+              zoom_mode,
+              align_mode,
+              vertical_gap_mode,
+              treat_first_page_as_cover,
+              updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            ON CONFLICT(scope_key) DO UPDATE SET
+              file_path = excluded.file_path,
+              page_mode = excluded.page_mode,
+              binding_direction = excluded.binding_direction,
+              zoom_mode = excluded.zoom_mode,
+              align_mode = excluded.align_mode,
+              vertical_gap_mode = excluded.vertical_gap_mode,
+              treat_first_page_as_cover = excluded.treat_first_page_as_cover,
+              updated_at = excluded.updated_at
+            ",
+            params![
+                scope_key,
+                file_path,
+                normalized.page_mode,
+                normalized.binding_direction,
+                normalized.zoom_mode,
+                normalized.align_mode,
+                normalized.vertical_gap_mode,
+                if normalized.treat_first_page_as_cover {
+                    1
+                } else {
+                    0
+                },
+                updated_at
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+
+    Ok(normalized)
+}
+
+fn load_viewer_preferences_payload(
+    connection: &Connection,
+    file_path: Option<&str>,
+) -> Result<ViewerPreferencesPayload, String> {
+    let global = load_saved_viewer_preferences(connection, VIEWER_DEFAULT_SCOPE_KEY)?
+        .unwrap_or_else(default_viewer_preferences);
+    let file = if let Some(file_path) = file_path {
+        load_saved_viewer_preferences(connection, file_path)?
+    } else {
+        None
+    };
+    let uses_file_override = file.is_some();
+    let effective = file.clone().unwrap_or_else(|| global.clone());
+
+    Ok(ViewerPreferencesPayload {
+        global,
+        file,
+        effective,
+        uses_file_override,
+    })
 }
 
 fn scan_and_index(connection: &Connection, config: &AppConfig) -> Result<(), String> {
@@ -608,6 +814,49 @@ fn save_note(file_path: String, content: String) -> Result<NoteDocument, String>
     })
 }
 
+#[tauri::command]
+fn load_viewer_preferences(file_path: String) -> Result<ViewerPreferencesPayload, String> {
+    let connection = open_database()?;
+    load_viewer_preferences_payload(&connection, Some(&file_path))
+}
+
+#[tauri::command]
+fn save_default_viewer_preferences(
+    current_file_path: Option<String>,
+    preferences: ViewerPreferences,
+) -> Result<ViewerPreferencesPayload, String> {
+    let connection = open_database()?;
+    save_viewer_preferences_record(
+        &connection,
+        VIEWER_DEFAULT_SCOPE_KEY,
+        None,
+        preferences,
+    )?;
+    load_viewer_preferences_payload(&connection, current_file_path.as_deref())
+}
+
+#[tauri::command]
+fn save_file_viewer_preferences(
+    file_path: String,
+    preferences: ViewerPreferences,
+) -> Result<ViewerPreferencesPayload, String> {
+    let connection = open_database()?;
+    save_viewer_preferences_record(&connection, &file_path, Some(&file_path), preferences)?;
+    load_viewer_preferences_payload(&connection, Some(&file_path))
+}
+
+#[tauri::command]
+fn clear_file_viewer_preferences(file_path: String) -> Result<ViewerPreferencesPayload, String> {
+    let connection = open_database()?;
+    connection
+        .execute(
+            "DELETE FROM viewer_preferences WHERE scope_key = ?1",
+            params![&file_path],
+        )
+        .map_err(|error| error.to_string())?;
+    load_viewer_preferences_payload(&connection, Some(&file_path))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -623,7 +872,11 @@ pub fn run() {
             library_snapshot,
             book_thumbnail,
             load_note,
-            save_note
+            save_note,
+            load_viewer_preferences,
+            save_default_viewer_preferences,
+            save_file_viewer_preferences,
+            clear_file_viewer_preferences
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

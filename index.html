@@ -71,6 +71,28 @@
               表示
             </button>
             <section id="viewer-settings-panel" class="viewer-settings-panel" hidden>
+              <div class="viewer-setting-tabs" role="tablist" aria-label="設定対象">
+                <button
+                  id="viewer-settings-scope-global"
+                  class="viewer-setting-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected="true"
+                  data-scope="global"
+                >
+                  全体
+                </button>
+                <button
+                  id="viewer-settings-scope-file"
+                  class="viewer-setting-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-scope="file"
+                >
+                  ファイル
+                </button>
+              </div>
               <label class="viewer-setting">
                 <span>ページ表示</span>
                 <select id="viewer-page-mode">

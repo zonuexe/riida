@@ -42,6 +42,22 @@ type ViewerSettings = {
   alignMode: "left" | "center" | "right";
   verticalGapMode: "wide" | "compact" | "none";
   treatFirstPageAsCover: boolean;
+};
+
+type ViewerSettingsPayload = {
+  global: ViewerSettings;
+  file: ViewerSettings | null;
+  effective: ViewerSettings;
+  usesFileOverride: boolean;
+};
+
+type ViewerSettingsScope = "global" | "file";
+
+type ViewerSettingsState = ViewerSettings & {
+  globalDraft: ViewerSettings;
+  fileDraft: ViewerSettings;
+  scope: ViewerSettingsScope;
+  hasFileOverride: boolean;
   isSettingsOpen: boolean;
 };
 
@@ -89,12 +105,21 @@ const viewerState: ViewerState = {
   sidebarCollapsed: false,
 };
 
-const viewerSettings: ViewerSettings = {
+const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
   pageMode: "spread",
   bindingDirection: "left",
-  zoomMode: "fit-width",
+  zoomMode: "fit-height",
   alignMode: "center",
-  verticalGapMode: "wide",
+  verticalGapMode: "compact",
+  treatFirstPageAsCover: true,
+};
+
+const viewerSettings: ViewerSettingsState = {
+  ...DEFAULT_VIEWER_SETTINGS,
+  globalDraft: { ...DEFAULT_VIEWER_SETTINGS },
+  fileDraft: { ...DEFAULT_VIEWER_SETTINGS },
+  scope: "global",
+  hasFileOverride: false,
   treatFirstPageAsCover: true,
   isSettingsOpen: false,
 };
@@ -107,6 +132,7 @@ let noteSaveTimer: number | null = null;
 let noteLoadToken = 0;
 let pdfRenderToken = 0;
 let pdfRenderResizeTimer: number | null = null;
+let viewerSettingsLoadToken = 0;
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -414,6 +440,8 @@ function syncNoteUi() {
 function syncViewerSettingsUi() {
   const settingsToggleEl = document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
   const settingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
+  const scopeGlobalEl = document.querySelector<HTMLButtonElement>("#viewer-settings-scope-global");
+  const scopeFileEl = document.querySelector<HTMLButtonElement>("#viewer-settings-scope-file");
   const pageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
   const bindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
   const zoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
@@ -421,6 +449,8 @@ function syncViewerSettingsUi() {
   const verticalGapModeEl = document.querySelector<HTMLSelectElement>("#viewer-vertical-gap-mode");
   const coverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
   const isPdfJs = lastSnapshot?.pdfRenderer === "pdfjs" && Boolean(viewerState.currentBook);
+  const editingPreferences =
+    viewerSettings.scope === "file" ? viewerSettings.fileDraft : viewerSettings.globalDraft;
 
   if (settingsToggleEl) {
     settingsToggleEl.hidden = !isPdfJs;
@@ -429,30 +459,111 @@ function syncViewerSettingsUi() {
 
   if (settingsPanelEl) {
     settingsPanelEl.hidden = !isPdfJs || !viewerSettings.isSettingsOpen;
+    settingsPanelEl.dataset.scope = viewerSettings.scope;
   }
 
+  scopeGlobalEl?.classList.toggle("is-active", viewerSettings.scope === "global");
+  scopeGlobalEl?.setAttribute("aria-selected", String(viewerSettings.scope === "global"));
+  scopeFileEl?.classList.toggle("is-active", viewerSettings.scope === "file");
+  scopeFileEl?.setAttribute("aria-selected", String(viewerSettings.scope === "file"));
+
   if (pageModeEl) {
-    pageModeEl.value = viewerSettings.pageMode;
+    pageModeEl.value = editingPreferences.pageMode;
   }
 
   if (bindingEl) {
-    bindingEl.value = viewerSettings.bindingDirection;
+    bindingEl.value = editingPreferences.bindingDirection;
   }
 
   if (zoomModeEl) {
-    zoomModeEl.value = viewerSettings.zoomMode;
+    zoomModeEl.value = editingPreferences.zoomMode;
   }
 
   if (alignModeEl) {
-    alignModeEl.value = viewerSettings.alignMode;
+    alignModeEl.value = editingPreferences.alignMode;
   }
 
   if (verticalGapModeEl) {
-    verticalGapModeEl.value = viewerSettings.verticalGapMode;
+    verticalGapModeEl.value = editingPreferences.verticalGapMode;
   }
 
   if (coverModeEl) {
-    coverModeEl.checked = viewerSettings.treatFirstPageAsCover;
+    coverModeEl.checked = editingPreferences.treatFirstPageAsCover;
+  }
+}
+
+function currentViewerPreferences(): ViewerSettings {
+  return { ...(viewerSettings.scope === "file" ? viewerSettings.fileDraft : viewerSettings.globalDraft) };
+}
+
+function setViewerDraft(scope: ViewerSettingsScope, preferences: ViewerSettings) {
+  if (scope === "file") {
+    viewerSettings.fileDraft = { ...preferences };
+    return;
+  }
+
+  viewerSettings.globalDraft = { ...preferences };
+}
+
+function applyViewerPreferences(
+  preferences: ViewerSettings,
+  scope: ViewerSettingsScope,
+  hasFileOverride: boolean,
+) {
+  viewerSettings.pageMode = preferences.pageMode;
+  viewerSettings.bindingDirection = preferences.bindingDirection;
+  viewerSettings.zoomMode = preferences.zoomMode;
+  viewerSettings.alignMode = preferences.alignMode;
+  viewerSettings.verticalGapMode = preferences.verticalGapMode;
+  viewerSettings.treatFirstPageAsCover = preferences.treatFirstPageAsCover;
+  viewerSettings.scope = scope;
+  viewerSettings.hasFileOverride = hasFileOverride;
+}
+
+function applyViewerSettingsPayload(
+  payload: ViewerSettingsPayload,
+  preferredScope: ViewerSettingsScope = payload.usesFileOverride ? "file" : "global",
+) {
+  const nextScope = preferredScope === "file" ? "file" : "global";
+  applyViewerPreferences(payload.effective, nextScope, payload.usesFileOverride);
+  viewerSettings.globalDraft = { ...payload.global };
+  viewerSettings.fileDraft = { ...(payload.file ?? payload.effective) };
+}
+
+async function loadViewerSettingsForCurrentBook() {
+  const currentBook = viewerState.currentBook;
+
+  if (!currentBook) {
+    applyViewerPreferences(DEFAULT_VIEWER_SETTINGS, "global", false);
+    viewerSettings.globalDraft = { ...DEFAULT_VIEWER_SETTINGS };
+    viewerSettings.fileDraft = { ...DEFAULT_VIEWER_SETTINGS };
+    syncViewerSettingsUi();
+    return;
+  }
+
+  viewerSettingsLoadToken += 1;
+  const currentToken = viewerSettingsLoadToken;
+
+  try {
+    const payload = await invoke<ViewerSettingsPayload>("load_viewer_preferences", {
+      filePath: currentBook.filePath,
+    });
+
+    if (
+      currentToken !== viewerSettingsLoadToken ||
+      viewerState.currentBook?.filePath !== currentBook.filePath
+    ) {
+      return;
+    }
+
+    applyViewerSettingsPayload(payload);
+    syncViewerSettingsUi();
+  } catch (error) {
+    applyViewerPreferences(DEFAULT_VIEWER_SETTINGS, "global", false);
+    viewerSettings.globalDraft = { ...DEFAULT_VIEWER_SETTINGS };
+    viewerSettings.fileDraft = { ...DEFAULT_VIEWER_SETTINGS };
+    syncViewerSettingsUi();
+    console.error("Failed to load viewer preferences:", error);
   }
 }
 
@@ -577,7 +688,11 @@ async function clearCurrentBookSelection() {
   noteState.savedContent = "";
   noteState.statusMessage = "ノートは自動保存されます。";
   viewerState.currentBook = null;
+  applyViewerPreferences(DEFAULT_VIEWER_SETTINGS, "global", false);
+  viewerSettings.globalDraft = { ...DEFAULT_VIEWER_SETTINGS };
+  viewerSettings.fileDraft = { ...DEFAULT_VIEWER_SETTINGS };
   syncNoteUi();
+  syncViewerSettingsUi();
 }
 
 function beginNoteDrag(event: PointerEvent) {
@@ -849,8 +964,8 @@ async function openBook(book: BookSummary) {
   }
 
   viewerState.currentBook = book;
+  await loadViewerSettingsForCurrentBook();
   renderApp();
-  await renderCurrentPage();
   await loadNoteForCurrentBook();
 }
 
@@ -1109,6 +1224,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   const noteCloseEl = document.querySelector<HTMLButtonElement>("#note-close");
   const viewerSettingsToggleEl = document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
   const viewerSettingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
+  const viewerSettingsScopeGlobalEl = document.querySelector<HTMLButtonElement>(
+    "#viewer-settings-scope-global",
+  );
+  const viewerSettingsScopeFileEl = document.querySelector<HTMLButtonElement>(
+    "#viewer-settings-scope-file",
+  );
   const viewerPageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
   const viewerBindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
   const viewerZoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
@@ -1144,35 +1265,112 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   };
 
+  const persistViewerSettings = async () => {
+    const currentFilePath = viewerState.currentBook?.filePath ?? null;
+
+    if (viewerSettings.scope === "file" && currentFilePath) {
+      const payload = await invoke<ViewerSettingsPayload>("save_file_viewer_preferences", {
+        filePath: currentFilePath,
+        preferences: currentViewerPreferences(),
+      });
+      applyViewerSettingsPayload(payload, "file");
+      return;
+    }
+
+    const payload = await invoke<ViewerSettingsPayload>("save_default_viewer_preferences", {
+      currentFilePath,
+      preferences: currentViewerPreferences(),
+    });
+    applyViewerSettingsPayload(payload, "global");
+  };
+
+  const updateViewerSettings = (mutate: () => void) => {
+    mutate();
+    void persistViewerSettings()
+      .catch((error) => {
+        console.error("Failed to save viewer preferences:", error);
+      })
+      .finally(() => {
+        rerenderPdfJs();
+      });
+  };
+
+  const switchViewerSettingsScope = (requestedScope: ViewerSettingsScope) => {
+    viewerSettings.scope = requestedScope;
+    if (requestedScope === "file" && !viewerSettings.hasFileOverride) {
+      viewerSettings.fileDraft = {
+        pageMode: viewerSettings.pageMode,
+        bindingDirection: viewerSettings.bindingDirection,
+        zoomMode: viewerSettings.zoomMode,
+        alignMode: viewerSettings.alignMode,
+        verticalGapMode: viewerSettings.verticalGapMode,
+        treatFirstPageAsCover: viewerSettings.treatFirstPageAsCover,
+      };
+    }
+    syncViewerSettingsUi();
+  };
+
+  const mutateEditingViewerSettings = (mutate: (preferences: ViewerSettings) => void) => {
+    const nextPreferences = { ...currentViewerPreferences() };
+    mutate(nextPreferences);
+    setViewerDraft(viewerSettings.scope, nextPreferences);
+  };
+
+  viewerSettingsScopeGlobalEl?.addEventListener("click", () => {
+    switchViewerSettingsScope("global");
+  });
+
+  viewerSettingsScopeFileEl?.addEventListener("click", () => {
+    switchViewerSettingsScope("file");
+  });
+
   viewerPageModeEl?.addEventListener("change", () => {
-    viewerSettings.pageMode = viewerPageModeEl.value as ViewerSettings["pageMode"];
-    rerenderPdfJs();
+    updateViewerSettings(() => {
+      mutateEditingViewerSettings((preferences) => {
+        preferences.pageMode = viewerPageModeEl.value as ViewerSettings["pageMode"];
+      });
+    });
   });
 
   viewerBindingEl?.addEventListener("change", () => {
-    viewerSettings.bindingDirection = viewerBindingEl.value as ViewerSettings["bindingDirection"];
-    rerenderPdfJs();
+    updateViewerSettings(() => {
+      mutateEditingViewerSettings((preferences) => {
+        preferences.bindingDirection = viewerBindingEl.value as ViewerSettings["bindingDirection"];
+      });
+    });
   });
 
   viewerZoomModeEl?.addEventListener("change", () => {
-    viewerSettings.zoomMode = viewerZoomModeEl.value as ViewerSettings["zoomMode"];
-    rerenderPdfJs();
+    updateViewerSettings(() => {
+      mutateEditingViewerSettings((preferences) => {
+        preferences.zoomMode = viewerZoomModeEl.value as ViewerSettings["zoomMode"];
+      });
+    });
   });
 
   viewerAlignModeEl?.addEventListener("change", () => {
-    viewerSettings.alignMode = viewerAlignModeEl.value as ViewerSettings["alignMode"];
-    rerenderPdfJs();
+    updateViewerSettings(() => {
+      mutateEditingViewerSettings((preferences) => {
+        preferences.alignMode = viewerAlignModeEl.value as ViewerSettings["alignMode"];
+      });
+    });
   });
 
   viewerVerticalGapModeEl?.addEventListener("change", () => {
-    viewerSettings.verticalGapMode =
-      viewerVerticalGapModeEl.value as ViewerSettings["verticalGapMode"];
-    rerenderPdfJs();
+    updateViewerSettings(() => {
+      mutateEditingViewerSettings((preferences) => {
+        preferences.verticalGapMode =
+          viewerVerticalGapModeEl.value as ViewerSettings["verticalGapMode"];
+      });
+    });
   });
 
   viewerCoverModeEl?.addEventListener("change", () => {
-    viewerSettings.treatFirstPageAsCover = viewerCoverModeEl.checked;
-    rerenderPdfJs();
+    updateViewerSettings(() => {
+      mutateEditingViewerSettings((preferences) => {
+        preferences.treatFirstPageAsCover = viewerCoverModeEl.checked;
+      });
+    });
   });
 
   noteToggleEl?.addEventListener("click", () => {

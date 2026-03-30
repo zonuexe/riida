@@ -39,6 +39,8 @@ type ViewerSettings = {
   pageMode: "single" | "spread";
   bindingDirection: "left" | "right";
   zoomMode: "fit-width" | "fit-height" | "original";
+  alignMode: "left" | "center" | "right";
+  verticalGapMode: "wide" | "compact" | "none";
   treatFirstPageAsCover: boolean;
   isSettingsOpen: boolean;
 };
@@ -91,6 +93,8 @@ const viewerSettings: ViewerSettings = {
   pageMode: "spread",
   bindingDirection: "left",
   zoomMode: "fit-width",
+  alignMode: "center",
+  verticalGapMode: "wide",
   treatFirstPageAsCover: true,
   isSettingsOpen: false,
 };
@@ -413,6 +417,8 @@ function syncViewerSettingsUi() {
   const pageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
   const bindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
   const zoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
+  const alignModeEl = document.querySelector<HTMLSelectElement>("#viewer-align-mode");
+  const verticalGapModeEl = document.querySelector<HTMLSelectElement>("#viewer-vertical-gap-mode");
   const coverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
   const isPdfJs = lastSnapshot?.pdfRenderer === "pdfjs" && Boolean(viewerState.currentBook);
 
@@ -435,6 +441,14 @@ function syncViewerSettingsUi() {
 
   if (zoomModeEl) {
     zoomModeEl.value = viewerSettings.zoomMode;
+  }
+
+  if (alignModeEl) {
+    alignModeEl.value = viewerSettings.alignMode;
+  }
+
+  if (verticalGapModeEl) {
+    verticalGapModeEl.value = viewerSettings.verticalGapMode;
   }
 
   if (coverModeEl) {
@@ -697,8 +711,10 @@ async function renderCurrentPage() {
   if (snapshot.pdfRenderer === "pdfjs") {
     frame.hidden = true;
     frame.src = "about:blank";
-    pdfjsViewerEl.hidden = false;
-    pdfjsViewerEl.innerHTML = "";
+  pdfjsViewerEl.hidden = false;
+  pdfjsViewerEl.innerHTML = "";
+  pdfjsViewerEl.dataset.position = viewerSettings.alignMode;
+  pdfjsViewerEl.dataset.verticalGap = viewerSettings.verticalGapMode;
 
     pdfRenderToken += 1;
     const currentToken = pdfRenderToken;
@@ -1096,6 +1112,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   const viewerPageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
   const viewerBindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
   const viewerZoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
+  const viewerAlignModeEl = document.querySelector<HTMLSelectElement>("#viewer-align-mode");
+  const viewerVerticalGapModeEl =
+    document.querySelector<HTMLSelectElement>("#viewer-vertical-gap-mode");
   const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
   const noteDragHandleEl = document.querySelector<HTMLElement>("#note-drag-handle");
   const noteResizeEls = document.querySelectorAll<HTMLElement>(".note-resize-handle");
@@ -1137,6 +1156,17 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   viewerZoomModeEl?.addEventListener("change", () => {
     viewerSettings.zoomMode = viewerZoomModeEl.value as ViewerSettings["zoomMode"];
+    rerenderPdfJs();
+  });
+
+  viewerAlignModeEl?.addEventListener("change", () => {
+    viewerSettings.alignMode = viewerAlignModeEl.value as ViewerSettings["alignMode"];
+    rerenderPdfJs();
+  });
+
+  viewerVerticalGapModeEl?.addEventListener("change", () => {
+    viewerSettings.verticalGapMode =
+      viewerVerticalGapModeEl.value as ViewerSettings["verticalGapMode"];
     rerenderPdfJs();
   });
 

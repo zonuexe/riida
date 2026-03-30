@@ -527,14 +527,35 @@ h1 {
   padding: 20px 0 40px;
   box-sizing: border-box;
   --scale-factor: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pdfjs-viewer[data-position="left"] {
+  align-items: flex-start;
+}
+
+.pdfjs-viewer[data-position="right"] {
+  align-items: flex-end;
+}
+
+.pdfjs-viewer[data-vertical-gap="compact"] .pdfjs-spread + .pdfjs-spread {
+  margin-top: 16px;
+}
+
+.pdfjs-viewer[data-vertical-gap="none"] .pdfjs-spread + .pdfjs-spread {
+  margin-top: 0;
 }
 
 .pdfjs-spread {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(2, max-content);
+  gap: 0;
   align-items: start;
   justify-items: center;
+  width: max-content;
+  max-width: 100%;
 }
 
 .pdfjs-spread[data-page-count="1"] {

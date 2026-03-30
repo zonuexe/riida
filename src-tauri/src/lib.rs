@@ -15,8 +15,6 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use walkdir::WalkDir;
 
 const DEFAULT_WATCH_ROOT: &str = "/Users/megurine/Dropbox/EBook/";
-const DATABASE_PATH: &str = "../data/app.db";
-const THUMBNAIL_DIR: &str = "../data/thumbnails";
 const CONFIG_FILE: &str = "riida.toml";
 const DEFAULT_EXCLUDED_DIR_NAMES: &[&str] = &["backup"];
 const DEFAULT_EXCLUDED_FILE_SUFFIXES: &[&str] = &[".bak"];
@@ -35,6 +33,8 @@ struct LibrarySnapshot {
     watch_root: String,
     indexed_count: usize,
     books: Vec<BookSummary>,
+    excluded_dir_names: Vec<String>,
+    excluded_file_suffixes: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -68,7 +68,7 @@ struct ThumbnailReadyEvent {
 }
 
 fn database_file() -> Result<PathBuf, String> {
-    Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(DATABASE_PATH))
+    Ok(project_root().join("data").join("app.db"))
 }
 
 fn project_root() -> PathBuf {
@@ -83,7 +83,7 @@ fn config_file() -> PathBuf {
 }
 
 fn thumbnail_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(THUMBNAIL_DIR)
+    project_root().join("data").join("thumbnails")
 }
 
 fn default_config() -> AppConfig {
@@ -299,6 +299,8 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
         watch_root: config.watch_root.clone(),
         indexed_count,
         books,
+        excluded_dir_names: config.excluded_dir_names.clone(),
+        excluded_file_suffixes: config.excluded_file_suffixes.clone(),
     })
 }
 

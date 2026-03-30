@@ -9,55 +9,66 @@
   </head>
 
   <body>
-    <main class="app-shell">
-      <section class="hero">
-        <p class="eyebrow">Local PDF Library</p>
-        <h1>Dropbox 配下の PDF を、自動で棚に並べる。</h1>
-        <p class="lede">
-          riida は Tauri と Rust で組み立てる、ローカルファイル中心の蔵書管理アプリです。
-          最初の目標は、Dropbox の電子書籍フォルダを走査して、本棚一覧と内蔵ビューアの土台を作ることです。
-        </p>
-      </section>
+    <main class="app-shell two-pane">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <p class="eyebrow">Local PDF Library</p>
+          <h1>riida</h1>
+          <p class="sidebar-copy">
+            ホーム、ディレクトリ、今後はタグからも蔵書へアクセスできるようにしていきます。
+          </p>
+        </div>
+        <section class="sidebar-tools">
+          <label class="sidebar-search-label" for="library-search">蔵書を検索</label>
+          <input
+            id="library-search"
+            class="library-search sidebar-search"
+            type="search"
+            placeholder="タイトルやパスで検索"
+          />
+        </section>
+        <nav class="sidebar-nav" id="sidebar-nav"></nav>
+      </aside>
 
-      <section class="panel-grid">
-        <article class="panel">
-          <h2>監視対象</h2>
-          <p id="watch-root">Rust 側から設定を読み込み中...</p>
-          <p class="panel-note" id="scan-status">起動時スキャンとフォルダ監視を開始しています...</p>
-        </article>
-        <article class="panel">
-          <h2>現在の蔵書数</h2>
-          <p class="stat" id="indexed-count">0</p>
-        </article>
-      </section>
-
-      <section class="panel-grid">
-        <article class="panel">
-          <div class="library-header">
-            <h2>本棚</h2>
-            <input
-              id="library-search"
-              class="library-search"
-              type="search"
-              placeholder="タイトルやパスで検索"
-            />
+      <section class="main-pane">
+        <header class="main-header panel">
+          <div>
+            <h2 id="main-title">ホーム</h2>
+            <p class="panel-note" id="main-description">蔵書情報を読み込み中...</p>
           </div>
-          <ul class="books" id="recent-books">
-            <li>読み込み中...</li>
-          </ul>
-        </article>
-        <article class="panel">
-          <div class="viewer-header">
-            <div>
-              <h2>PDF ビューア</h2>
-              <p class="panel-note" id="viewer-title">本を選ぶとここに表示されます。</p>
+        </header>
+
+        <section id="home-view">
+          <section class="panel-grid">
+            <article class="panel">
+              <h2>監視対象</h2>
+              <p id="watch-root">Rust 側から設定を読み込み中...</p>
+              <p class="panel-note" id="excluded-rules">除外ルールを読み込み中...</p>
+              <p class="panel-note" id="scan-status">起動時スキャンとフォルダ監視を開始しています...</p>
+            </article>
+            <article class="panel">
+              <h2>現在の蔵書数</h2>
+              <p class="stat" id="indexed-count">0</p>
+            </article>
+          </section>
+
+          <section class="panel">
+            <div class="library-header">
+              <h2>本棚</h2>
             </div>
-          </div>
-          <div class="viewer-stage">
-            <iframe id="pdf-frame" title="PDF preview"></iframe>
-          </div>
-          <p class="panel-note" id="viewer-status">本棚から1冊選んでください。</p>
-        </article>
+            <div id="book-results">
+              <div class="empty-state">読み込み中...</div>
+            </div>
+          </section>
+        </section>
+
+        <section id="pdf-view" class="pdf-view" hidden>
+          <article class="viewer-panel">
+            <div class="viewer-stage">
+              <iframe id="pdf-frame" title="PDF preview"></iframe>
+            </div>
+          </article>
+        </section>
       </section>
     </main>
   </body>

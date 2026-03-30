@@ -69,7 +69,7 @@ When changing this logic, preserve migration behavior unless there is an explici
 Example development config in [riida.toml](/Users/megurine/repo/rust/riida/riida.toml):
 
 ```toml
-library_roots = ["~/Dropbox/EBook/"]
+library_roots = ["~/Documents/Ebooks/"]
 excluded_dir_names = ["backup"]
 excluded_file_suffixes = [".bak"]
 pdf_renderer = "pdfjs"

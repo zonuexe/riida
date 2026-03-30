@@ -20,7 +20,7 @@ This project is still in active development.
 The current working setup assumes a local PDF collection such as:
 
 ```toml
-library_roots = ["~/Dropbox/EBook/"]
+library_roots = ["~/Documents/Ebooks/"]
 ```
 
 ## Configuration
@@ -35,7 +35,7 @@ The app prefers:
 Example:
 
 ```toml
-library_roots = ["~/Dropbox/EBook/"]
+library_roots = ["~/Documents/Ebooks/"]
 excluded_dir_names = ["backup"]
 excluded_file_suffixes = [".bak"]
 pdf_renderer = "pdfjs"

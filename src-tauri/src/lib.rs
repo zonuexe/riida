@@ -1,3 +1,4 @@
+use directories::ProjectDirs;
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -7,7 +8,7 @@ use std::{
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
     process::Command,
-    sync::{mpsc, Arc, Mutex},
+    sync::{mpsc, Arc, Mutex, OnceLock},
     thread,
     time::{Duration, UNIX_EPOCH},
 };
@@ -26,6 +27,8 @@ const DEFAULT_VIEWER_ZOOM_MODE: &str = "fit-height";
 const DEFAULT_VIEWER_ALIGN_MODE: &str = "center";
 const DEFAULT_VIEWER_VERTICAL_GAP_MODE: &str = "compact";
 const DEFAULT_VIEWER_TREAT_FIRST_PAGE_AS_COVER: bool = true;
+
+static APP_PATHS: OnceLock<AppPaths> = OnceLock::new();
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,6 +77,18 @@ struct ThumbnailQueue {
     pending: Arc<Mutex<HashSet<String>>>,
 }
 
+#[derive(Clone)]
+struct AppPaths {
+    config_file: PathBuf,
+    data_dir: PathBuf,
+    database_file: PathBuf,
+    cache_dir: PathBuf,
+    thumbnail_root: PathBuf,
+    legacy_config_file: PathBuf,
+    legacy_database_file: PathBuf,
+    legacy_thumbnail_root: PathBuf,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct NoteDocument {
@@ -120,7 +135,7 @@ struct ThumbnailReadyEvent {
 }
 
 fn database_file() -> Result<PathBuf, String> {
-    Ok(project_root().join("data").join("app.db"))
+    Ok(app_paths()?.database_file.clone())
 }
 
 fn project_root() -> PathBuf {
@@ -131,11 +146,91 @@ fn project_root() -> PathBuf {
 }
 
 fn config_file() -> PathBuf {
-    project_root().join(CONFIG_FILE)
+    app_paths()
+        .map(|paths| paths.config_file.clone())
+        .unwrap_or_else(|_| project_root().join(CONFIG_FILE))
 }
 
 fn thumbnail_root() -> PathBuf {
-    project_root().join("data").join("thumbnails")
+    app_paths()
+        .map(|paths| paths.thumbnail_root.clone())
+        .unwrap_or_else(|_| project_root().join("data").join("thumbnails"))
+}
+
+fn resolve_app_paths() -> Result<AppPaths, String> {
+    let project_dirs =
+        ProjectDirs::from("com", "megurine", "riida").ok_or_else(|| "failed to resolve app directories".to_string())?;
+    let project_root = project_root();
+    let data_dir = project_dirs.data_dir().to_path_buf();
+    let cache_dir = project_dirs.cache_dir().to_path_buf();
+    let config_file = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .map(|home| home.join(".config"))
+        .filter(|xdg_dir| xdg_dir.exists())
+        .map(|xdg_dir| xdg_dir.join("riida").join(CONFIG_FILE))
+        .unwrap_or_else(|| project_dirs.config_dir().join(CONFIG_FILE));
+
+    Ok(AppPaths {
+        config_file,
+        database_file: data_dir.join("app.db"),
+        thumbnail_root: cache_dir.join("thumbnails"),
+        data_dir,
+        cache_dir,
+        legacy_config_file: project_root.join(CONFIG_FILE),
+        legacy_database_file: project_root.join("data").join("app.db"),
+        legacy_thumbnail_root: project_root.join("data").join("thumbnails"),
+    })
+}
+
+fn app_paths() -> Result<&'static AppPaths, String> {
+    APP_PATHS
+        .get()
+        .ok_or_else(|| "application paths have not been initialized".to_string())
+}
+
+fn migrate_directory_contents(source: &Path, destination: &Path) -> Result<(), String> {
+    if !source.exists() || destination.exists() {
+        return Ok(());
+    }
+
+    fs::create_dir_all(destination).map_err(|error| error.to_string())?;
+
+    for entry in fs::read_dir(source).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let entry_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+
+        if entry_path.is_dir() {
+            migrate_directory_contents(&entry_path, &destination_path)?;
+        } else {
+            fs::copy(&entry_path, &destination_path).map_err(|error| error.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+fn prepare_storage(paths: &AppPaths) -> Result<(), String> {
+    let config_dir = paths
+        .config_file
+        .parent()
+        .ok_or_else(|| "failed to resolve config directory".to_string())?;
+
+    fs::create_dir_all(config_dir).map_err(|error| error.to_string())?;
+    fs::create_dir_all(&paths.data_dir).map_err(|error| error.to_string())?;
+    fs::create_dir_all(&paths.cache_dir).map_err(|error| error.to_string())?;
+
+    if !paths.config_file.exists() && paths.legacy_config_file.exists() {
+        fs::copy(&paths.legacy_config_file, &paths.config_file).map_err(|error| error.to_string())?;
+    }
+
+    if !paths.database_file.exists() && paths.legacy_database_file.exists() {
+        fs::copy(&paths.legacy_database_file, &paths.database_file).map_err(|error| error.to_string())?;
+    }
+
+    migrate_directory_contents(&paths.legacy_thumbnail_root, &paths.thumbnail_root)?;
+
+    Ok(())
 }
 
 fn default_config() -> AppConfig {
@@ -1021,6 +1116,9 @@ fn clear_file_viewer_preferences(file_path: String) -> Result<ViewerPreferencesP
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            let paths = resolve_app_paths()?;
+            let _ = APP_PATHS.set(paths.clone());
+            prepare_storage(&paths)?;
             let config = load_config()?;
             start_library_watcher(app.handle().clone(), config.clone())?;
             app.manage(ConfigState { config });

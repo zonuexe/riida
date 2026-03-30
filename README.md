@@ -33,13 +33,31 @@ npm run tauri dev
 
 - Watch `/Users/megurine/Dropbox/EBook/`
 - Ignore `backup` directories and `*.bak` files
-- Index PDF files into SQLite at `data/app.db`
+- Index PDF files into a platform-specific application data directory
 - Show the library in a Tauri desktop app
 - Open a selected PDF in the embedded viewer
 
 ## Configuration
 
-Settings are loaded from `riida.toml` in the project root.
+Settings, database files, and caches now follow OS-specific app directory conventions.
+
+- Config: `~/.config/riida/riida.toml` is preferred when `~/.config` exists; otherwise the OS config directory is used
+- Data: OS app data directory as `app.db`
+- Cache: OS cache directory under `thumbnails/`
+
+On first launch, legacy files from the project root are copied forward automatically:
+
+- `riida.toml`
+- `data/app.db`
+- `data/thumbnails/`
+
+Typical locations are:
+
+- Linux: `~/.config/riida/riida.toml`, `~/.local/share/riida/app.db`, `~/.cache/riida/thumbnails/`
+- macOS: `~/.config/riida/riida.toml` when `~/.config` exists, otherwise `~/Library/Application Support/riida/riida.toml`; cache stays under `~/Library/Caches/riida/thumbnails/`
+- Windows: `%APPDATA%\\riida\\riida.toml`, `%APPDATA%\\riida\\app.db`, `%LOCALAPPDATA%\\riida\\thumbnails\\`
+
+For local development, a project-root `riida.toml` is still accepted as a legacy fallback and will be migrated automatically.
 
 ```toml
 watch_root = "~/Dropbox/EBook/"

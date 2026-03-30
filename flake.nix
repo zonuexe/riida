@@ -37,10 +37,8 @@
 
           shellHook = ''
             export PROJECT_ROOT="$PWD"
-            export DATABASE_URL="sqlite:$PROJECT_ROOT/data/app.db"
 
             mkdir -p "$PROJECT_ROOT/.cargo"
-            mkdir -p "$PROJECT_ROOT/data"
 
             echo
             echo "riida development shell"
@@ -51,7 +49,7 @@
             echo "Next steps:"
             echo "  1. cargo install create-tauri-app"
             echo "  2. npm create tauri-app@latest"
-            echo "  3. sqlite3 data/app.db '.databases'"
+            echo "  3. npm run tauri dev"
             echo
           '';
         };

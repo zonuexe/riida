@@ -153,6 +153,8 @@ h1 {
   padding: 12px 0;
   border-bottom: 1px solid rgba(96, 70, 33, 0.12);
   cursor: pointer;
+  border-radius: 12px;
+  padding-inline: 12px;
 }
 
 .book-item strong {
@@ -165,9 +167,19 @@ h1 {
   word-break: break-all;
 }
 
+.book-progress {
+  color: var(--accent-soft);
+  font-size: 0.82rem;
+}
+
 .book-item:hover strong,
 .book-item:focus strong {
   color: var(--accent);
+}
+
+.book-item.is-selected {
+  background: rgba(125, 78, 33, 0.11);
+  border-bottom-color: transparent;
 }
 
 li + li {

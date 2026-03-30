@@ -9,6 +9,7 @@ type BookSummary = {
   fileName: string;
   filePath: string;
   fileSize: number;
+  lastPage?: number | null;
 };
 
 type LibrarySnapshot = {
@@ -30,6 +31,40 @@ const viewerState: ViewerState = {
   pdf: null,
   currentPage: 1,
 };
+
+let saveProgressTimer: number | null = null;
+
+function syncSelectedBookHighlight() {
+  const bookItems = document.querySelectorAll<HTMLLIElement>(".book-item");
+
+  for (const itemEl of bookItems) {
+    const isSelected = itemEl.dataset.filePath === viewerState.currentBook?.filePath;
+    itemEl.classList.toggle("is-selected", isSelected);
+  }
+}
+
+function queueSaveReadingProgress() {
+  if (!viewerState.currentBook) {
+    return;
+  }
+
+  if (saveProgressTimer) {
+    window.clearTimeout(saveProgressTimer);
+  }
+
+  saveProgressTimer = window.setTimeout(() => {
+    if (!viewerState.currentBook) {
+      return;
+    }
+
+    void invoke("save_reading_progress", {
+      payload: {
+        filePath: viewerState.currentBook.filePath,
+        lastPage: viewerState.currentPage,
+      },
+    });
+  }, 250);
+}
 
 async function renderCurrentPage() {
   const canvas = document.querySelector<HTMLCanvasElement>("#pdf-canvas");
@@ -64,6 +99,8 @@ async function renderCurrentPage() {
   if (viewerStatusEl && viewerState.currentBook) {
     viewerStatusEl.textContent = `${viewerState.currentBook.fileName} を表示中です。`;
   }
+
+  queueSaveReadingProgress();
 }
 
 async function openBook(book: BookSummary) {
@@ -83,10 +120,12 @@ async function openBook(book: BookSummary) {
   }
 
   viewerState.currentBook = book;
-  viewerState.currentPage = 1;
+  viewerState.currentPage = Math.max(1, book.lastPage ?? 1);
+  syncSelectedBookHighlight();
 
   const pdfUrl = convertFileSrc(book.filePath);
   viewerState.pdf = await getDocument(pdfUrl).promise;
+  viewerState.currentPage = Math.min(viewerState.currentPage, viewerState.pdf.numPages);
   await renderCurrentPage();
 }
 
@@ -124,6 +163,7 @@ function renderSnapshot(snapshot: LibrarySnapshot) {
       const itemEl = document.createElement("li");
       itemEl.className = "book-item";
       itemEl.tabIndex = 0;
+      itemEl.dataset.filePath = book.filePath;
 
       const titleEl = document.createElement("strong");
       titleEl.textContent = book.fileName;
@@ -131,14 +171,29 @@ function renderSnapshot(snapshot: LibrarySnapshot) {
       const pathEl = document.createElement("span");
       pathEl.textContent = book.filePath;
 
+      if (book.lastPage && book.lastPage > 1) {
+        const progressEl = document.createElement("small");
+        progressEl.className = "book-progress";
+        progressEl.textContent = `${book.lastPage} ページまで読了`;
+        itemEl.appendChild(progressEl);
+      }
+
       itemEl.appendChild(titleEl);
       itemEl.appendChild(pathEl);
       itemEl.addEventListener("click", () => {
         void openBook(book);
       });
+      itemEl.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          void openBook(book);
+        }
+      });
       recentBooksEl.appendChild(itemEl);
     }
   }
+
+  syncSelectedBookHighlight();
 }
 
 window.addEventListener("DOMContentLoaded", async () => {

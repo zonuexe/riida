@@ -33,7 +33,7 @@ jobs:
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
       - name: Check Rust dependency licenses
-        run: cargo deny --manifest-path src-tauri/Cargo.toml --config deny.toml check licenses
+        run: cargo deny --manifest-path src-tauri/Cargo.toml check --config deny.toml licenses
 
   npm-licenses:
     runs-on: ubuntu-latest

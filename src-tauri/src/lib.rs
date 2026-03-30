@@ -1,10 +1,14 @@
+use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::{params, Connection};
 use serde::Serialize;
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::UNIX_EPOCH,
+    sync::mpsc,
+    thread,
+    time::{Duration, UNIX_EPOCH},
 };
+use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
 
 const WATCH_ROOT: &str = "/Users/megurine/Dropbox/EBook/";
@@ -158,8 +162,7 @@ fn load_snapshot(connection: &Connection) -> Result<LibrarySnapshot, String> {
     })
 }
 
-#[tauri::command]
-fn library_snapshot() -> Result<LibrarySnapshot, String> {
+fn refresh_library_snapshot() -> Result<LibrarySnapshot, String> {
     if !Path::new(WATCH_ROOT).exists() {
         return Err(format!("watch root does not exist: {WATCH_ROOT}"));
     }
@@ -169,9 +172,77 @@ fn library_snapshot() -> Result<LibrarySnapshot, String> {
     load_snapshot(&connection)
 }
 
+fn should_rescan(event: &Event) -> bool {
+    event.paths.iter().any(|path| path.is_dir() || is_pdf_file(path))
+}
+
+fn emit_library_snapshot(app: &AppHandle) -> Result<(), String> {
+    let snapshot = refresh_library_snapshot()?;
+
+    app.emit("library-updated", &snapshot)
+        .map_err(|error| error.to_string())
+}
+
+fn start_library_watcher(app: AppHandle) -> Result<(), String> {
+    if !Path::new(WATCH_ROOT).exists() {
+        return Ok(());
+    }
+
+    let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
+
+    thread::spawn(move || {
+        let mut watcher = match RecommendedWatcher::new(
+            move |result| {
+                let _ = tx.send(result);
+            },
+            Config::default(),
+        ) {
+            Ok(watcher) => watcher,
+            Err(error) => {
+                let _ = app.emit("library-watch-error", error.to_string());
+                return;
+            }
+        };
+
+        if let Err(error) = watcher.watch(Path::new(WATCH_ROOT), RecursiveMode::Recursive) {
+            let _ = app.emit("library-watch-error", error.to_string());
+            return;
+        }
+
+        while let Ok(result) = rx.recv() {
+            match result {
+                Ok(event) if should_rescan(&event) => {
+                    thread::sleep(Duration::from_millis(250));
+
+                    while rx.try_recv().is_ok() {}
+
+                    if let Err(error) = emit_library_snapshot(&app) {
+                        let _ = app.emit("library-watch-error", error);
+                    }
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    let _ = app.emit("library-watch-error", error.to_string());
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+fn library_snapshot() -> Result<LibrarySnapshot, String> {
+    refresh_library_snapshot()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            start_library_watcher(app.handle().clone())?;
+            Ok(())
+        })
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![library_snapshot])
         .run(tauri::generate_context!())

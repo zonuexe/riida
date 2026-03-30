@@ -676,13 +676,30 @@ h1 {
   top: 14px;
   right: 14px;
   z-index: 5;
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   border: 1px solid rgba(96, 70, 33, 0.16);
   border-radius: 999px;
   background: rgba(255, 250, 240, 0.9);
   color: var(--accent);
   cursor: pointer;
-  font: inherit;
-  padding: 8px 12px;
+  padding: 0;
+}
+
+.viewer-settings-toggle span {
+  width: 16px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.viewer-settings-toggle:hover {
+  background: rgba(255, 250, 240, 1);
 }
 
 .viewer-settings-panel {

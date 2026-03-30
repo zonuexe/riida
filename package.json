@@ -7,6 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "generate:third-party-licenses": "node scripts/generate-third-party-licenses.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"

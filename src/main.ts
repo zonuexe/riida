@@ -1,10 +1,13 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { getName, getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
 import { GlobalWorkerOptions, TextLayer, getDocument } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { mountNoteEditor, type NoteEditorHandle } from "./note-editor";
+import licenseText from "../LICENSE?raw";
+import thirdPartyLicenseUrl from "../THIRD-PARTY-LICENSES.md?url";
 
 type BookSummary = {
   fileName: string;
@@ -44,6 +47,7 @@ type ViewerState = {
   expandedDirectories: Set<string>;
   sidebarCollapsed: boolean;
   isAppSettingsOpen: boolean;
+  isAboutOpen: boolean;
 };
 
 type AppConfigPayload = {
@@ -131,6 +135,7 @@ const viewerState: ViewerState = {
   expandedDirectories: new Set<string>(),
   sidebarCollapsed: false,
   isAppSettingsOpen: false,
+  isAboutOpen: false,
 };
 
 const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
@@ -169,6 +174,10 @@ let navigationEntries: NavigationState[] = [];
 let activeReadingPosition: ReadingPosition | null = null;
 let lastAppConfig: AppConfigPayload | null = null;
 let cachedHomeDir: string | null = null;
+let cachedAppName = "riida";
+let cachedAppVersion = "0.1.0";
+const buildDate = __BUILD_DATE__;
+let cachedThirdPartyText = "Loading third-party notices...";
 
 function readingPositionStorageKey(filePath: string) {
   return `riida:reading-position:${filePath}`;
@@ -654,6 +663,52 @@ function syncAppSettingsUi() {
   }
 
   renderLibraryRootsList();
+}
+
+function syncAboutUi() {
+  const modalEl = document.querySelector<HTMLElement>("#app-about-modal");
+  const nameEl = document.querySelector<HTMLElement>("#app-about-name");
+  const versionEl = document.querySelector<HTMLElement>("#app-about-version");
+  const buildDateEl = document.querySelector<HTMLElement>("#app-about-build-date");
+  const licenseEl = document.querySelector<HTMLElement>("#app-license-text");
+  const thirdPartyEl = document.querySelector<HTMLElement>("#app-third-party-text");
+
+  if (modalEl) {
+    modalEl.hidden = !viewerState.isAboutOpen;
+  }
+
+  if (nameEl) {
+    nameEl.textContent = cachedAppName;
+  }
+
+  if (versionEl) {
+    versionEl.textContent = cachedAppVersion;
+  }
+
+  if (buildDateEl) {
+    buildDateEl.textContent = `(built ${buildDate})`;
+  }
+
+  if (licenseEl) {
+    licenseEl.textContent = licenseText.trim();
+  }
+
+  if (thirdPartyEl) {
+    thirdPartyEl.textContent = cachedThirdPartyText;
+  }
+}
+
+async function loadThirdPartyLicenses() {
+  try {
+    const response = await fetch(thirdPartyLicenseUrl);
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+
+    cachedThirdPartyText = (await response.text()).trim();
+  } catch (error) {
+    cachedThirdPartyText = `Failed to load third-party notices: ${String(error)}`;
+  }
 }
 
 async function loadAppConfig() {
@@ -2006,6 +2061,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   const navForwardEl = document.querySelector<HTMLButtonElement>("#nav-forward");
   const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
   const appSettingsOpenEl = document.querySelector<HTMLButtonElement>("#app-settings-open");
+  const appAboutOpenEl = document.querySelector<HTMLButtonElement>("#app-about-open");
+  const appAboutCloseEl = document.querySelector<HTMLButtonElement>("#app-about-close");
+  const appAboutDoneEl = document.querySelector<HTMLButtonElement>("#app-about-done");
+  const appAboutBackdropEl = document.querySelector<HTMLElement>("#app-about-backdrop");
   const appSettingsCloseEl = document.querySelector<HTMLButtonElement>("#app-settings-close");
   const appSettingsCancelEl = document.querySelector<HTMLButtonElement>("#app-settings-cancel");
   const appSettingsSaveEl = document.querySelector<HTMLButtonElement>("#app-settings-save");
@@ -2069,6 +2128,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     syncAppSettingsUi();
   };
 
+  const closeAbout = () => {
+    viewerState.isAboutOpen = false;
+    syncAboutUi();
+  };
+
   appSettingsOpenEl?.addEventListener("click", async () => {
     viewerState.isAppSettingsOpen = true;
     setAppSettingsStatus("");
@@ -2123,6 +2187,20 @@ window.addEventListener("DOMContentLoaded", async () => {
       setAppSettingsStatus(`Failed to choose a folder: ${String(error)}`, "error");
     }
   });
+
+  appAboutOpenEl?.addEventListener("click", () => {
+    viewerState.isAboutOpen = true;
+    syncAboutUi();
+    if (cachedThirdPartyText === "Loading third-party notices...") {
+      void loadThirdPartyLicenses().then(() => {
+        syncAboutUi();
+      });
+    }
+  });
+
+  appAboutCloseEl?.addEventListener("click", closeAbout);
+  appAboutDoneEl?.addEventListener("click", closeAbout);
+  appAboutBackdropEl?.addEventListener("click", closeAbout);
 
   viewerSettingsToggleEl?.addEventListener("click", () => {
     viewerSettings.isSettingsOpen = !viewerSettings.isSettingsOpen;
@@ -2294,6 +2372,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && viewerState.isAboutOpen) {
+      closeAbout();
+      return;
+    }
+
     if (event.key === "Escape" && viewerState.isAppSettingsOpen) {
       closeAppSettings();
       return;
@@ -2427,4 +2510,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   } catch (error) {
     console.error("failed to load app config", error);
   }
+
+  try {
+    cachedAppName = await getName();
+    cachedAppVersion = await getVersion();
+  } catch (error) {
+    console.error("failed to load app metadata", error);
+  }
+  syncAboutUi();
 });

@@ -217,8 +217,57 @@
           <p id="app-settings-status" class="app-settings-status" hidden></p>
         </div>
         <div class="app-settings-actions">
+          <button id="app-about-open" class="app-settings-secondary app-settings-leading" type="button">
+            About riida
+          </button>
           <button id="app-settings-cancel" class="app-settings-secondary" type="button">Cancel</button>
           <button id="app-settings-save" class="app-settings-primary" type="button">Save and close</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="app-about-modal" class="app-settings-modal" hidden>
+      <div id="app-about-backdrop" class="app-settings-backdrop"></div>
+      <section class="app-settings-dialog app-about-dialog" role="dialog" aria-modal="true" aria-labelledby="app-about-title">
+        <div class="app-settings-header">
+          <div>
+            <p class="app-settings-kicker">Application</p>
+            <h2 id="app-about-title">About riida</h2>
+          </div>
+          <button id="app-about-close" class="app-settings-close" type="button" aria-label="Close about dialog">
+            ×
+          </button>
+        </div>
+        <div class="app-settings-body app-about-body">
+          <section class="app-about-summary">
+            <p class="app-about-name" id="app-about-name">riida</p>
+            <p class="app-about-meta">
+              <strong>Version</strong>
+              <span id="app-about-version">0.1.0</span>
+              <span class="app-about-build-date" id="app-about-build-date"></span>
+            </p>
+            <p class="app-about-meta"><strong>License</strong> MPL-2.0</p>
+            <p class="app-about-meta">
+              <strong>Source</strong>
+              <a id="app-about-source" href="https://github.com/zonuexe/riida" target="_blank" rel="noreferrer noopener">
+                github.com/zonuexe/riida
+              </a>
+            </p>
+            <p class="app-about-copy">
+              riida is distributed under the Mozilla Public License 2.0. The license text is shown below.
+            </p>
+          </section>
+          <section class="app-about-license">
+            <h3>License text</h3>
+            <pre id="app-license-text" class="app-license-text"></pre>
+          </section>
+          <section class="app-about-license">
+            <h3>Third-party notices</h3>
+            <pre id="app-third-party-text" class="app-license-text"></pre>
+          </section>
+        </div>
+        <div class="app-settings-actions">
+          <button id="app-about-done" class="app-settings-primary" type="button">Done</button>
         </div>
       </section>
     </div>

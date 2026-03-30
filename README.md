@@ -55,6 +55,8 @@ Legacy project-root files are migrated forward automatically on startup when pos
 
 This project is licensed under the [Mozilla Public License 2.0](https://www.mozilla.org/en-US/MPL/2.0/). See [`LICENSE`](LICENSE).
 
+Licenses and notice texts for bundled Rust and npm dependencies are collected in [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md).
+
 > This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of the MPL was not distributed with this file, You can obtain one at <https://mozilla.org/MPL/2.0/>.
 
 Copyright belongs to the contributors to this repository unless otherwise noted.

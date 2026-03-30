@@ -171,11 +171,6 @@ h1 {
   word-break: break-all;
 }
 
-.book-progress {
-  color: var(--accent-soft);
-  font-size: 0.82rem;
-}
-
 .book-meta {
   color: rgba(31, 27, 22, 0.48);
   font-size: 0.8rem;

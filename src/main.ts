@@ -5,7 +5,6 @@ type BookSummary = {
   fileName: string;
   filePath: string;
   fileSize: number;
-  lastPage?: number | null;
 };
 
 type LibrarySnapshot = {
@@ -17,18 +16,14 @@ type LibrarySnapshot = {
 type ViewerState = {
   books: BookSummary[];
   currentBook: BookSummary | null;
-  currentPage: number;
 };
 
 const viewerState: ViewerState = {
   books: [],
   currentBook: null,
-  currentPage: 1,
 };
 
 let lastSnapshot: LibrarySnapshot | null = null;
-
-let saveProgressTimer: number | null = null;
 
 function syncSelectedBookHighlight() {
   const bookItems = document.querySelectorAll<HTMLLIElement>(".book-item");
@@ -67,29 +62,6 @@ function filteredBooks() {
   });
 }
 
-function queueSaveReadingProgress() {
-  if (!viewerState.currentBook) {
-    return;
-  }
-
-  if (saveProgressTimer) {
-    window.clearTimeout(saveProgressTimer);
-  }
-
-  saveProgressTimer = window.setTimeout(() => {
-    if (!viewerState.currentBook) {
-      return;
-    }
-
-    void invoke("save_reading_progress", {
-      payload: {
-        filePath: viewerState.currentBook.filePath,
-        lastPage: viewerState.currentPage,
-      },
-    });
-  }, 250);
-}
-
 async function renderCurrentPage() {
   const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
   const viewerStatusEl = document.querySelector<HTMLElement>("#viewer-status");
@@ -102,8 +74,6 @@ async function renderCurrentPage() {
   if (viewerStatusEl && viewerState.currentBook) {
     viewerStatusEl.textContent = `${viewerState.currentBook.fileName} をネイティブビューアで表示中です。`;
   }
-
-  queueSaveReadingProgress();
 }
 
 async function openBook(book: BookSummary) {
@@ -119,7 +89,6 @@ async function openBook(book: BookSummary) {
   }
 
   viewerState.currentBook = book;
-  viewerState.currentPage = Math.max(1, book.lastPage ?? 1);
   syncSelectedBookHighlight();
   await renderCurrentPage();
 }
@@ -178,13 +147,6 @@ function renderSnapshot(snapshot: LibrarySnapshot) {
       const metaEl = document.createElement("small");
       metaEl.className = "book-meta";
       metaEl.textContent = formatFileSize(book.fileSize);
-
-      if (book.lastPage && book.lastPage > 1) {
-        const progressEl = document.createElement("small");
-        progressEl.className = "book-progress";
-        progressEl.textContent = `${book.lastPage} ページまで読了`;
-        itemEl.appendChild(progressEl);
-      }
 
       itemEl.appendChild(titleEl);
       itemEl.appendChild(pathEl);

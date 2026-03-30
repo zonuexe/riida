@@ -1,6 +1,6 @@
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::{params, Connection};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -20,7 +20,6 @@ struct BookSummary {
     file_name: String,
     file_path: String,
     file_size: u64,
-    last_page: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -29,13 +28,6 @@ struct LibrarySnapshot {
     watch_root: &'static str,
     indexed_count: usize,
     books: Vec<BookSummary>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SaveReadingProgressPayload {
-    file_path: String,
-    last_page: u32,
 }
 
 fn database_file() -> Result<PathBuf, String> {
@@ -61,11 +53,6 @@ fn open_database() -> Result<Connection, String> {
               file_size INTEGER NOT NULL,
               modified_at INTEGER NOT NULL,
               indexed_at INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS reading_progress (
-              file_path TEXT PRIMARY KEY,
-              last_page INTEGER NOT NULL,
-              updated_at INTEGER NOT NULL
             );
             ",
         )
@@ -149,13 +136,10 @@ fn load_snapshot(connection: &Connection) -> Result<LibrarySnapshot, String> {
         .prepare(
             "
             SELECT
-              books.file_name,
-              books.file_path,
-              books.file_size,
-              reading_progress.last_page
+              file_name,
+              file_path,
+              file_size
             FROM books
-            LEFT JOIN reading_progress
-              ON reading_progress.file_path = books.file_path
             ORDER BY books.modified_at DESC, books.file_name ASC
             ",
         )
@@ -167,7 +151,6 @@ fn load_snapshot(connection: &Connection) -> Result<LibrarySnapshot, String> {
                 file_name: row.get(0)?,
                 file_path: row.get(1)?,
                 file_size: row.get(2)?,
-                last_page: row.get(3)?,
             })
         })
         .map_err(|error| error.to_string())?
@@ -255,30 +238,6 @@ fn library_snapshot() -> Result<LibrarySnapshot, String> {
     refresh_library_snapshot()
 }
 
-#[tauri::command]
-fn save_reading_progress(payload: SaveReadingProgressPayload) -> Result<(), String> {
-    let now = std::time::SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| error.to_string())?
-        .as_secs();
-    let connection = open_database()?;
-
-    connection
-        .execute(
-            "
-            INSERT INTO reading_progress (file_path, last_page, updated_at)
-            VALUES (?1, ?2, ?3)
-            ON CONFLICT(file_path) DO UPDATE SET
-              last_page = excluded.last_page,
-              updated_at = excluded.updated_at
-            ",
-            params![payload.file_path, payload.last_page, now],
-        )
-        .map_err(|error| error.to_string())?;
-
-    Ok(())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -287,10 +246,7 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![
-            library_snapshot,
-            save_reading_progress
-        ])
+        .invoke_handler(tauri::generate_handler![library_snapshot])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

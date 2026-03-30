@@ -9,6 +9,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const cargoDir = path.join(rootDir, "src-tauri");
 const outputFile = path.join(rootDir, "THIRD-PARTY-LICENSES.md");
+const rustTargets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "x86_64-unknown-linux-gnu",
+  "x86_64-pc-windows-msvc",
+];
 
 function run(command, args, cwd = rootDir) {
   const result = spawnSync(command, args, {
@@ -23,16 +29,6 @@ function run(command, args, cwd = rootDir) {
   }
 
   return result.stdout;
-}
-
-function currentRustHost() {
-  const versionOutput = run("rustc", ["-vV"], cargoDir);
-  const hostLine = versionOutput
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line.startsWith("host: "));
-
-  return hostLine ? hostLine.replace("host: ", "") : null;
 }
 
 function readJson(filePath) {
@@ -164,26 +160,34 @@ function formatPackageSection(sectionTitle, packages) {
 }
 
 function collectRustPackages() {
-  const host = currentRustHost();
-  const metadataArgs = ["metadata", "--manifest-path", "src-tauri/Cargo.toml", "--format-version", "1", "--offline"];
-  if (host) {
-    metadataArgs.push("--filter-platform", host);
-  }
+  const packages = new Map();
 
-  const metadata = JSON.parse(
-    run("cargo", metadataArgs),
-  );
+  for (const target of rustTargets) {
+    const metadata = JSON.parse(
+      run("cargo", [
+        "metadata",
+        "--manifest-path",
+        "src-tauri/Cargo.toml",
+        "--format-version",
+        "1",
+        "--offline",
+        "--filter-platform",
+        target,
+      ]),
+    );
 
-  return metadata.packages
-    .filter((pkg) => pkg.source)
-    .map((pkg) => {
+    for (const pkg of metadata.packages.filter((candidate) => candidate.source)) {
+      if (packages.has(pkg.id)) {
+        continue;
+      }
+
       const packageDir = path.dirname(pkg.manifest_path);
       const noticeFiles = findNoticeFiles(packageDir).map((name) => ({
         name,
         content: readNoticeFile(path.join(packageDir, name)),
       }));
 
-      return {
+      packages.set(pkg.id, {
         name: pkg.name,
         version: pkg.version,
         license: pkg.license ?? "UNKNOWN",
@@ -191,8 +195,11 @@ function collectRustPackages() {
         homepage: pkg.homepage ?? pkg.documentation ?? null,
         repository: pkg.repository ?? null,
         noticeFiles,
-      };
-    })
+      });
+    }
+  }
+
+  return [...packages.values()]
     .sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
 }
 

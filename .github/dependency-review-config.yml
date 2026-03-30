@@ -1,0 +1,19 @@
+license-check: true
+vulnerability-check: true
+fail-on-severity: moderate
+fail-on-scopes:
+  - runtime
+allow-licenses:
+  - MIT
+  - Apache-2.0
+  - MIT OR Apache-2.0
+  - Apache-2.0 OR MIT
+  - BSD-2-Clause
+  - BSD-3-Clause
+  - ISC
+  - MPL-2.0
+  - MPL-2.0 OR Apache-2.0
+  - 0BSD
+  - Unlicense
+  - Unicode-3.0
+  - Zlib

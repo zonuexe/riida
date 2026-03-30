@@ -4,6 +4,32 @@
 
 This file records implementation details and operational context that are useful during development but do not belong in the user-facing README.
 
+## Release And Licensing
+
+Release builds must satisfy the project's software licensing requirements.
+
+In practice this means:
+
+- the app's own license information must remain visible in the About dialog
+- bundled third-party notices must be available from `THIRD-PARTY-LICENSES.md`
+- dependency license checks must pass before release or public distribution
+
+When dependency sets change, update notices and run the checks before committing release-facing changes:
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run generate:third-party-licenses
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run check:licenses:npm
+```
+
+CI also checks the release gate:
+
+- Rust dependency licenses via `cargo-deny` using [deny.toml](/Users/megurine/repo/rust/riida/deny.toml)
+- npm production dependency licenses via `license-checker`
+- PR dependency review via [.github/dependency-review-config.yml](/Users/megurine/repo/rust/riida/.github/dependency-review-config.yml)
+- notice regeneration via [.github/workflows/license-check.yml](/Users/megurine/repo/rust/riida/.github/workflows/license-check.yml)
+
+If a dependency is added or updated, assume `THIRD-PARTY-LICENSES.md` may need regeneration.
+
 ## Architecture
 
 `riida` is a Tauri v2 desktop app with:

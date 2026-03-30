@@ -175,6 +175,13 @@ function isNodeVisible(node: DirectoryNode) {
   return node.parentPath ? viewerState.expandedDirectories.has(node.parentPath) : true;
 }
 
+function normalizeSearchText(value: string) {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase("ja")
+    .replace(/[\s\-_.\/]+/g, "");
+}
+
 function visibleBooks(snapshot: LibrarySnapshot) {
   return snapshot.books.filter((book) => {
     if (viewerState.activeDirectory) {
@@ -191,10 +198,13 @@ function visibleBooks(snapshot: LibrarySnapshot) {
       return true;
     }
 
-    const query = viewerState.searchQuery.toLowerCase();
+    const query = normalizeSearchText(viewerState.searchQuery);
+    const normalizedName = normalizeSearchText(book.fileName);
+    const normalizedPath = normalizeSearchText(book.filePath);
+
     return (
-      book.fileName.toLowerCase().includes(query) ||
-      book.filePath.toLowerCase().includes(query)
+      normalizedName.includes(query) ||
+      normalizedPath.includes(query)
     );
   });
 }
@@ -487,6 +497,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   searchInput?.addEventListener("input", () => {
     viewerState.searchQuery = searchInput.value.trim();
     viewerState.currentBook = null;
+    viewerState.activeDirectory = null;
     renderApp();
   });
 

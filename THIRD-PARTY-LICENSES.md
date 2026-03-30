@@ -3,7 +3,7 @@
 This file was generated from the currently installed Rust and npm dependencies used by riida.
 
 - Rust dependencies: 412
-- npm dependencies: 248
+- npm dependencies: 243
 
 _Regenerate with `npm run generate:third-party-licenses` inside the Nix development shell._
 
@@ -64854,13 +64854,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @esbuild/darwin-arm64 0.25.12
-
-- License: MIT
-- Source: git+https://github.com/evanw/esbuild.git
-
-_No local license or notice file was found in the installed package._
-
 ### @floating-ui/core 1.7.5
 
 - License: MIT
@@ -65794,13 +65787,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @napi-rs/canvas-darwin-arm64 0.1.97
-
-- License: MIT
-- Source: git+https://github.com/Brooooooklyn/canvas.git
-
-_No local license or notice file was found in the installed package._
-
 ### @ocavue/utils 1.6.0
 
 - License: MIT
@@ -65832,14 +65818,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
-
-### @rollup/rollup-darwin-arm64 4.60.0
-
-- License: MIT
-- Authors: Lukas Taegert-Atkinson
-- Source: git+https://github.com/rollup/rollup.git
-
-_No local license or notice file was found in the installed package._
 
 ### @tauri-apps/api 2.10.1
 
@@ -66266,14 +66244,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
-
-### @tauri-apps/cli-darwin-arm64 2.10.1
-
-- License: Apache-2.0 OR MIT
-- Authors: Tauri Programme within The Commons Conservancy
-- Source: git+https://github.com/tauri-apps/tauri.git
-
-_No local license or notice file was found in the installed package._
 
 ### @tauri-apps/plugin-dialog 2.6.0
 
@@ -68520,39 +68490,6 @@ the licensed code:
   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
   DEALINGS IN THE SOFTWARE.
-```
-
-### fsevents 2.3.3
-
-- License: MIT
-- Authors: Philipp Dunkel <pip@pipobscure.com>, Ben Noordhuis <info@bnoordhuis.nl>, Elan Shankar <elan.shanker@gmail.com>, Miroslav Bajtoš <mbajtoss@gmail.com>, Paul Miller (https://paulmillr.com)
-- Source: https://github.com/fsevents/fsevents.git
-
-#### LICENSE
-
-```text
-MIT License
------------
-
-Copyright (C) 2010-2020 by Philipp Dunkel, Ben Noordhuis, Elan Shankar, Paul Miller
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
 ```
 
 ### function-bind 1.1.2

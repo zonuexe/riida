@@ -244,7 +244,19 @@ function collectRustPackages() {
 function collectNodePackages() {
   const lock = readJson(path.join(rootDir, "package-lock.json"));
   const entries = Object.entries(lock.packages ?? {})
-    .filter(([packagePath]) => packagePath.startsWith("node_modules/"))
+    .filter(([packagePath, pkg]) => {
+      if (!packagePath.startsWith("node_modules/")) {
+        return false;
+      }
+
+      // Skip platform-specific optional packages so the generated notices stay
+      // stable across macOS/Linux CI environments.
+      if (pkg?.optional && (Array.isArray(pkg.os) || Array.isArray(pkg.cpu))) {
+        return false;
+      }
+
+      return true;
+    })
     .map(([packagePath]) => {
       const packageDir = path.join(rootDir, packagePath);
       const packageJsonPath = path.join(packageDir, "package.json");

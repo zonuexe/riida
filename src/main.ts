@@ -126,6 +126,29 @@ type DirectoryNode = {
   hasChildren: boolean;
 };
 
+type PdfRenderPlan = {
+  groupIndex: number;
+  visualOrder: number[];
+  spreadEl: HTMLElement;
+  pageSlots: Map<number, HTMLElement>;
+  baseScale: number;
+};
+
+type PdfRenderSession = {
+  token: number;
+  pdfDocument: {
+    numPages: number;
+    getPage: (pageNumber: number) => Promise<any>;
+  };
+  viewerEl: HTMLElement;
+  stageEl: HTMLElement;
+  plans: PdfRenderPlan[];
+  restoreTargetPage: number | null;
+  updateScheduled: boolean;
+  isUpdating: boolean;
+  pendingFocusGroupIndex: number | null;
+};
+
 const viewerState: ViewerState = {
   books: [],
   currentBook: null,
@@ -164,6 +187,7 @@ let noteSaveTimer: number | null = null;
 let noteLoadToken = 0;
 let pdfRenderToken = 0;
 let pdfRenderResizeTimer: number | null = null;
+let activePdfRenderSession: PdfRenderSession | null = null;
 let viewerSettingsLoadToken = 0;
 let readingPositionSaveTimer: number | null = null;
 let suppressHistoryUpdates = false;
@@ -178,6 +202,8 @@ let cachedAppVersion = "0.0.2";
 const buildDate = __BUILD_DATE__;
 let cachedThirdPartyRustText = "Loading Rust notices...";
 let cachedThirdPartyJsText = "Loading JavaScript notices...";
+const PDF_RENDER_RADIUS = 2;
+const PDF_KEEP_RADIUS = 3;
 
 function readingPositionStorageKey(filePath: string) {
   return `riida:reading-position:${filePath}`;
@@ -481,35 +507,177 @@ function getVisualPageOrder(group: number[]) {
   return [...group].reverse();
 }
 
-function buildPrioritizedGroupOrder(pageGroups: number[][], targetPage: number | null) {
-  if (!targetPage) {
-    return pageGroups.map((_, index) => index);
+function releasePdfRenderPlan(plan: PdfRenderPlan) {
+  for (const pageEl of plan.pageSlots.values()) {
+    if (pageEl.dataset.rendered !== "true") {
+      continue;
+    }
+
+    pageEl.innerHTML = "";
+    pageEl.dataset.rendered = "false";
+  }
+}
+
+function currentVisiblePdfGroupIndex(session: PdfRenderSession) {
+  const anchor = session.stageEl.scrollTop + session.stageEl.clientHeight * 0.35;
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const plan of session.plans) {
+    const distance = Math.abs(plan.spreadEl.offsetTop - anchor);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = plan.groupIndex;
+    }
   }
 
-  const targetGroupIndex = pageGroups.findIndex((group) => group.includes(targetPage));
-  if (targetGroupIndex < 0) {
-    return pageGroups.map((_, index) => index);
+  return bestIndex;
+}
+
+async function renderPdfRenderPlan(session: PdfRenderSession, plan: PdfRenderPlan) {
+  for (const pageNumber of plan.visualOrder) {
+    if (session.token !== pdfRenderToken) {
+      return;
+    }
+
+    const pageEl = plan.pageSlots.get(pageNumber);
+    if (!pageEl || pageEl.dataset.rendered === "true") {
+      continue;
+    }
+
+    const page = await session.pdfDocument.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: plan.baseScale });
+    pageEl.style.width = `${viewport.width}px`;
+    pageEl.style.height = `${viewport.height}px`;
+    pageEl.innerHTML = "";
+
+    const canvasWrapperEl = document.createElement("div");
+    canvasWrapperEl.className = "canvasWrapper";
+    const canvas = document.createElement("canvas");
+    const outputScale = Math.max(window.devicePixelRatio || 1, 1);
+    canvas.width = Math.ceil(viewport.width * outputScale);
+    canvas.height = Math.ceil(viewport.height * outputScale);
+    canvas.style.width = `${viewport.width}px`;
+    canvas.style.height = `${viewport.height}px`;
+    canvasWrapperEl.appendChild(canvas);
+    pageEl.appendChild(canvasWrapperEl);
+
+    const textLayerEl = document.createElement("div");
+    textLayerEl.className = "textLayer";
+    pageEl.appendChild(textLayerEl);
+
+    const linkLayerEl = document.createElement("div");
+    linkLayerEl.className = "annotationLayer";
+    pageEl.appendChild(linkLayerEl);
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      continue;
+    }
+
+    await page.render({
+      canvas,
+      canvasContext: context,
+      transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
+      viewport,
+    }).promise;
+
+    const textLayer = new TextLayer({
+      textContentSource: page.streamTextContent(),
+      container: textLayerEl,
+      viewport,
+    });
+    await textLayer.render();
+
+    const annotations = await page.getAnnotations();
+    renderPdfJsLinks(linkLayerEl, viewport, annotations as Array<Record<string, unknown>>);
+    pageEl.dataset.rendered = "true";
+
+    if (session.restoreTargetPage === pageNumber) {
+      scheduleReadingPositionRestore();
+    }
+  }
+}
+
+async function updatePdfRenderWindow(session: PdfRenderSession, focusGroupIndex?: number) {
+  if (session.token !== pdfRenderToken) {
+    return;
   }
 
-  return pageGroups
-    .map((group, index) => ({
-      index,
-      distance: Math.abs(index - targetGroupIndex),
-      startsAfterTarget: index > targetGroupIndex ? 1 : 0,
-      firstPage: group[0] ?? 0,
-    }))
-    .sort((left, right) => {
-      if (left.distance !== right.distance) {
-        return left.distance - right.distance;
+  if (session.isUpdating) {
+    session.pendingFocusGroupIndex = focusGroupIndex ?? currentVisiblePdfGroupIndex(session);
+    return;
+  }
+
+  session.isUpdating = true;
+
+  try {
+    const activeGroupIndex = focusGroupIndex ?? currentVisiblePdfGroupIndex(session);
+    const renderMin = Math.max(0, activeGroupIndex - PDF_RENDER_RADIUS);
+    const renderMax = Math.min(session.plans.length - 1, activeGroupIndex + PDF_RENDER_RADIUS);
+    const keepMin = Math.max(0, activeGroupIndex - PDF_KEEP_RADIUS);
+    const keepMax = Math.min(session.plans.length - 1, activeGroupIndex + PDF_KEEP_RADIUS);
+
+    for (const plan of session.plans) {
+      if (plan.groupIndex < keepMin || plan.groupIndex > keepMax) {
+        releasePdfRenderPlan(plan);
+      }
+    }
+
+    const renderOrder: number[] = [];
+    for (let distance = 0; distance <= PDF_RENDER_RADIUS; distance += 1) {
+      const beforeIndex = activeGroupIndex - distance;
+      const afterIndex = activeGroupIndex + distance;
+
+      if (beforeIndex >= renderMin) {
+        renderOrder.push(beforeIndex);
       }
 
-      if (left.startsAfterTarget !== right.startsAfterTarget) {
-        return left.startsAfterTarget - right.startsAfterTarget;
+      if (distance > 0 && afterIndex <= renderMax) {
+        renderOrder.push(afterIndex);
+      }
+    }
+
+    for (const index of renderOrder) {
+      const plan = session.plans[index];
+      if (!plan) {
+        continue;
       }
 
-      return left.firstPage - right.firstPage;
-    })
-    .map((item) => item.index);
+      await renderPdfRenderPlan(session, plan);
+
+      if (session.token !== pdfRenderToken) {
+        return;
+      }
+    }
+  } finally {
+    session.isUpdating = false;
+  }
+
+  if (session.pendingFocusGroupIndex !== null) {
+    const nextFocusGroupIndex = session.pendingFocusGroupIndex;
+    session.pendingFocusGroupIndex = null;
+    void updatePdfRenderWindow(session, nextFocusGroupIndex);
+  }
+}
+
+function schedulePdfRenderWindowUpdate(session: PdfRenderSession, focusGroupIndex?: number) {
+  if (session.token !== pdfRenderToken) {
+    return;
+  }
+
+  if (session.updateScheduled) {
+    if (typeof focusGroupIndex === "number") {
+      session.pendingFocusGroupIndex = focusGroupIndex;
+    }
+    return;
+  }
+
+  session.updateScheduled = true;
+  window.requestAnimationFrame(() => {
+    session.updateScheduled = false;
+    void updatePdfRenderWindow(session, focusGroupIndex);
+  });
 }
 
 function normalizeSearchText(value: string) {
@@ -1553,6 +1721,7 @@ async function renderCurrentPage() {
   const sourceUrl = convertFileSrc(viewerState.currentBook.filePath);
 
   if (snapshot.pdfRenderer === "pdfjs") {
+    activePdfRenderSession = null;
     frame.hidden = true;
     frame.src = "about:blank";
     frame.dataset.filePath = "";
@@ -1587,19 +1756,14 @@ async function renderCurrentPage() {
       pdfjsViewerEl.innerHTML = "";
       const pageGroups = buildPageGroups(pdfDocument.numPages);
       const restoreTargetPage = activeReadingPosition?.pageNumber ?? null;
-      const prioritizedGroupOrder = buildPrioritizedGroupOrder(pageGroups, restoreTargetPage);
       const pageGap = viewerSettings.pageMode === "spread" ? 6 : 0;
       const viewerWidth = Math.max(pdfjsViewerEl.clientWidth, 720);
       const viewerHeight = Math.max(pdfjsViewerEl.clientHeight, 600);
       const maxColumns = viewerSettings.pageMode === "spread" ? 2 : 1;
       const availableWidth = viewerWidth - pageGap * (maxColumns - 1) - 32;
-      const renderPlans: Array<{
-        visualOrder: number[];
-        pageSlots: Map<number, HTMLElement>;
-        baseScale: number;
-      }> = [];
+      const renderPlans: PdfRenderPlan[] = [];
 
-      for (const group of pageGroups) {
+      for (const [groupIndex, group] of pageGroups.entries()) {
         const visualOrder = getVisualPageOrder(group);
         const spreadEl = document.createElement("section");
         spreadEl.className = "pdfjs-spread";
@@ -1637,80 +1801,29 @@ async function renderCurrentPage() {
           pageSlots.set(pageNumber, pageEl);
         }
 
-        renderPlans.push({ visualOrder, pageSlots, baseScale });
+        renderPlans.push({ groupIndex, visualOrder, spreadEl, pageSlots, baseScale });
       }
 
-      for (const groupIndex of prioritizedGroupOrder) {
-        const plan = renderPlans[groupIndex];
-        if (!plan) {
-          continue;
-        }
-
-        for (const pageNumber of plan.visualOrder) {
-          const pageEl = plan.pageSlots.get(pageNumber);
-          if (!pageEl || pageEl.dataset.rendered === "true") {
-            continue;
-          }
-
-          const page = await pdfDocument.getPage(pageNumber);
-          const viewport = page.getViewport({ scale: plan.baseScale });
-          pageEl.style.width = `${viewport.width}px`;
-          pageEl.style.height = `${viewport.height}px`;
-          pageEl.innerHTML = "";
-
-          const canvasWrapperEl = document.createElement("div");
-          canvasWrapperEl.className = "canvasWrapper";
-          const canvas = document.createElement("canvas");
-          const outputScale = Math.max(window.devicePixelRatio || 1, 1);
-          canvas.width = Math.ceil(viewport.width * outputScale);
-          canvas.height = Math.ceil(viewport.height * outputScale);
-          canvas.style.width = `${viewport.width}px`;
-          canvas.style.height = `${viewport.height}px`;
-          canvasWrapperEl.appendChild(canvas);
-          pageEl.appendChild(canvasWrapperEl);
-
-          const textLayerEl = document.createElement("div");
-          textLayerEl.className = "textLayer";
-          pageEl.appendChild(textLayerEl);
-
-          const linkLayerEl = document.createElement("div");
-          linkLayerEl.className = "annotationLayer";
-          pageEl.appendChild(linkLayerEl);
-
-          const context = canvas.getContext("2d");
-          if (!context) {
-            continue;
-          }
-
-          await page.render({
-            canvas,
-            canvasContext: context,
-            transform:
-              outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
-            viewport,
-          }).promise;
-
-          const textLayer = new TextLayer({
-            textContentSource: page.streamTextContent(),
-            container: textLayerEl,
-            viewport,
-          });
-          await textLayer.render();
-
-          const annotations = await page.getAnnotations();
-          renderPdfJsLinks(linkLayerEl, viewport, annotations as Array<Record<string, unknown>>);
-          pageEl.dataset.rendered = "true";
-
-          if (restoreTargetPage === pageNumber) {
-            scheduleReadingPositionRestore();
-          }
-
-          if (currentToken !== pdfRenderToken) {
-            return;
-          }
-        }
-      }
-      scheduleReadingPositionRestore();
+      const targetGroupIndex =
+        restoreTargetPage === null
+          ? 0
+          : Math.max(
+              0,
+              pageGroups.findIndex((group) => group.includes(restoreTargetPage)),
+            );
+      const session: PdfRenderSession = {
+        token: currentToken,
+        pdfDocument,
+        viewerEl: pdfjsViewerEl,
+        stageEl: viewerStageEl,
+        plans: renderPlans,
+        restoreTargetPage,
+        updateScheduled: false,
+        isUpdating: false,
+        pendingFocusGroupIndex: null,
+      };
+      activePdfRenderSession = session;
+      schedulePdfRenderWindowUpdate(session, targetGroupIndex);
     } catch (error) {
       pdfjsViewerEl.innerHTML = "";
       const errorEl = document.createElement("div");
@@ -1723,6 +1836,7 @@ async function renderCurrentPage() {
   }
 
   pdfRenderToken += 1;
+  activePdfRenderSession = null;
   pdfjsViewerEl.hidden = true;
   pdfjsViewerEl.innerHTML = "";
   pdfjsViewerEl.dataset.filePath = "";
@@ -2094,6 +2208,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     scheduleReadingPositionSave();
+    if (activePdfRenderSession) {
+      schedulePdfRenderWindowUpdate(activePdfRenderSession);
+    }
   });
 
   sidebarToggleEl?.addEventListener("click", () => {

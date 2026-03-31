@@ -66,4 +66,4 @@ jobs:
       - name: Regenerate third-party notices
         run: npm run generate:third-party-licenses
       - name: Ensure generated file is committed
-        run: git diff --exit-code -- THIRD-PARTY-LICENSES.md
+        run: git diff --exit-code -- THIRD-PARTY-LICENSES-rust.md THIRD-PARTY-LICENSES-js.md

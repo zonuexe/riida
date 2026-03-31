@@ -7,7 +7,8 @@ import { GlobalWorkerOptions, TextLayer, getDocument } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { mountNoteEditor, type NoteEditorHandle } from "./note-editor";
 import licenseText from "../LICENSE?raw";
-import thirdPartyLicenseUrl from "../THIRD-PARTY-LICENSES.md?url";
+import thirdPartyRustLicenseUrl from "../THIRD-PARTY-LICENSES-rust.md?url";
+import thirdPartyJsLicenseUrl from "../THIRD-PARTY-LICENSES-js.md?url";
 
 type BookSummary = {
   fileName: string;
@@ -175,7 +176,8 @@ let cachedHomeDir: string | null = null;
 let cachedAppName = "riida";
 let cachedAppVersion = "0.0.2";
 const buildDate = __BUILD_DATE__;
-let cachedThirdPartyText = "Loading third-party notices...";
+let cachedThirdPartyRustText = "Loading Rust notices...";
+let cachedThirdPartyJsText = "Loading JavaScript notices...";
 
 function readingPositionStorageKey(filePath: string) {
   return `riida:reading-position:${filePath}`;
@@ -669,7 +671,8 @@ function syncAboutUi() {
   const versionEl = document.querySelector<HTMLElement>("#app-about-version");
   const buildDateEl = document.querySelector<HTMLElement>("#app-about-build-date");
   const licenseEl = document.querySelector<HTMLElement>("#app-license-text");
-  const thirdPartyEl = document.querySelector<HTMLElement>("#app-third-party-text");
+  const thirdPartyRustEl = document.querySelector<HTMLElement>("#app-third-party-rust-text");
+  const thirdPartyJsEl = document.querySelector<HTMLElement>("#app-third-party-js-text");
 
   if (modalEl) {
     modalEl.hidden = !viewerState.isAboutOpen;
@@ -691,21 +694,34 @@ function syncAboutUi() {
     licenseEl.textContent = licenseText.trim();
   }
 
-  if (thirdPartyEl) {
-    thirdPartyEl.textContent = cachedThirdPartyText;
+  if (thirdPartyRustEl) {
+    thirdPartyRustEl.textContent = cachedThirdPartyRustText;
+  }
+
+  if (thirdPartyJsEl) {
+    thirdPartyJsEl.textContent = cachedThirdPartyJsText;
   }
 }
 
 async function loadThirdPartyLicenses() {
   try {
-    const response = await fetch(thirdPartyLicenseUrl);
-    if (!response.ok) {
-      throw new Error(`${response.status} ${response.statusText}`);
+    const [rustResponse, jsResponse] = await Promise.all([
+      fetch(thirdPartyRustLicenseUrl),
+      fetch(thirdPartyJsLicenseUrl),
+    ]);
+    if (!rustResponse.ok) {
+      throw new Error(`Rust notices: ${rustResponse.status} ${rustResponse.statusText}`);
+    }
+    if (!jsResponse.ok) {
+      throw new Error(`JavaScript notices: ${jsResponse.status} ${jsResponse.statusText}`);
     }
 
-    cachedThirdPartyText = (await response.text()).trim();
+    cachedThirdPartyRustText = (await rustResponse.text()).trim();
+    cachedThirdPartyJsText = (await jsResponse.text()).trim();
   } catch (error) {
-    cachedThirdPartyText = `Failed to load third-party notices: ${String(error)}`;
+    const message = `Failed to load third-party notices: ${String(error)}`;
+    cachedThirdPartyRustText = message;
+    cachedThirdPartyJsText = message;
   }
 }
 
@@ -2153,7 +2169,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   appAboutOpenEl?.addEventListener("click", () => {
     viewerState.isAboutOpen = true;
     syncAboutUi();
-    if (cachedThirdPartyText === "Loading third-party notices...") {
+    if (
+      cachedThirdPartyRustText === "Loading Rust notices..." ||
+      cachedThirdPartyJsText === "Loading JavaScript notices..."
+    ) {
       void loadThirdPartyLicenses().then(() => {
         syncAboutUi();
       });

@@ -11,7 +11,7 @@ Release builds must satisfy the project's software licensing requirements.
 In practice this means:
 
 - the app's own license information must remain visible in the About dialog
-- bundled third-party notices must be available from `THIRD-PARTY-LICENSES.md`
+- bundled third-party notices must be available from `THIRD-PARTY-LICENSES-rust.md` and `THIRD-PARTY-LICENSES-js.md`
 - dependency license checks must pass before release or public distribution
 
 When dependency sets change, update notices and run the checks before committing release-facing changes:
@@ -28,7 +28,7 @@ CI also checks the release gate:
 - PR dependency review via [.github/dependency-review-config.yml](/Users/megurine/repo/rust/riida/.github/dependency-review-config.yml)
 - notice regeneration via [.github/workflows/license-check.yml](/Users/megurine/repo/rust/riida/.github/workflows/license-check.yml)
 
-If a dependency is added or updated, assume `THIRD-PARTY-LICENSES.md` may need regeneration.
+If a dependency is added or updated, assume `THIRD-PARTY-LICENSES-rust.md` and `THIRD-PARTY-LICENSES-js.md` may need regeneration.
 
 For macOS builds, the current default is ad-hoc signing via
 [src-tauri/tauri.conf.json](/Users/megurine/repo/rust/riida/src-tauri/tauri.conf.json).

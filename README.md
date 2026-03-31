@@ -61,6 +61,23 @@ Licenses and notice texts for bundled Rust and JavaScript dependencies are colle
 
 Copyright belongs to the contributors to this repository unless otherwise noted.
 
+## macOS Distribution Note
+
+This project does not use Apple's paid code signing and notarization workflow.
+
+If you download a macOS build artifact, Gatekeeper may report that the app is damaged or unsafe to open. In that case, you need to re-sign it locally with an ad-hoc signature before launching it.
+
+Example:
+
+```bash
+cp -R riida.app /Applications/
+xattr -cr /Applications/riida.app
+codesign --force --deep --sign - /Applications/riida.app
+open /Applications/riida.app
+```
+
+This is intended only for local, personal use on your own machine.
+
 ## Development
 
 The project includes a Nix flake-based development shell.

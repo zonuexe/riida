@@ -30,6 +30,11 @@ CI also checks the release gate:
 
 If a dependency is added or updated, assume `THIRD-PARTY-LICENSES.md` may need regeneration.
 
+For macOS builds, the current default is ad-hoc signing via
+[src-tauri/tauri.conf.json](/Users/megurine/repo/rust/riida/src-tauri/tauri.conf.json).
+This is intended for local verification and CI smoke testing only.
+Public distribution still requires proper Apple signing and notarization.
+
 ## Architecture
 
 `riida` is a Tauri v2 desktop app with:

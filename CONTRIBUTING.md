@@ -48,4 +48,4 @@ cargo check --manifest-path src-tauri/Cargo.toml
 
 ## More Detail
 
-Development notes and implementation details live in [AGENTS.md](/Users/megurine/repo/rust/riida/AGENTS.md).
+Development notes and implementation details live in [AGENTS.md](AGENTS.md).

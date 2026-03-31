@@ -6,6 +6,18 @@ It was created to meet the needs of an author who owns more than 1,000 ebooks an
 
 The name "Riida" comes from "Reader", reflecting that primary goal.
 
+## Install
+
+Download an installer for your platform from:
+
+- [riida releases](https://github.com/zonuexe/riida/releases)
+
+On macOS, if Gatekeeper refuses to open the downloaded app, move it to `/Applications` and run:
+
+```bash
+xattr -cr /Applications/riida.app
+```
+
 It is currently focused on:
 
 - indexing PDFs from a watched local folder
@@ -65,14 +77,13 @@ Copyright belongs to the contributors to this repository unless otherwise noted.
 
 This project does not use Apple's paid code signing and notarization workflow.
 
-If you download a macOS build artifact, Gatekeeper may report that the app is damaged or unsafe to open. In that case, you need to re-sign it locally with an ad-hoc signature before launching it.
+If you download a macOS build artifact, Gatekeeper may report that the app is damaged or unsafe to open.
 
 Example:
 
 ```bash
 cp -R riida.app /Applications/
 xattr -cr /Applications/riida.app
-codesign --force --deep --sign - /Applications/riida.app
 open /Applications/riida.app
 ```
 

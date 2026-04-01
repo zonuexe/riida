@@ -198,11 +198,41 @@ fn preferred_config_file(project_dirs: &ProjectDirs) -> PathBuf {
         .unwrap_or_else(|| project_dirs.config_dir().join(CONFIG_FILE))
 }
 
+fn development_app_paths(project_root: &Path) -> AppPaths {
+    let legacy_project_dirs = ProjectDirs::from("com", "megurine", "riida");
+    let data_dir = project_root.join("data");
+    let cache_dir = project_root.join("cache");
+    let mut legacy_config_files = Vec::new();
+    let mut legacy_database_files = Vec::new();
+    let mut legacy_thumbnail_roots = vec![project_root.join("data").join("thumbnails")];
+
+    if let Some(legacy_project_dirs) = legacy_project_dirs {
+        legacy_config_files.push(preferred_config_file(&legacy_project_dirs));
+        legacy_database_files.push(legacy_project_dirs.data_dir().join("app.db"));
+        legacy_thumbnail_roots.push(legacy_project_dirs.cache_dir().join("thumbnails"));
+    }
+
+    AppPaths {
+        config_file: project_root.join(CONFIG_FILE),
+        data_dir: data_dir.clone(),
+        database_file: data_dir.join("app.db"),
+        cache_dir: cache_dir.clone(),
+        thumbnail_root: cache_dir.join("thumbnails"),
+        legacy_config_files,
+        legacy_database_files,
+        legacy_thumbnail_roots,
+    }
+}
+
 fn resolve_app_paths() -> Result<AppPaths, String> {
+    let project_root = project_root();
+    if cfg!(debug_assertions) {
+        return Ok(development_app_paths(&project_root));
+    }
+
     let project_dirs = ProjectDirs::from("com", "zonuexe", "riida")
         .ok_or_else(|| "failed to resolve app directories".to_string())?;
     let legacy_project_dirs = ProjectDirs::from("com", "megurine", "riida");
-    let project_root = project_root();
     let data_dir = project_dirs.data_dir().to_path_buf();
     let cache_dir = project_dirs.cache_dir().to_path_buf();
     let config_file = preferred_config_file(&project_dirs);
@@ -1519,6 +1549,25 @@ mod tests {
             legacy_database_files: vec![root.join("legacy").join("app.db")],
             legacy_thumbnail_roots: vec![root.join("legacy").join("thumbnails")],
         }
+    }
+
+    #[test]
+    fn development_app_paths_use_repository_storage_layout() {
+        let root = unique_temp_dir("development-app-paths");
+        let paths = development_app_paths(&root);
+
+        assert_eq!(paths.config_file, root.join(CONFIG_FILE));
+        assert_eq!(paths.data_dir, root.join("data"));
+        assert_eq!(paths.database_file, root.join("data").join("app.db"));
+        assert_eq!(paths.cache_dir, root.join("cache"));
+        assert_eq!(paths.thumbnail_root, root.join("cache").join("thumbnails"));
+        assert!(
+            paths
+                .legacy_thumbnail_roots
+                .contains(&root.join("data").join("thumbnails"))
+        );
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

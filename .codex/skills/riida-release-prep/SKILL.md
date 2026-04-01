@@ -23,8 +23,16 @@ Update these files:
 
 Use these rules:
 
+- Write the changelog for humans, not machines.
+- Add an entry for every released version.
+- Keep the newest released version directly below `Unreleased`.
 - Add a new `## [x.y.z] - YYYY-MM-DD` section to `CHANGELOG.md`.
+- Use Keep a Changelog section headings as needed: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, and `Security`.
+- Group the same kinds of changes under the same section heading.
 - Keep changelog entries user-facing. Do not list internal refactors unless they affect users.
+- Keep version headings and bottom-of-file links consistent so releases and compare ranges stay linkable.
+- Preserve the release date in every version heading.
+- Preserve the existing Semantic Versioning note at the top of `CHANGELOG.md`.
 - Update the `[Unreleased]` compare link and add the new release link at the bottom of `CHANGELOG.md`.
 - Keep the release commit message in the form `Bump up version to x.y.z`.
 

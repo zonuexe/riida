@@ -1536,6 +1536,54 @@ mod tests {
     }
 
     #[test]
+    fn normalize_config_input_expands_home_and_normalizes_patterns() {
+        let home = std::env::var("HOME").expect("HOME should exist for tests");
+        let config = normalize_config_input(AppConfigFile {
+            library_roots: Some(vec!["~/Books".to_string(), "  ".to_string()]),
+            excluded_patterns: Some(vec!["Prefix_*".to_string(), r"**\BACKUP\**".to_string()]),
+            excluded_dir_names: None,
+            excluded_file_suffixes: None,
+            pdf_renderer: Some("PDFJS".to_string()),
+        });
+
+        assert_eq!(config.library_roots, vec![format!("{home}/Books")]);
+        assert_eq!(
+            config.excluded_patterns,
+            vec!["**/backup/**".to_string(), "prefix_*".to_string()]
+        );
+        assert_eq!(config.pdf_renderer, "pdfjs");
+    }
+
+    #[test]
+    fn normalize_gui_config_input_preserves_new_glob_format() {
+        let config = normalize_gui_config_input(AppConfigInput {
+            library_roots: vec!["~/Library".to_string()],
+            excluded_patterns: vec!["*.BAK".to_string(), "prefix_*".to_string()],
+            pdf_renderer: "native".to_string(),
+        });
+
+        assert_eq!(config.excluded_patterns, vec!["*.bak".to_string(), "prefix_*".to_string()]);
+        assert_eq!(config.pdf_renderer, "native");
+    }
+
+    #[test]
+    fn app_config_to_payload_collapses_home_paths() {
+        let home = std::env::var("HOME").expect("HOME should exist for tests");
+        let payload = app_config_to_payload(&AppConfig {
+            library_roots: vec![format!("{home}/Documents/Ebooks"), "/tmp/library".to_string()],
+            excluded_patterns: vec!["**/backup/**".to_string()],
+            pdf_renderer: "pdfjs".to_string(),
+        });
+
+        assert_eq!(
+            payload.library_roots,
+            vec!["~/Documents/Ebooks".to_string(), "/tmp/library".to_string()]
+        );
+        assert_eq!(payload.excluded_patterns, vec!["**/backup/**".to_string()]);
+        assert_eq!(payload.pdf_renderer, "pdfjs");
+    }
+
+    #[test]
     fn normalize_viewer_preferences_falls_back_to_defaults_for_unknown_values() {
         let normalized = normalize_viewer_preferences(viewer_preferences(
             "mystery",

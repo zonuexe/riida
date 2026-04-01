@@ -63,7 +63,5 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Install dependencies
         run: npm ci
-      - name: Regenerate third-party notices
-        run: npm run generate:third-party-licenses
-      - name: Ensure generated file is committed
-        run: git diff --exit-code -- THIRD-PARTY-LICENSES-rust.md THIRD-PARTY-LICENSES-js.md
+      - name: Check bundled third-party notices
+        run: npm run check:notices

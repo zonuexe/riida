@@ -66,6 +66,12 @@ npm run mutants:rust:list
 npm run mutants:rust
 ```
 
+When dependencies or bundled notices change, also run:
+
+```bash
+npm run check:licenses
+```
+
 ## Project Structure
 
 - [src-tauri/src/lib.rs](/Users/megurine/repo/rust/riida/src-tauri/src/lib.rs): backend, config, SQLite, library scan/watch, thumbnails

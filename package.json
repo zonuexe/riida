@@ -9,6 +9,8 @@
     "dev": "vite",
     "generate:third-party-licenses": "node scripts/generate-third-party-licenses.mjs",
     "check:licenses:npm": "license-checker --production --excludePrivatePackages --onlyAllow 'MIT;MIT OR Apache-2.0;Apache-2.0;Apache-2.0 OR MIT;(MPL-2.0 OR Apache-2.0);BSD-2-Clause;BSD-3-Clause;ISC'",
+    "check:notices": "npm run generate:third-party-licenses && git diff --exit-code -- THIRD-PARTY-LICENSES-rust.md THIRD-PARTY-LICENSES-js.md",
+    "check:licenses": "npm run check:licenses:npm && npm run check:notices",
     "check": "npm run check:rust && npm run check:frontend",
     "check:rust": "npm run rust:fmt:check && npm run rust:lint && cargo test --manifest-path src-tauri/Cargo.toml && cargo check --manifest-path src-tauri/Cargo.toml",
     "check:frontend": "npm run lint && npm run fmt:check && npm test && npm run build",

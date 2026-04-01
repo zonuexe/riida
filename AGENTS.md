@@ -21,6 +21,12 @@ nix --extra-experimental-features 'nix-command flakes' develop --command npm run
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run check:licenses:npm
 ```
 
+Combined local shortcut:
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run check:licenses
+```
+
 CI also checks the release gate:
 
 - Rust dependency licenses via `cargo-deny` using [deny.toml](/Users/megurine/repo/rust/riida/deny.toml)

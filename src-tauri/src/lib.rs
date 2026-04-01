@@ -116,7 +116,7 @@ struct ReadingPosition {
     updated_at: Option<u64>,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ViewerPreferences {
     page_mode: String,
@@ -1287,7 +1287,7 @@ fn save_reading_position(
         .duration_since(UNIX_EPOCH)
         .map_err(|error| error.to_string())?
         .as_secs();
-    let normalized_ratio = page_offset_ratio.clamp(0.0, 1.0);
+    let normalized_ratio = normalize_page_offset_ratio(page_offset_ratio);
 
     connection
         .execute(
@@ -1309,6 +1309,10 @@ fn save_reading_position(
         page_offset_ratio: normalized_ratio,
         updated_at: Some(updated_at),
     })
+}
+
+fn normalize_page_offset_ratio(page_offset_ratio: f64) -> f64 {
+    page_offset_ratio.clamp(0.0, 1.0)
 }
 
 #[tauri::command]
@@ -1399,6 +1403,7 @@ mod tests {
     use super::*;
     use notify::event::{CreateKind, ModifyKind, RemoveKind};
     use notify::{EventKind, event::DataChange};
+    use proptest::prelude::*;
     use rusqlite::Connection;
     use std::fs;
 
@@ -1719,5 +1724,61 @@ mod tests {
         assert!(should_rescan(&regular_dir_event, &compiled));
 
         let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    prop_compose! {
+        fn arbitrary_viewer_preferences()(
+            page_mode in ".*",
+            binding_direction in ".*",
+            zoom_mode in ".*",
+            align_mode in ".*",
+            vertical_gap_mode in ".*",
+            treat_first_page_as_cover in any::<bool>(),
+        ) -> ViewerPreferences {
+            ViewerPreferences {
+                page_mode,
+                binding_direction,
+                zoom_mode,
+                align_mode,
+                vertical_gap_mode,
+                treat_first_page_as_cover,
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn normalized_viewer_preferences_always_use_supported_values(
+            preferences in arbitrary_viewer_preferences()
+        ) {
+            let normalized = normalize_viewer_preferences(preferences);
+
+            prop_assert!(matches!(normalized.page_mode.as_str(), "single" | "spread"));
+            prop_assert!(matches!(normalized.binding_direction.as_str(), "left" | "right"));
+            prop_assert!(matches!(
+                normalized.zoom_mode.as_str(),
+                "fit-width" | "fit-height" | "original"
+            ));
+            prop_assert!(matches!(normalized.align_mode.as_str(), "left" | "center" | "right"));
+            prop_assert!(matches!(
+                normalized.vertical_gap_mode.as_str(),
+                "wide" | "compact" | "none"
+            ));
+        }
+
+        #[test]
+        fn normalized_page_offset_ratio_stays_in_range(value in any::<f64>()) {
+            let normalized = normalize_page_offset_ratio(value);
+
+            prop_assert!(normalized.is_finite());
+            prop_assert!((0.0..=1.0).contains(&normalized));
+        }
+
+        #[test]
+        fn normalized_page_offset_ratio_preserves_values_already_in_range(value in 0.0f64..=1.0f64) {
+            let normalized = normalize_page_offset_ratio(value);
+
+            prop_assert_eq!(normalized, value);
+        }
     }
 }

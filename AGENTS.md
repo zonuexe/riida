@@ -161,6 +161,31 @@ nix --extra-experimental-features 'nix-command flakes' develop --command cargo c
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run build
 ```
 
+## Rust Quality Tools
+
+Rust logic now uses both example-based unit tests and property-based tests.
+
+- deterministic unit tests live in [src-tauri/src/lib.rs](/Users/megurine/repo/rust/riida/src-tauri/src/lib.rs)
+- property-based tests use `proptest`
+
+Good candidates for future `proptest` coverage:
+
+- config normalization
+- viewer preference normalization and merging
+- reading-position normalization
+- watcher rescan decisions
+
+Mutation testing is not part of normal CI yet, but `cargo-mutants` is the preferred tool for periodic local audits.
+
+Suggested local workflow:
+
+```bash
+cargo install cargo-mutants --locked
+nix --extra-experimental-features 'nix-command flakes' develop --command cargo mutants --manifest-path src-tauri/Cargo.toml --test-tool cargo test
+```
+
+Use mutation testing selectively on logic-heavy Rust code because it is much slower than the normal test suite.
+
 ## Frontend Linting And Formatting
 
 The frontend now uses the Oxc toolchain:

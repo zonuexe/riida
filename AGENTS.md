@@ -159,6 +159,13 @@ nix --extra-experimental-features 'nix-command flakes' develop --command npm run
 Or run the narrower commands when iterating on one area:
 
 ```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run check:rust
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run check:frontend
+```
+
+Or run the smallest commands directly:
+
+```bash
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run rust:fmt:check
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run rust:lint
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run lint

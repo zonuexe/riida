@@ -23,14 +23,8 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Check Rust formatting
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
-
-      - name: Run Clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-
-      - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Run Rust quality checks
+        run: npm run check:rust
 
   frontend-tests:
     runs-on: ubuntu-latest
@@ -46,14 +40,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run frontend lint
-        run: npm run lint
-
-      - name: Check frontend formatting
-        run: npm run fmt:check
-
-      - name: Run TypeScript tests
-        run: npm test
-
-      - name: Build frontend
-        run: npm run build
+      - name: Run frontend quality checks
+        run: npm run check:frontend

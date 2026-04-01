@@ -36,6 +36,13 @@ npm run check
 Or run the individual checks when iterating on one area:
 
 ```bash
+npm run check:rust
+npm run check:frontend
+```
+
+Or the narrower commands:
+
+```bash
 npm run rust:fmt:check
 npm run rust:lint
 npm run lint

@@ -33,6 +33,10 @@ import {
   buildPageGroups,
   getVisualPageOrder,
 } from "./viewer-layout-utils";
+import {
+  applyViewerSettingsPayloadToState,
+  switchViewerSettingsScopeInState,
+} from "./viewer-settings-utils";
 import licenseText from "../LICENSE?raw";
 import thirdPartyRustLicenseUrl from "../THIRD-PARTY-LICENSES-rust.md?url";
 import thirdPartyJsLicenseUrl from "../THIRD-PARTY-LICENSES-js.md?url";
@@ -917,10 +921,10 @@ function applyViewerSettingsPayload(
   payload: ViewerSettingsPayload,
   preferredScope: ViewerSettingsScope = payload.usesFileOverride ? "file" : "global",
 ) {
-  const nextScope = preferredScope === "file" ? "file" : "global";
-  applyViewerPreferences(payload.effective, nextScope, payload.usesFileOverride);
-  viewerSettings.globalDraft = { ...payload.global };
-  viewerSettings.fileDraft = { ...(payload.file ?? payload.effective) };
+  const nextState = applyViewerSettingsPayloadToState(payload, preferredScope);
+  applyViewerPreferences(nextState, nextState.scope, nextState.hasFileOverride);
+  viewerSettings.globalDraft = nextState.globalDraft;
+  viewerSettings.fileDraft = nextState.fileDraft;
 }
 
 async function loadViewerSettingsForCurrentBook() {
@@ -2168,17 +2172,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   };
 
   const switchViewerSettingsScope = (requestedScope: ViewerSettingsScope) => {
-    viewerSettings.scope = requestedScope;
-    if (requestedScope === "file" && !viewerSettings.hasFileOverride) {
-      viewerSettings.fileDraft = {
-        pageMode: viewerSettings.pageMode,
-        bindingDirection: viewerSettings.bindingDirection,
-        zoomMode: viewerSettings.zoomMode,
-        alignMode: viewerSettings.alignMode,
-        verticalGapMode: viewerSettings.verticalGapMode,
-        treatFirstPageAsCover: viewerSettings.treatFirstPageAsCover,
-      };
-    }
+    const nextState = switchViewerSettingsScopeInState(viewerSettings, requestedScope);
+    viewerSettings.scope = nextState.scope;
+    viewerSettings.fileDraft = nextState.fileDraft;
     syncViewerSettingsUi();
   };
 

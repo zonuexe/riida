@@ -123,6 +123,18 @@ When changing navigation logic, verify:
 - forward navigation after going back
 - search result restoration
 
+The frontend now has focused Vitest coverage for:
+
+- library filtering and directory derivation
+- navigation URL/signature helpers
+- navigation shortcut detection
+- reading-position cache parsing
+- note window placement
+- viewer layout and render-window planning
+- viewer settings state merging
+
+Prefer adding tests in these helper modules when changing logic that can be expressed without DOM rendering.
+
 ## SQLite Notes
 
 The backend currently stores at least:
@@ -135,6 +147,17 @@ The backend currently stores at least:
 Schema setup lives in the startup `CREATE TABLE IF NOT EXISTS` block in [src-tauri/src/lib.rs](/Users/megurine/repo/rust/riida/src-tauri/src/lib.rs).
 
 If schema semantics change, consider migration behavior early.
+
+## Local Verification
+
+Common local checks:
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command cargo test --manifest-path src-tauri/Cargo.toml
+nix --extra-experimental-features 'nix-command flakes' develop --command npm test
+nix --extra-experimental-features 'nix-command flakes' develop --command cargo check --manifest-path src-tauri/Cargo.toml
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run build
+```
 
 ## Notes
 

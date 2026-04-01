@@ -58,13 +58,14 @@ If notice regeneration is the only remaining change after a release bump, use a 
 Run these commands before committing:
 
 ```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command cargo test --manifest-path src-tauri/Cargo.toml
+nix --extra-experimental-features 'nix-command flakes' develop --command npm test
 nix --extra-experimental-features 'nix-command flakes' develop --command cargo check --manifest-path src-tauri/Cargo.toml
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run build
 ```
 
-Run targeted extra checks when the touched area warrants them:
+Run this extra check when the touched area warrants it:
 
-- `cargo test --manifest-path src-tauri/Cargo.toml` when Rust behavior changed
 - `npm run check:licenses:npm` when JS dependencies or license generation changed
 
 ## Commit the Result
@@ -89,5 +90,6 @@ If the user asks for separate commits, keep the release version bump as the fina
 - Version numbers are consistent across Rust, npm, Tauri, and the About dialog fallback.
 - `CHANGELOG.md` describes only user-visible release changes.
 - Third-party notice files were regenerated.
+- `cargo test` and `npm test` passed.
 - `cargo check` and `npm run build` passed.
 - The final commit message follows the established release format.

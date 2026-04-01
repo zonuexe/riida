@@ -34,6 +34,13 @@ npm run build
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
+Run the test suites when touching frontend logic, Rust behavior, or shared state handling.
+
+```bash
+npm test
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
 ## Project Structure
 
 - [src-tauri/src/lib.rs](/Users/megurine/repo/rust/riida/src-tauri/src/lib.rs): backend, config, SQLite, library scan/watch, thumbnails

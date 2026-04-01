@@ -701,6 +701,36 @@ fn merge_file_viewer_preferences(
     }
 }
 
+fn build_file_viewer_preferences_for_storage(
+    global: &ViewerPreferences,
+    normalized: ViewerPreferences,
+) -> ViewerPreferences {
+    ViewerPreferences {
+        page_mode: if normalized.page_mode == global.page_mode {
+            String::new()
+        } else {
+            normalized.page_mode
+        },
+        binding_direction: normalized.binding_direction,
+        zoom_mode: if normalized.zoom_mode == global.zoom_mode {
+            String::new()
+        } else {
+            normalized.zoom_mode
+        },
+        align_mode: if normalized.align_mode == global.align_mode {
+            String::new()
+        } else {
+            normalized.align_mode
+        },
+        vertical_gap_mode: if normalized.vertical_gap_mode == global.vertical_gap_mode {
+            String::new()
+        } else {
+            normalized.vertical_gap_mode
+        },
+        treat_first_page_as_cover: normalized.treat_first_page_as_cover,
+    }
+}
+
 fn save_viewer_preferences_record(
     connection: &Connection,
     scope_key: &str,
@@ -1312,30 +1342,7 @@ fn save_file_viewer_preferences(
         .map(normalize_viewer_preferences)
         .unwrap_or_else(default_viewer_preferences);
     let normalized = normalize_viewer_preferences(preferences);
-    let stored_preferences = ViewerPreferences {
-        page_mode: if normalized.page_mode == global.page_mode {
-            String::new()
-        } else {
-            normalized.page_mode
-        },
-        binding_direction: normalized.binding_direction,
-        zoom_mode: if normalized.zoom_mode == global.zoom_mode {
-            String::new()
-        } else {
-            normalized.zoom_mode
-        },
-        align_mode: if normalized.align_mode == global.align_mode {
-            String::new()
-        } else {
-            normalized.align_mode
-        },
-        vertical_gap_mode: if normalized.vertical_gap_mode == global.vertical_gap_mode {
-            String::new()
-        } else {
-            normalized.vertical_gap_mode
-        },
-        treat_first_page_as_cover: normalized.treat_first_page_as_cover,
-    };
+    let stored_preferences = build_file_viewer_preferences_for_storage(&global, normalized);
     save_viewer_preferences_record(&connection, &file_path, Some(&file_path), stored_preferences)?;
     load_viewer_preferences_payload(&connection, Some(&file_path))
 }
@@ -1390,6 +1397,50 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use notify::event::{CreateKind, ModifyKind, RemoveKind};
+    use notify::{EventKind, event::DataChange};
+    use rusqlite::Connection;
+    use std::fs;
+
+    fn test_connection() -> Connection {
+        let connection = Connection::open_in_memory().expect("in-memory db should open");
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE viewer_preferences (
+                  scope_key TEXT PRIMARY KEY,
+                  file_path TEXT UNIQUE,
+                  page_mode TEXT NOT NULL,
+                  binding_direction TEXT NOT NULL,
+                  zoom_mode TEXT NOT NULL,
+                  align_mode TEXT NOT NULL,
+                  vertical_gap_mode TEXT NOT NULL,
+                  treat_first_page_as_cover INTEGER NOT NULL,
+                  updated_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .expect("viewer_preferences table should be created");
+        connection
+    }
+
+    fn viewer_preferences(
+        page_mode: &str,
+        binding_direction: &str,
+        zoom_mode: &str,
+        align_mode: &str,
+        vertical_gap_mode: &str,
+        treat_first_page_as_cover: bool,
+    ) -> ViewerPreferences {
+        ViewerPreferences {
+            page_mode: page_mode.to_string(),
+            binding_direction: binding_direction.to_string(),
+            zoom_mode: zoom_mode.to_string(),
+            align_mode: align_mode.to_string(),
+            vertical_gap_mode: vertical_gap_mode.to_string(),
+            treat_first_page_as_cover,
+        }
+    }
 
     fn test_config(patterns: &[&str]) -> AppConfig {
         AppConfig {
@@ -1482,5 +1533,143 @@ mod tests {
             .expect("invalid glob should fail to compile");
 
         assert!(error.contains("invalid excluded pattern"));
+    }
+
+    #[test]
+    fn normalize_viewer_preferences_falls_back_to_defaults_for_unknown_values() {
+        let normalized = normalize_viewer_preferences(viewer_preferences(
+            "mystery",
+            "upside-down",
+            "stretch",
+            "outer-space",
+            "tight",
+            false,
+        ));
+
+        assert_eq!(normalized.page_mode, DEFAULT_VIEWER_PAGE_MODE);
+        assert_eq!(normalized.binding_direction, DEFAULT_VIEWER_BINDING_DIRECTION);
+        assert_eq!(normalized.zoom_mode, DEFAULT_VIEWER_ZOOM_MODE);
+        assert_eq!(normalized.align_mode, DEFAULT_VIEWER_ALIGN_MODE);
+        assert_eq!(normalized.vertical_gap_mode, DEFAULT_VIEWER_VERTICAL_GAP_MODE);
+        assert!(!normalized.treat_first_page_as_cover);
+    }
+
+    #[test]
+    fn merge_file_viewer_preferences_inherits_blank_fields_from_global() {
+        let global = viewer_preferences("spread", "left", "fit-height", "center", "compact", true);
+        let file = viewer_preferences("", "right", "", "left", "", false);
+
+        let merged = merge_file_viewer_preferences(&global, &file);
+
+        assert_eq!(merged.page_mode, "spread");
+        assert_eq!(merged.binding_direction, "right");
+        assert_eq!(merged.zoom_mode, "fit-height");
+        assert_eq!(merged.align_mode, "left");
+        assert_eq!(merged.vertical_gap_mode, "compact");
+        assert!(!merged.treat_first_page_as_cover);
+    }
+
+    #[test]
+    fn load_viewer_preferences_payload_merges_global_and_file_records() {
+        let connection = test_connection();
+
+        save_viewer_preferences_record(
+            &connection,
+            VIEWER_DEFAULT_SCOPE_KEY,
+            None,
+            viewer_preferences("spread", "left", "fit-height", "center", "compact", true),
+        )
+        .expect("global preferences should save");
+        save_viewer_preferences_record(
+            &connection,
+            "/tmp/book.pdf",
+            Some("/tmp/book.pdf"),
+            viewer_preferences("", "right", "original", "", "", false),
+        )
+        .expect("file preferences should save");
+
+        let payload =
+            load_viewer_preferences_payload(&connection, Some("/tmp/book.pdf")).expect("payload should load");
+
+        assert_eq!(payload.global.binding_direction, "left");
+        assert!(payload.uses_file_override);
+        let file = payload.file.expect("file payload should exist");
+        assert_eq!(file.page_mode, "spread");
+        assert_eq!(file.binding_direction, "right");
+        assert_eq!(file.zoom_mode, "original");
+        assert_eq!(file.align_mode, "center");
+        assert_eq!(file.vertical_gap_mode, "compact");
+        assert!(!file.treat_first_page_as_cover);
+        assert_eq!(payload.effective.binding_direction, "right");
+        assert_eq!(payload.effective.zoom_mode, "original");
+    }
+
+    #[test]
+    fn file_viewer_preferences_store_only_non_global_overrides() {
+        let global = viewer_preferences("spread", "left", "fit-height", "center", "compact", true);
+        let stored = build_file_viewer_preferences_for_storage(
+            &global,
+            normalize_viewer_preferences(viewer_preferences(
+            "spread",
+            "right",
+            "fit-height",
+            "center",
+            "compact",
+            false,
+            )),
+        );
+
+        assert_eq!(stored.page_mode, "");
+        assert_eq!(stored.binding_direction, "right");
+        assert_eq!(stored.zoom_mode, "");
+        assert_eq!(stored.align_mode, "");
+        assert_eq!(stored.vertical_gap_mode, "");
+        assert!(!stored.treat_first_page_as_cover);
+    }
+
+    #[test]
+    fn should_rescan_ignores_excluded_paths_and_non_pdf_files() {
+        let compiled =
+            compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak"])).expect("patterns should compile");
+
+        let temp_root = std::env::temp_dir().join(format!(
+            "riida-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("time should move forward")
+                .as_nanos()
+        ));
+        let backup_dir = temp_root.join("backup");
+        let regular_dir = temp_root.join("regular");
+        fs::create_dir_all(&backup_dir).expect("backup dir should be created");
+        fs::create_dir_all(&regular_dir).expect("regular dir should be created");
+
+        let excluded_dir_event = Event {
+            kind: EventKind::Create(CreateKind::Folder),
+            paths: vec![backup_dir.clone()],
+            attrs: Default::default(),
+        };
+        let pdf_event = Event {
+            kind: EventKind::Modify(ModifyKind::Data(DataChange::Content)),
+            paths: vec![regular_dir.join("book.pdf")],
+            attrs: Default::default(),
+        };
+        let txt_event = Event {
+            kind: EventKind::Modify(ModifyKind::Data(DataChange::Content)),
+            paths: vec![regular_dir.join("notes.txt")],
+            attrs: Default::default(),
+        };
+        let regular_dir_event = Event {
+            kind: EventKind::Remove(RemoveKind::Folder),
+            paths: vec![regular_dir.clone()],
+            attrs: Default::default(),
+        };
+
+        assert!(!should_rescan(&excluded_dir_event, &compiled));
+        assert!(should_rescan(&pdf_event, &compiled));
+        assert!(!should_rescan(&txt_event, &compiled));
+        assert!(should_rescan(&regular_dir_event, &compiled));
+
+        let _ = fs::remove_dir_all(&temp_root);
     }
 }

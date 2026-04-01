@@ -75,16 +75,14 @@ Example development config in [riida.toml](/Users/megurine/repo/rust/riida/riida
 
 ```toml
 library_roots = ["~/Documents/Ebooks/"]
-excluded_dir_names = ["backup"]
-excluded_file_suffixes = [".bak"]
+excluded_patterns = ["**/backup/**", "*.bak"]
 pdf_renderer = "pdfjs"
 ```
 
 Important fields:
 
 - `library_roots`: recursively scanned and watched
-- `excluded_dir_names`: exact directory names to ignore
-- `excluded_file_suffixes`: filename suffixes to ignore
+- `excluded_patterns`: glob patterns matched against file names and paths
 - `pdf_renderer`: `"pdfjs"` or `"native"`
 
 ## PDF Viewer Notes

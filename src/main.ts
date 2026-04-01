@@ -20,8 +20,7 @@ type LibrarySnapshot = {
   libraryRoots: string[];
   indexedCount: number;
   books: BookSummary[];
-  excludedDirNames: string[];
-  excludedFileSuffixes: string[];
+  excludedPatterns: string[];
   pdfRenderer: "native" | "pdfjs";
 };
 
@@ -53,8 +52,7 @@ type ViewerState = {
 type AppConfigPayload = {
   configPath: string;
   libraryRoots: string[];
-  excludedDirNames: string[];
-  excludedFileSuffixes: string[];
+  excludedPatterns: string[];
   pdfRenderer: "native" | "pdfjs";
 };
 
@@ -802,10 +800,7 @@ function setAppSettingsStatus(message: string, tone: "neutral" | "success" | "er
 
 function syncAppSettingsUi() {
   const modalEl = document.querySelector<HTMLElement>("#app-settings-modal");
-  const excludedDirNamesEl = document.querySelector<HTMLTextAreaElement>("#config-excluded-dir-names");
-  const excludedFileSuffixesEl = document.querySelector<HTMLTextAreaElement>(
-    "#config-excluded-file-suffixes",
-  );
+  const excludedPatternsEl = document.querySelector<HTMLTextAreaElement>("#config-excluded-patterns");
   const pdfRendererEl = document.querySelector<HTMLSelectElement>("#config-pdf-renderer");
   const configPathEl = document.querySelector<HTMLElement>("#app-settings-config-path");
 
@@ -814,11 +809,8 @@ function syncAppSettingsUi() {
   }
 
   if (lastAppConfig) {
-    if (excludedDirNamesEl) {
-      excludedDirNamesEl.value = lastAppConfig.excludedDirNames.join("\n");
-    }
-    if (excludedFileSuffixesEl) {
-      excludedFileSuffixesEl.value = lastAppConfig.excludedFileSuffixes.join("\n");
+    if (excludedPatternsEl) {
+      excludedPatternsEl.value = lastAppConfig.excludedPatterns.join("\n");
     }
     if (pdfRendererEl) {
       pdfRendererEl.value = lastAppConfig.pdfRenderer;
@@ -899,10 +891,7 @@ async function loadAppConfig() {
 }
 
 async function saveAppSettingsFromForm() {
-  const excludedDirNamesEl = document.querySelector<HTMLTextAreaElement>("#config-excluded-dir-names");
-  const excludedFileSuffixesEl = document.querySelector<HTMLTextAreaElement>(
-    "#config-excluded-file-suffixes",
-  );
+  const excludedPatternsEl = document.querySelector<HTMLTextAreaElement>("#config-excluded-patterns");
   const pdfRendererEl = document.querySelector<HTMLSelectElement>("#config-pdf-renderer");
 
   const libraryRoots = [...(lastAppConfig?.libraryRoots ?? [])];
@@ -916,11 +905,7 @@ async function saveAppSettingsFromForm() {
     const payload = await invoke<AppConfigPayload>("save_app_config", {
       input: {
         libraryRoots,
-        excludedDirNames: (excludedDirNamesEl?.value ?? "")
-          .split("\n")
-          .map((value) => value.trim())
-          .filter(Boolean),
-        excludedFileSuffixes: (excludedFileSuffixesEl?.value ?? "")
+        excludedPatterns: (excludedPatternsEl?.value ?? "")
           .split("\n")
           .map((value) => value.trim())
           .filter(Boolean),
@@ -2273,8 +2258,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       lastAppConfig = {
         configPath: lastAppConfig?.configPath ?? "",
         libraryRoots: [...currentRoots],
-        excludedDirNames: lastAppConfig?.excludedDirNames ?? [],
-        excludedFileSuffixes: lastAppConfig?.excludedFileSuffixes ?? [],
+        excludedPatterns: lastAppConfig?.excludedPatterns ?? [],
         pdfRenderer: lastAppConfig?.pdfRenderer ?? "native",
       };
       syncAppSettingsUi();

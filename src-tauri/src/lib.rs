@@ -1,3 +1,4 @@
+use globset::{Glob, GlobMatcher};
 use directories::ProjectDirs;
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::{params, Connection};
@@ -16,8 +17,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use walkdir::WalkDir;
 
 const CONFIG_FILE: &str = "riida.toml";
-const DEFAULT_EXCLUDED_DIR_NAMES: &[&str] = &["backup"];
-const DEFAULT_EXCLUDED_FILE_SUFFIXES: &[&str] = &[".bak"];
+const DEFAULT_EXCLUDED_PATTERNS: &[&str] = &["**/backup/**", "*.bak"];
 const DEFAULT_PDF_RENDERER: &str = "native";
 const VIEWER_DEFAULT_SCOPE_KEY: &str = "__default__";
 const DEFAULT_VIEWER_PAGE_MODE: &str = "spread";
@@ -43,23 +43,24 @@ struct LibrarySnapshot {
     library_roots: Vec<String>,
     indexed_count: usize,
     books: Vec<BookSummary>,
-    excluded_dir_names: Vec<String>,
-    excluded_file_suffixes: Vec<String>,
+    excluded_patterns: Vec<String>,
     pdf_renderer: String,
 }
 
 #[derive(Clone)]
 struct AppConfig {
     library_roots: Vec<String>,
-    excluded_dir_names: Vec<String>,
-    excluded_file_suffixes: Vec<String>,
+    excluded_patterns: Vec<String>,
     pdf_renderer: String,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
 struct AppConfigFile {
     library_roots: Option<Vec<String>>,
+    excluded_patterns: Option<Vec<String>>,
+    #[serde(default)]
     excluded_dir_names: Option<Vec<String>>,
+    #[serde(default)]
     excluded_file_suffixes: Option<Vec<String>>,
     pdf_renderer: Option<String>,
 }
@@ -68,8 +69,7 @@ struct AppConfigFile {
 #[serde(rename_all = "camelCase")]
 struct AppConfigInput {
     library_roots: Vec<String>,
-    excluded_dir_names: Vec<String>,
-    excluded_file_suffixes: Vec<String>,
+    excluded_patterns: Vec<String>,
     pdf_renderer: String,
 }
 
@@ -92,6 +92,10 @@ struct AppPaths {
     legacy_config_file: PathBuf,
     legacy_database_file: PathBuf,
     legacy_thumbnail_root: PathBuf,
+}
+
+struct CompiledExcludePatterns {
+    matchers: Vec<GlobMatcher>,
 }
 
 #[derive(Serialize)]
@@ -144,8 +148,7 @@ struct ThumbnailReadyEvent {
 struct AppConfigPayload {
     config_path: String,
     library_roots: Vec<String>,
-    excluded_dir_names: Vec<String>,
-    excluded_file_suffixes: Vec<String>,
+    excluded_patterns: Vec<String>,
     pdf_renderer: String,
 }
 
@@ -265,11 +268,7 @@ fn prepare_storage(paths: &AppPaths) -> Result<(), String> {
 fn default_config() -> AppConfig {
     AppConfig {
         library_roots: Vec::new(),
-        excluded_dir_names: DEFAULT_EXCLUDED_DIR_NAMES
-            .iter()
-            .map(|value| value.to_string())
-            .collect(),
-        excluded_file_suffixes: DEFAULT_EXCLUDED_FILE_SUFFIXES
+        excluded_patterns: DEFAULT_EXCLUDED_PATTERNS
             .iter()
             .map(|value| value.to_string())
             .collect(),
@@ -298,6 +297,76 @@ fn expand_home_path(path: &str) -> String {
     path.to_string()
 }
 
+fn legacy_dir_name_to_pattern(value: &str) -> Option<String> {
+    let trimmed = value.trim().to_lowercase();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    Some(format!("**/{trimmed}/**"))
+}
+
+fn legacy_file_suffix_to_pattern(value: &str) -> Option<String> {
+    let trimmed = value.trim().to_lowercase();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    Some(if trimmed.starts_with('*') {
+        trimmed
+    } else {
+        format!("*{trimmed}")
+    })
+}
+
+fn normalize_excluded_patterns(
+    patterns: Option<Vec<String>>,
+    legacy_dir_names: Option<Vec<String>>,
+    legacy_file_suffixes: Option<Vec<String>>,
+    defaults: &[String],
+) -> Vec<String> {
+    let mut normalized = patterns
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| value.trim().replace('\\', "/").to_lowercase())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+
+    normalized.extend(
+        legacy_dir_names
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|value| legacy_dir_name_to_pattern(&value)),
+    );
+    normalized.extend(
+        legacy_file_suffixes
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|value| legacy_file_suffix_to_pattern(&value)),
+    );
+
+    if normalized.is_empty() {
+        defaults.to_vec()
+    } else {
+        normalized.sort();
+        normalized.dedup();
+        normalized
+    }
+}
+
+fn compile_exclude_patterns(config: &AppConfig) -> Result<CompiledExcludePatterns, String> {
+    let mut matchers = Vec::new();
+
+    for pattern in &config.excluded_patterns {
+        let glob = Glob::new(pattern).map_err(|error| format!("invalid excluded pattern '{pattern}': {error}"))?;
+        matchers.push(glob.compile_matcher());
+    }
+
+    Ok(CompiledExcludePatterns {
+        matchers,
+    })
+}
+
 fn load_config() -> Result<AppConfig, String> {
     let config_path = config_file();
 
@@ -317,18 +386,12 @@ fn load_config() -> Result<AppConfig, String> {
             .into_iter()
             .map(|value| expand_home_path(&value))
             .collect(),
-        excluded_dir_names: file_config
-            .excluded_dir_names
-            .unwrap_or(defaults.excluded_dir_names)
-            .into_iter()
-            .map(|value| value.to_lowercase())
-            .collect(),
-        excluded_file_suffixes: file_config
-            .excluded_file_suffixes
-            .unwrap_or(defaults.excluded_file_suffixes)
-            .into_iter()
-            .map(|value| value.to_lowercase())
-            .collect(),
+        excluded_patterns: normalize_excluded_patterns(
+            file_config.excluded_patterns,
+            file_config.excluded_dir_names,
+            file_config.excluded_file_suffixes,
+            &defaults.excluded_patterns,
+        ),
         pdf_renderer: normalize_pdf_renderer(
             file_config.pdf_renderer.unwrap_or(defaults.pdf_renderer),
         ),
@@ -352,8 +415,7 @@ fn app_config_to_payload(config: &AppConfig) -> AppConfigPayload {
             .iter()
             .map(|value| collapse_home_path(value))
             .collect(),
-        excluded_dir_names: config.excluded_dir_names.clone(),
-        excluded_file_suffixes: config.excluded_file_suffixes.clone(),
+        excluded_patterns: config.excluded_patterns.clone(),
         pdf_renderer: config.pdf_renderer.clone(),
     }
 }
@@ -369,20 +431,12 @@ fn normalize_config_input(config: AppConfigFile) -> AppConfig {
             .map(|value| expand_home_path(value.trim()))
             .filter(|value| !value.trim().is_empty())
             .collect(),
-        excluded_dir_names: config
-            .excluded_dir_names
-            .unwrap_or(defaults.excluded_dir_names)
-            .into_iter()
-            .map(|value| value.trim().to_lowercase())
-            .filter(|value| !value.is_empty())
-            .collect(),
-        excluded_file_suffixes: config
-            .excluded_file_suffixes
-            .unwrap_or(defaults.excluded_file_suffixes)
-            .into_iter()
-            .map(|value| value.trim().to_lowercase())
-            .filter(|value| !value.is_empty())
-            .collect(),
+        excluded_patterns: normalize_excluded_patterns(
+            config.excluded_patterns,
+            config.excluded_dir_names,
+            config.excluded_file_suffixes,
+            &defaults.excluded_patterns,
+        ),
         pdf_renderer: normalize_pdf_renderer(config.pdf_renderer.unwrap_or(defaults.pdf_renderer)),
     }
 }
@@ -390,8 +444,9 @@ fn normalize_config_input(config: AppConfigFile) -> AppConfig {
 fn normalize_gui_config_input(config: AppConfigInput) -> AppConfig {
     normalize_config_input(AppConfigFile {
         library_roots: Some(config.library_roots),
-        excluded_dir_names: Some(config.excluded_dir_names),
-        excluded_file_suffixes: Some(config.excluded_file_suffixes),
+        excluded_patterns: Some(config.excluded_patterns),
+        excluded_dir_names: None,
+        excluded_file_suffixes: None,
         pdf_renderer: Some(config.pdf_renderer),
     })
 }
@@ -405,20 +460,15 @@ fn save_config_input_file(input: &AppConfigInput) -> Result<(), String> {
                 .filter(|value| !value.is_empty())
                 .collect(),
         ),
-        excluded_dir_names: Some(
-            input.excluded_dir_names
+        excluded_patterns: Some(
+            input.excluded_patterns
                 .iter()
-                .map(|value| value.trim().to_lowercase())
+                .map(|value| value.trim().replace('\\', "/").to_lowercase())
                 .filter(|value| !value.is_empty())
                 .collect(),
         ),
-        excluded_file_suffixes: Some(
-            input.excluded_file_suffixes
-                .iter()
-                .map(|value| value.trim().to_lowercase())
-                .filter(|value| !value.is_empty())
-                .collect(),
-        ),
+        excluded_dir_names: None,
+        excluded_file_suffixes: None,
         pdf_renderer: Some(normalize_pdf_renderer(input.pdf_renderer.clone())),
     };
     let serialized = toml::to_string_pretty(&payload).map_err(|error| error.to_string())?;
@@ -483,33 +533,35 @@ fn is_pdf_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn path_contains_excluded_directory(path: &Path, config: &AppConfig) -> bool {
-    path.components().any(|component| {
-        let name = component.as_os_str().to_string_lossy().to_lowercase();
-        config
-            .excluded_dir_names
-            .iter()
-            .any(|excluded| name == *excluded)
-    })
+fn normalized_path_for_glob(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/").to_lowercase()
 }
 
-fn is_excluded_file(path: &Path, config: &AppConfig) -> bool {
+fn matches_excluded_pattern(path: &Path, compiled: &CompiledExcludePatterns) -> bool {
+    let full_path = normalized_path_for_glob(path);
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
         .map(|name| name.to_lowercase())
         .unwrap_or_default();
+    let directory_probe = if path.is_dir() {
+        Some(format!("{full_path}/__riida__"))
+    } else {
+        None
+    };
 
-    config
-        .excluded_file_suffixes
-        .iter()
-        .any(|suffix| file_name.ends_with(suffix))
+    compiled.matchers.iter().any(|matcher| {
+        matcher.is_match(&full_path)
+            || (!file_name.is_empty() && matcher.is_match(&file_name))
+            || directory_probe
+                .as_ref()
+                .map(|probe| matcher.is_match(probe))
+                .unwrap_or(false)
+    })
 }
 
-fn should_include_pdf(path: &Path, config: &AppConfig) -> bool {
-    is_pdf_file(path)
-        && !path_contains_excluded_directory(path, config)
-        && !is_excluded_file(path, config)
+fn should_include_pdf(path: &Path, compiled: &CompiledExcludePatterns) -> bool {
+    is_pdf_file(path) && !matches_excluded_pattern(path, compiled)
 }
 
 fn modified_unix_seconds(metadata: &fs::Metadata) -> u64 {
@@ -733,7 +785,11 @@ fn load_viewer_preferences_payload(
     })
 }
 
-fn scan_and_index(connection: &Connection, config: &AppConfig) -> Result<(), String> {
+fn scan_and_index(
+    connection: &Connection,
+    config: &AppConfig,
+    excluded_patterns: &CompiledExcludePatterns,
+) -> Result<(), String> {
     let now = std::time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| error.to_string())?
@@ -743,7 +799,7 @@ fn scan_and_index(connection: &Connection, config: &AppConfig) -> Result<(), Str
         for entry in WalkDir::new(root)
             .into_iter()
             .filter_map(Result::ok)
-            .filter(|entry| entry.file_type().is_file() && should_include_pdf(entry.path(), config))
+            .filter(|entry| entry.file_type().is_file() && should_include_pdf(entry.path(), excluded_patterns))
         {
             let path = entry.path();
             let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
@@ -819,8 +875,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
         library_roots: config.library_roots.clone(),
         indexed_count,
         books,
-        excluded_dir_names: config.excluded_dir_names.clone(),
-        excluded_file_suffixes: config.excluded_file_suffixes.clone(),
+        excluded_patterns: config.excluded_patterns.clone(),
         pdf_renderer: config.pdf_renderer.clone(),
     })
 }
@@ -835,7 +890,8 @@ fn refresh_library_snapshot(config: &AppConfig) -> Result<LibrarySnapshot, Strin
     }
 
     let connection = open_database()?;
-    scan_and_index(&connection, config)?;
+    let excluded_patterns = compile_exclude_patterns(config)?;
+    scan_and_index(&connection, config, &excluded_patterns)?;
     load_snapshot(&connection, config)
 }
 
@@ -934,10 +990,10 @@ fn start_thumbnail_worker(app: AppHandle) -> ThumbnailQueue {
     }
 }
 
-fn should_rescan(event: &Event, config: &AppConfig) -> bool {
+fn should_rescan(event: &Event, excluded_patterns: &CompiledExcludePatterns) -> bool {
     event.paths.iter().any(|path| {
-        (path.is_dir() && !path_contains_excluded_directory(path, config))
-            || should_include_pdf(path, config)
+        (path.is_dir() && !matches_excluded_pattern(path, excluded_patterns))
+            || should_include_pdf(path, excluded_patterns)
     })
 }
 
@@ -960,6 +1016,13 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
     let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
 
     thread::spawn(move || {
+        let excluded_patterns = match compile_exclude_patterns(&config) {
+            Ok(patterns) => patterns,
+            Err(error) => {
+                let _ = app.emit("library-watch-error", error);
+                return;
+            }
+        };
         let mut watcher = match RecommendedWatcher::new(
             move |result| {
                 let _ = tx.send(result);
@@ -986,7 +1049,7 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
 
         while let Ok(result) = rx.recv() {
             match result {
-                Ok(event) if should_rescan(&event, &config) => {
+                Ok(event) if should_rescan(&event, &excluded_patterns) => {
                     thread::sleep(Duration::from_millis(250));
 
                     while rx.try_recv().is_ok() {}
@@ -1020,8 +1083,9 @@ fn book_thumbnail(
 ) -> Result<Option<String>, String> {
     let pdf_path = PathBuf::from(&file_path);
     let config = lock_config(&config_state)?.clone();
+    let excluded_patterns = compile_exclude_patterns(&config)?;
 
-    if !pdf_path.exists() || !should_include_pdf(&pdf_path, &config) {
+    if !pdf_path.exists() || !should_include_pdf(&pdf_path, &excluded_patterns) {
         return Ok(None);
     }
 
@@ -1070,8 +1134,7 @@ fn save_app_config(
             .iter()
             .map(|value| collapse_home_path(value))
             .collect(),
-        excluded_dir_names: next_config.excluded_dir_names.clone(),
-        excluded_file_suffixes: next_config.excluded_file_suffixes.clone(),
+        excluded_patterns: next_config.excluded_patterns.clone(),
         pdf_renderer: next_config.pdf_renderer.clone(),
     })?;
 
@@ -1322,4 +1385,102 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_config(patterns: &[&str]) -> AppConfig {
+        AppConfig {
+            library_roots: Vec::new(),
+            excluded_patterns: patterns.iter().map(|value| value.to_string()).collect(),
+            pdf_renderer: DEFAULT_PDF_RENDERER.to_string(),
+        }
+    }
+
+    #[test]
+    fn normalize_excluded_patterns_merges_legacy_entries() {
+        let defaults = vec!["**/backup/**".to_string(), "*.bak".to_string()];
+
+        let normalized = normalize_excluded_patterns(
+            Some(vec!["prefix_*".to_string()]),
+            Some(vec!["backup".to_string()]),
+            Some(vec![".bak".to_string()]),
+            &defaults,
+        );
+
+        assert_eq!(
+            normalized,
+            vec![
+                "**/backup/**".to_string(),
+                "*.bak".to_string(),
+                "prefix_*".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn normalize_excluded_patterns_falls_back_to_defaults() {
+        let defaults = vec!["**/backup/**".to_string(), "*.bak".to_string()];
+
+        let normalized = normalize_excluded_patterns(None, None, None, &defaults);
+
+        assert_eq!(normalized, defaults);
+    }
+
+    #[test]
+    fn excluded_patterns_match_paths_and_file_names() {
+        let compiled = compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak", "prefix_*"]))
+            .expect("patterns should compile");
+
+        assert!(matches_excluded_pattern(
+            Path::new("/tmp/library/backup/book.pdf"),
+            &compiled
+        ));
+        assert!(matches_excluded_pattern(
+            Path::new("/tmp/library/prefix_manual.pdf"),
+            &compiled
+        ));
+        assert!(matches_excluded_pattern(
+            Path::new("/tmp/library/archive/document.bak"),
+            &compiled
+        ));
+        assert!(!matches_excluded_pattern(
+            Path::new("/tmp/library/regular/document.pdf"),
+            &compiled
+        ));
+    }
+
+    #[test]
+    fn should_include_pdf_only_accepts_non_excluded_pdfs() {
+        let compiled =
+            compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak"])).expect("patterns should compile");
+
+        assert!(should_include_pdf(
+            Path::new("/tmp/library/regular/document.pdf"),
+            &compiled
+        ));
+        assert!(!should_include_pdf(
+            Path::new("/tmp/library/backup/document.pdf"),
+            &compiled
+        ));
+        assert!(!should_include_pdf(
+            Path::new("/tmp/library/regular/document.bak"),
+            &compiled
+        ));
+        assert!(!should_include_pdf(
+            Path::new("/tmp/library/regular/document.epub"),
+            &compiled
+        ));
+    }
+
+    #[test]
+    fn invalid_excluded_pattern_is_rejected() {
+        let error = compile_exclude_patterns(&test_config(&["["]))
+            .err()
+            .expect("invalid glob should fail to compile");
+
+        assert!(error.contains("invalid excluded pattern"));
+    }
 }

@@ -6,6 +6,12 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { GlobalWorkerOptions, TextLayer, getDocument } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { mountNoteEditor, type NoteEditorHandle } from "./note-editor";
+import {
+  deriveDirectories,
+  filterVisibleBooks,
+  formatFileSize,
+  type DirectoryNode,
+} from "./library-utils";
 import licenseText from "../LICENSE?raw";
 import thirdPartyRustLicenseUrl from "../THIRD-PARTY-LICENSES-rust.md?url";
 import thirdPartyJsLicenseUrl from "../THIRD-PARTY-LICENSES-js.md?url";
@@ -112,16 +118,6 @@ type NoteInteractionState = {
   startTop: number;
   startWidth: number;
   startHeight: number;
-};
-
-type DirectoryNode = {
-  id: string;
-  label: string;
-  path: string;
-  depth: number;
-  count: number;
-  parentPath: string | null;
-  hasChildren: boolean;
 };
 
 type PdfRenderPlan = {
@@ -275,19 +271,6 @@ function applyThumbnail(filePath: string, thumbnailPath: string) {
   }
 }
 
-function formatFileSize(fileSize: number) {
-  const units = ["B", "KB", "MB", "GB"];
-  let size = fileSize;
-  let unitIndex = 0;
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-
-  return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-}
-
 async function loadThumbnail(book: BookSummary, imageEl: HTMLImageElement) {
   if (thumbnailUrls.has(book.filePath)) {
     imageEl.src = thumbnailUrls.get(book.filePath) ?? "";
@@ -335,58 +318,6 @@ function ensureThumbnailObserver() {
   );
 
   return thumbnailObserver;
-}
-
-function deriveDirectories(snapshot: LibrarySnapshot): DirectoryNode[] {
-  const counts = new Map<string, number>();
-  const normalizedRoots = snapshot.libraryRoots
-    .map((root) => root.replace(/\/+$/, ""))
-    .sort((a, b) => b.length - a.length);
-  const findRootForPath = (filePath: string) =>
-    normalizedRoots.find(
-      (candidate) => filePath === candidate || filePath.startsWith(`${candidate}/`),
-    );
-
-  for (const book of snapshot.books) {
-    const root = findRootForPath(book.filePath);
-
-    if (!root) {
-      continue;
-    }
-
-    counts.set(root, (counts.get(root) ?? 0) + 1);
-    const relative = book.filePath.startsWith(`${root}/`)
-      ? book.filePath.slice(root.length + 1)
-      : "";
-    const parts = relative.split("/").slice(0, -1);
-    let current = root;
-
-    for (const part of parts) {
-      current = current ? `${current}/${part}` : part;
-      counts.set(current, (counts.get(current) ?? 0) + 1);
-    }
-  }
-
-  const paths = [...counts.keys()];
-
-  return [...counts.entries()]
-    .sort(([a], [b]) => a.localeCompare(b, "ja"))
-    .map(([path, count]) => {
-      const root = findRootForPath(path);
-      const isRoot = normalizedRoots.includes(path);
-      const relativePath =
-        root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : "";
-
-      return {
-        id: path,
-        label: path.split("/").filter(Boolean).pop() ?? path,
-        path,
-        depth: isRoot ? 0 : relativePath.split("/").length - 1,
-        count,
-        parentPath: isRoot ? null : path.slice(0, path.lastIndexOf("/")),
-        hasChildren: paths.some((candidate) => candidate.startsWith(`${path}/`)),
-      };
-    });
 }
 
 function ensureExpandedPath(path: string | null) {
@@ -676,13 +607,6 @@ function schedulePdfRenderWindowUpdate(session: PdfRenderSession, focusGroupInde
     session.updateScheduled = false;
     void updatePdfRenderWindow(session, focusGroupIndex);
   });
-}
-
-function normalizeSearchText(value: string) {
-  return value
-    .normalize("NFKC")
-    .toLocaleLowerCase("ja")
-    .replace(/[\s\-_.\/]+/g, "");
 }
 
 function clampNoteWindow() {
@@ -1277,29 +1201,7 @@ function endNoteInteraction() {
 }
 
 function visibleBooks(snapshot: LibrarySnapshot) {
-  return snapshot.books.filter((book) => {
-    if (viewerState.activeDirectory) {
-      const directory = viewerState.activeDirectory.replace(/\/+$/, "");
-      const prefix = `${directory}/`;
-
-      if (!book.filePath.startsWith(prefix)) {
-        return false;
-      }
-    }
-
-    if (!viewerState.searchQuery) {
-      return true;
-    }
-
-    const query = normalizeSearchText(viewerState.searchQuery);
-    const normalizedName = normalizeSearchText(book.fileName);
-    const normalizedPath = normalizeSearchText(book.filePath);
-
-    return (
-      normalizedName.includes(query) ||
-      normalizedPath.includes(query)
-    );
-  });
+  return filterVisibleBooks(snapshot.books, viewerState.activeDirectory, viewerState.searchQuery);
 }
 
 function currentNavigationState(): NavigationState {

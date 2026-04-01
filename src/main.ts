@@ -33,6 +33,7 @@ import {
   buildPageGroups,
   getVisualPageOrder,
 } from "./viewer-layout-utils";
+import { buildPdfRenderWindowPlan } from "./pdf-render-window-utils";
 import {
   applyViewerSettingsPayloadToState,
   switchViewerSettingsScopeInState,
@@ -525,32 +526,20 @@ async function updatePdfRenderWindow(session: PdfRenderSession, focusGroupIndex?
 
   try {
     const activeGroupIndex = focusGroupIndex ?? currentVisiblePdfGroupIndex(session);
-    const renderMin = Math.max(0, activeGroupIndex - PDF_RENDER_RADIUS);
-    const renderMax = Math.min(session.plans.length - 1, activeGroupIndex + PDF_RENDER_RADIUS);
-    const keepMin = Math.max(0, activeGroupIndex - PDF_KEEP_RADIUS);
-    const keepMax = Math.min(session.plans.length - 1, activeGroupIndex + PDF_KEEP_RADIUS);
+    const planWindow = buildPdfRenderWindowPlan(
+      session.plans.length,
+      activeGroupIndex,
+      PDF_RENDER_RADIUS,
+      PDF_KEEP_RADIUS,
+    );
 
     for (const plan of session.plans) {
-      if (plan.groupIndex < keepMin || plan.groupIndex > keepMax) {
+      if (plan.groupIndex < planWindow.keepMin || plan.groupIndex > planWindow.keepMax) {
         releasePdfRenderPlan(plan);
       }
     }
 
-    const renderOrder: number[] = [];
-    for (let distance = 0; distance <= PDF_RENDER_RADIUS; distance += 1) {
-      const beforeIndex = activeGroupIndex - distance;
-      const afterIndex = activeGroupIndex + distance;
-
-      if (beforeIndex >= renderMin) {
-        renderOrder.push(beforeIndex);
-      }
-
-      if (distance > 0 && afterIndex <= renderMax) {
-        renderOrder.push(afterIndex);
-      }
-    }
-
-    for (const index of renderOrder) {
+    for (const index of planWindow.renderOrder) {
       const plan = session.plans[index];
       if (!plan) {
         continue;

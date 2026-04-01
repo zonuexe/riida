@@ -254,8 +254,8 @@ async function collapseHomePath(path: string) {
 
 async function loadPdfJsRuntime() {
   pdfJsRuntimePromise ??= Promise.all([
-    import("pdfjs-dist"),
-    import("pdfjs-dist/build/pdf.worker.mjs?url"),
+    import("pdfjs-dist/build/pdf.min.mjs"),
+    import("pdfjs-dist/build/pdf.worker.min.mjs?url"),
   ]).then(([runtime, workerModule]) => {
     runtime.GlobalWorkerOptions.workerSrc = workerModule.default;
 

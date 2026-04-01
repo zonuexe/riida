@@ -9,6 +9,10 @@ async function main() {
     (entry) =>
       entry.startsWith("index-") ||
       entry.startsWith("pdf.worker-") ||
+      entry.startsWith("pdf.worker.min-") ||
+      entry.startsWith("pdf-") ||
+      entry.startsWith("pdf.min-") ||
+      entry.startsWith("note-editor-") ||
       entry.startsWith("THIRD-PARTY-LICENSES-"),
   );
 

@@ -190,7 +190,7 @@ fn thumbnail_root() -> PathBuf {
 }
 
 fn resolve_app_paths() -> Result<AppPaths, String> {
-    let project_dirs = ProjectDirs::from("com", "megurine", "riida")
+    let project_dirs = ProjectDirs::from("com", "zonuexe", "riida")
         .ok_or_else(|| "failed to resolve app directories".to_string())?;
     let project_root = project_root();
     let data_dir = project_dirs.data_dir().to_path_buf();

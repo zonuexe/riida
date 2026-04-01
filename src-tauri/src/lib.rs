@@ -1,5 +1,5 @@
-use globset::{Glob, GlobMatcher};
 use directories::ProjectDirs;
+use globset::{Glob, GlobMatcher};
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -190,8 +190,8 @@ fn thumbnail_root() -> PathBuf {
 }
 
 fn resolve_app_paths() -> Result<AppPaths, String> {
-    let project_dirs =
-        ProjectDirs::from("com", "megurine", "riida").ok_or_else(|| "failed to resolve app directories".to_string())?;
+    let project_dirs = ProjectDirs::from("com", "megurine", "riida")
+        .ok_or_else(|| "failed to resolve app directories".to_string())?;
     let project_root = project_root();
     let data_dir = project_dirs.data_dir().to_path_buf();
     let cache_dir = project_dirs.cache_dir().to_path_buf();
@@ -253,11 +253,13 @@ fn prepare_storage(paths: &AppPaths) -> Result<(), String> {
     fs::create_dir_all(&paths.cache_dir).map_err(|error| error.to_string())?;
 
     if !paths.config_file.exists() && paths.legacy_config_file.exists() {
-        fs::copy(&paths.legacy_config_file, &paths.config_file).map_err(|error| error.to_string())?;
+        fs::copy(&paths.legacy_config_file, &paths.config_file)
+            .map_err(|error| error.to_string())?;
     }
 
     if !paths.database_file.exists() && paths.legacy_database_file.exists() {
-        fs::copy(&paths.legacy_database_file, &paths.database_file).map_err(|error| error.to_string())?;
+        fs::copy(&paths.legacy_database_file, &paths.database_file)
+            .map_err(|error| error.to_string())?;
     }
 
     migrate_directory_contents(&paths.legacy_thumbnail_root, &paths.thumbnail_root)?;
@@ -290,7 +292,10 @@ fn expand_home_path(path: &str) -> String {
 
     if let Some(rest) = path.strip_prefix("~/") {
         if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home).join(rest).to_string_lossy().into_owned();
+            return PathBuf::from(home)
+                .join(rest)
+                .to_string_lossy()
+                .into_owned();
         }
     }
 
@@ -358,13 +363,12 @@ fn compile_exclude_patterns(config: &AppConfig) -> Result<CompiledExcludePattern
     let mut matchers = Vec::new();
 
     for pattern in &config.excluded_patterns {
-        let glob = Glob::new(pattern).map_err(|error| format!("invalid excluded pattern '{pattern}': {error}"))?;
+        let glob = Glob::new(pattern)
+            .map_err(|error| format!("invalid excluded pattern '{pattern}': {error}"))?;
         matchers.push(glob.compile_matcher());
     }
 
-    Ok(CompiledExcludePatterns {
-        matchers,
-    })
+    Ok(CompiledExcludePatterns { matchers })
 }
 
 fn load_config() -> Result<AppConfig, String> {
@@ -454,14 +458,16 @@ fn normalize_gui_config_input(config: AppConfigInput) -> AppConfig {
 fn save_config_input_file(input: &AppConfigInput) -> Result<(), String> {
     let payload = AppConfigFile {
         library_roots: Some(
-            input.library_roots
+            input
+                .library_roots
                 .iter()
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty())
                 .collect(),
         ),
         excluded_patterns: Some(
-            input.excluded_patterns
+            input
+                .excluded_patterns
                 .iter()
                 .map(|value| value.trim().replace('\\', "/").to_lowercase())
                 .filter(|value| !value.is_empty())
@@ -829,7 +835,9 @@ fn scan_and_index(
         for entry in WalkDir::new(root)
             .into_iter()
             .filter_map(Result::ok)
-            .filter(|entry| entry.file_type().is_file() && should_include_pdf(entry.path(), excluded_patterns))
+            .filter(|entry| {
+                entry.file_type().is_file() && should_include_pdf(entry.path(), excluded_patterns)
+            })
         {
             let path = entry.path();
             let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
@@ -865,7 +873,7 @@ fn scan_and_index(
     }
 
     connection
-        .execute("DELETE FROM books WHERE indexed_at < ?1", params![now],)
+        .execute("DELETE FROM books WHERE indexed_at < ?1", params![now])
         .map_err(|error| error.to_string())?;
 
     Ok(())
@@ -1327,12 +1335,7 @@ fn save_default_viewer_preferences(
     preferences: ViewerPreferences,
 ) -> Result<ViewerPreferencesPayload, String> {
     let connection = open_database()?;
-    save_viewer_preferences_record(
-        &connection,
-        VIEWER_DEFAULT_SCOPE_KEY,
-        None,
-        preferences,
-    )?;
+    save_viewer_preferences_record(&connection, VIEWER_DEFAULT_SCOPE_KEY, None, preferences)?;
     load_viewer_preferences_payload(&connection, current_file_path.as_deref())
 }
 
@@ -1347,7 +1350,12 @@ fn save_file_viewer_preferences(
         .unwrap_or_else(default_viewer_preferences);
     let normalized = normalize_viewer_preferences(preferences);
     let stored_preferences = build_file_viewer_preferences_for_storage(&global, normalized);
-    save_viewer_preferences_record(&connection, &file_path, Some(&file_path), stored_preferences)?;
+    save_viewer_preferences_record(
+        &connection,
+        &file_path,
+        Some(&file_path),
+        stored_preferences,
+    )?;
     load_viewer_preferences_payload(&connection, Some(&file_path))
 }
 
@@ -1402,7 +1410,7 @@ pub fn run() {
 mod tests {
     use super::*;
     use notify::event::{CreateKind, ModifyKind, RemoveKind};
-    use notify::{EventKind, event::DataChange};
+    use notify::{event::DataChange, EventKind};
     use proptest::prelude::*;
     use rusqlite::Connection;
     use std::fs;
@@ -1487,8 +1495,9 @@ mod tests {
 
     #[test]
     fn excluded_patterns_match_paths_and_file_names() {
-        let compiled = compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak", "prefix_*"]))
-            .expect("patterns should compile");
+        let compiled =
+            compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak", "prefix_*"]))
+                .expect("patterns should compile");
 
         assert!(matches_excluded_pattern(
             Path::new("/tmp/library/backup/book.pdf"),
@@ -1510,8 +1519,8 @@ mod tests {
 
     #[test]
     fn should_include_pdf_only_accepts_non_excluded_pdfs() {
-        let compiled =
-            compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak"])).expect("patterns should compile");
+        let compiled = compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak"]))
+            .expect("patterns should compile");
 
         assert!(should_include_pdf(
             Path::new("/tmp/library/regular/document.pdf"),
@@ -1567,7 +1576,10 @@ mod tests {
             pdf_renderer: "native".to_string(),
         });
 
-        assert_eq!(config.excluded_patterns, vec!["*.bak".to_string(), "prefix_*".to_string()]);
+        assert_eq!(
+            config.excluded_patterns,
+            vec!["*.bak".to_string(), "prefix_*".to_string()]
+        );
         assert_eq!(config.pdf_renderer, "native");
     }
 
@@ -1575,7 +1587,10 @@ mod tests {
     fn app_config_to_payload_collapses_home_paths() {
         let home = std::env::var("HOME").expect("HOME should exist for tests");
         let payload = app_config_to_payload(&AppConfig {
-            library_roots: vec![format!("{home}/Documents/Ebooks"), "/tmp/library".to_string()],
+            library_roots: vec![
+                format!("{home}/Documents/Ebooks"),
+                "/tmp/library".to_string(),
+            ],
             excluded_patterns: vec!["**/backup/**".to_string()],
             pdf_renderer: "pdfjs".to_string(),
         });
@@ -1600,10 +1615,16 @@ mod tests {
         ));
 
         assert_eq!(normalized.page_mode, DEFAULT_VIEWER_PAGE_MODE);
-        assert_eq!(normalized.binding_direction, DEFAULT_VIEWER_BINDING_DIRECTION);
+        assert_eq!(
+            normalized.binding_direction,
+            DEFAULT_VIEWER_BINDING_DIRECTION
+        );
         assert_eq!(normalized.zoom_mode, DEFAULT_VIEWER_ZOOM_MODE);
         assert_eq!(normalized.align_mode, DEFAULT_VIEWER_ALIGN_MODE);
-        assert_eq!(normalized.vertical_gap_mode, DEFAULT_VIEWER_VERTICAL_GAP_MODE);
+        assert_eq!(
+            normalized.vertical_gap_mode,
+            DEFAULT_VIEWER_VERTICAL_GAP_MODE
+        );
         assert!(!normalized.treat_first_page_as_cover);
     }
 
@@ -1641,8 +1662,8 @@ mod tests {
         )
         .expect("file preferences should save");
 
-        let payload =
-            load_viewer_preferences_payload(&connection, Some("/tmp/book.pdf")).expect("payload should load");
+        let payload = load_viewer_preferences_payload(&connection, Some("/tmp/book.pdf"))
+            .expect("payload should load");
 
         assert_eq!(payload.global.binding_direction, "left");
         assert!(payload.uses_file_override);
@@ -1663,12 +1684,12 @@ mod tests {
         let stored = build_file_viewer_preferences_for_storage(
             &global,
             normalize_viewer_preferences(viewer_preferences(
-            "spread",
-            "right",
-            "fit-height",
-            "center",
-            "compact",
-            false,
+                "spread",
+                "right",
+                "fit-height",
+                "center",
+                "compact",
+                false,
             )),
         );
 
@@ -1682,8 +1703,8 @@ mod tests {
 
     #[test]
     fn should_rescan_ignores_excluded_paths_and_non_pdf_files() {
-        let compiled =
-            compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak"])).expect("patterns should compile");
+        let compiled = compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak"]))
+            .expect("patterns should compile");
 
         let temp_root = std::env::temp_dir().join(format!(
             "riida-test-{}",

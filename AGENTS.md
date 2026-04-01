@@ -153,6 +153,8 @@ If schema semantics change, consider migration behavior early.
 Common local checks:
 
 ```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run rust:fmt:check
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run rust:lint
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run lint
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run fmt:check
 nix --extra-experimental-features 'nix-command flakes' develop --command cargo test --manifest-path src-tauri/Cargo.toml
@@ -186,6 +188,15 @@ nix --extra-experimental-features 'nix-command flakes' develop --command npm run
 ```
 
 Use mutation testing selectively on logic-heavy Rust code because it is much slower than the normal test suite.
+
+Standard Rust static checks:
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run rust:fmt:check
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run rust:lint
+```
+
+`rust:lint` currently runs `cargo clippy --all-targets -- -D warnings`.
 
 Project defaults live in [.cargo/mutants.toml](/Users/megurine/repo/rust/riida/.cargo/mutants.toml), and currently focus on [src-tauri/src/lib.rs](/Users/megurine/repo/rust/riida/src-tauri/src/lib.rs).
 

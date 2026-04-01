@@ -23,6 +23,12 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Run Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 

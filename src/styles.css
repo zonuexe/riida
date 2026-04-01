@@ -24,6 +24,10 @@ body {
   min-height: 100vh;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .app-shell {
   height: 100vh;
 }

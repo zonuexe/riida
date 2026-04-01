@@ -217,15 +217,15 @@
             <span>Excluded patterns</span>
             <textarea id="config-excluded-patterns" rows="5" spellcheck="false"></textarea>
             <small
-              >One glob pattern per line, for example <code>*.bak</code>, <code>prefix_*</code>, or
+              >One glob pattern per line, for example <code>*.bak.pdf</code>, <code>prefix_*</code>, or
               <code>**/backup/**</code>.</small
             >
           </label>
           <label class="app-settings-field">
             <span>PDF renderer</span>
             <select id="config-pdf-renderer">
-              <option value="native">Native</option>
-              <option value="pdfjs">PDF.js</option>
+              <option value="native">Native - browser-provided layout</option>
+              <option value="pdfjs">PDF.js - customizable layout</option>
             </select>
           </label>
           <p id="app-settings-config-path" class="app-settings-path"></p>

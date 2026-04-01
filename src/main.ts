@@ -41,6 +41,8 @@ type BookSummary = {
 
 type LibrarySnapshot = {
   libraryRoots: string[];
+  existingLibraryRoots: string[];
+  missingLibraryRoots: string[];
   indexedCount: number;
   books: BookSummary[];
   excludedPatterns: string[];
@@ -70,6 +72,7 @@ type ViewerState = {
   sidebarCollapsed: boolean;
   isAppSettingsOpen: boolean;
   isAboutOpen: boolean;
+  libraryErrorMessage: string | null;
 };
 
 type AppConfigPayload = {
@@ -174,6 +177,7 @@ const viewerState: ViewerState = {
   sidebarCollapsed: false,
   isAppSettingsOpen: false,
   isAboutOpen: false,
+  libraryErrorMessage: null,
 };
 
 const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
@@ -1219,6 +1223,53 @@ function visibleBooks(snapshot: LibrarySnapshot) {
   return filterVisibleBooks(snapshot.books, viewerState.activeDirectory, viewerState.searchQuery);
 }
 
+function describeEmptyLibraryState(snapshot: LibrarySnapshot, books: BookSummary[]) {
+  if (viewerState.searchQuery || viewerState.activeDirectory) {
+    return {
+      message: "No matching PDFs.",
+      detail: null as string | null,
+    };
+  }
+
+  if (viewerState.libraryErrorMessage) {
+    return {
+      message: viewerState.libraryErrorMessage,
+      detail: null as string | null,
+    };
+  }
+
+  if (snapshot.libraryRoots.length === 0) {
+    return {
+      message: "No library folders selected yet.",
+      detail: "Open Settings and add at least one library folder.",
+    };
+  }
+
+  if (snapshot.existingLibraryRoots.length === 0) {
+    return {
+      message: "The configured library folders do not exist.",
+      detail: "Update Library roots in Settings and choose folders that are available on this machine.",
+    };
+  }
+
+  if (books.length === 0) {
+    const detail =
+      snapshot.missingLibraryRoots.length > 0
+        ? "Some configured folders are missing, and no PDFs were found in the folders that still exist."
+        : "No PDFs were found in the configured library folders.";
+
+    return {
+      message: "Your library is empty.",
+      detail,
+    };
+  }
+
+  return {
+    message: "No PDFs yet.",
+    detail: null as string | null,
+  };
+}
+
 function currentNavigationState(): NavigationState {
   return {
     historyIndex: navigationHistoryIndex,
@@ -1868,10 +1919,23 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
   container.innerHTML = "";
 
   if (books.length === 0) {
+    const snapshot = lastSnapshot;
     const emptyEl = document.createElement("div");
     emptyEl.className = "empty-state";
-    emptyEl.textContent =
-      viewerState.searchQuery || viewerState.activeDirectory ? "No matching PDFs." : "No PDFs yet.";
+    const state = snapshot
+      ? describeEmptyLibraryState(snapshot, books)
+      : { message: "Loading library...", detail: null as string | null };
+    const messageEl = document.createElement("p");
+    messageEl.textContent = state.message;
+    emptyEl.appendChild(messageEl);
+
+    if (state.detail) {
+      const detailEl = document.createElement("p");
+      detailEl.className = "empty-state-detail";
+      detailEl.textContent = state.detail;
+      emptyEl.appendChild(detailEl);
+    }
+
     container.appendChild(emptyEl);
     return;
   }
@@ -2408,6 +2472,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   await listen<LibrarySnapshot>("library-updated", (event) => {
     lastSnapshot = event.payload;
+    viewerState.libraryErrorMessage = null;
     viewerState.books = event.payload.books;
     if (
       viewerState.currentBook &&
@@ -2458,6 +2523,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   invoke<LibrarySnapshot>("library_snapshot")
     .then((snapshot) => {
       lastSnapshot = snapshot;
+      viewerState.libraryErrorMessage = null;
       viewerState.books = snapshot.books;
       const params = new URLSearchParams(window.location.search);
       const initialState: NavigationState = {
@@ -2478,6 +2544,8 @@ window.addEventListener("DOMContentLoaded", async () => {
       });
     })
     .catch((error) => {
+      viewerState.libraryErrorMessage = "Failed to load the library.";
+      renderApp();
       console.error("failed to load library snapshot", error);
     });
 

@@ -1051,6 +1051,17 @@ h1 {
 .empty-state {
   padding: 24px 0;
   color: rgba(31, 27, 22, 0.58);
+  display: grid;
+  gap: 8px;
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+.empty-state-detail {
+  color: rgba(31, 27, 22, 0.48);
+  line-height: 1.5;
 }
 
 .stat {

@@ -41,6 +41,8 @@ struct BookSummary {
 #[serde(rename_all = "camelCase")]
 struct LibrarySnapshot {
     library_roots: Vec<String>,
+    existing_library_roots: Vec<String>,
+    missing_library_roots: Vec<String>,
     indexed_count: usize,
     books: Vec<BookSummary>,
     excluded_patterns: Vec<String>,
@@ -943,6 +945,12 @@ fn scan_and_index(
 }
 
 fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibrarySnapshot, String> {
+    let (existing_library_roots, missing_library_roots): (Vec<_>, Vec<_>) = config
+        .library_roots
+        .iter()
+        .cloned()
+        .partition(|root| Path::new(root).exists());
+
     let indexed_count: usize = connection
         .query_row("SELECT COUNT(*) FROM books", [], |row| row.get(0))
         .map_err(|error| error.to_string())?;
@@ -974,6 +982,8 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
 
     Ok(LibrarySnapshot {
         library_roots: config.library_roots.clone(),
+        existing_library_roots,
+        missing_library_roots,
         indexed_count,
         books,
         excluded_patterns: config.excluded_patterns.clone(),
@@ -982,14 +992,6 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
 }
 
 fn refresh_library_snapshot(config: &AppConfig) -> Result<LibrarySnapshot, String> {
-    if let Some(missing_root) = config
-        .library_roots
-        .iter()
-        .find(|root| !Path::new(root).exists())
-    {
-        return Err(format!("library root does not exist: {missing_root}"));
-    }
-
     let connection = open_database()?;
     let excluded_patterns = compile_exclude_patterns(config)?;
     scan_and_index(&connection, config, &excluded_patterns)?;

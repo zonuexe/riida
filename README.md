@@ -107,5 +107,5 @@ cargo check --manifest-path src-tauri/Cargo.toml
 
 ## Contributing
 
-- Minimum contributor workflow: [CONTRIBUTING.md](/Users/megurine/repo/rust/riida/CONTRIBUTING.md)
-- Development details and implementation notes: [AGENTS.md](/Users/megurine/repo/rust/riida/AGENTS.md)
+- Minimum contributor workflow: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Development details and implementation notes: [AGENTS.md](AGENTS.md)

@@ -24,8 +24,7 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$HOME/**",
-          "/Users/megurine/repo/rust/riida/data/thumbnails/**"
+          "$HOME/**"
         ]
       },
       "csp": {

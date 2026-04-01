@@ -29,15 +29,15 @@ nix --extra-experimental-features 'nix-command flakes' develop --command npm run
 
 CI also checks the release gate:
 
-- Rust dependency licenses via `cargo-deny` using [deny.toml](/Users/megurine/repo/rust/riida/deny.toml)
+- Rust dependency licenses via `cargo-deny` using [deny.toml](deny.toml)
 - npm production dependency licenses via `license-checker`
-- PR dependency review via [.github/dependency-review-config.yml](/Users/megurine/repo/rust/riida/.github/dependency-review-config.yml)
-- notice regeneration via [.github/workflows/license-check.yml](/Users/megurine/repo/rust/riida/.github/workflows/license-check.yml)
+- PR dependency review via [.github/dependency-review-config.yml](.github/dependency-review-config.yml)
+- notice regeneration via [.github/workflows/license-check.yml](.github/workflows/license-check.yml)
 
 If a dependency is added or updated, assume `THIRD-PARTY-LICENSES-rust.md` and `THIRD-PARTY-LICENSES-js.md` may need regeneration.
 
 For macOS builds, the current default is ad-hoc signing via
-[src-tauri/tauri.conf.json](/Users/megurine/repo/rust/riida/src-tauri/tauri.conf.json).
+[src-tauri/tauri.conf.json](src-tauri/tauri.conf.json).
 This is intended for local verification and CI smoke testing only.
 Public distribution still requires proper Apple signing and notarization.
 
@@ -45,10 +45,10 @@ Public distribution still requires proper Apple signing and notarization.
 
 `riida` is a Tauri v2 desktop app with:
 
-- Rust backend in [src-tauri/src/lib.rs](/Users/megurine/repo/rust/riida/src-tauri/src/lib.rs)
-- Vite/TypeScript frontend in [src/main.ts](/Users/megurine/repo/rust/riida/src/main.ts)
-- Styling in [src/styles.css](/Users/megurine/repo/rust/riida/src/styles.css)
-- Nix flake dev environment in [flake.nix](/Users/megurine/repo/rust/riida/flake.nix)
+- Rust backend in [src-tauri/src/lib.rs](src-tauri/src/lib.rs)
+- Vite/TypeScript frontend in [src/main.ts](src/main.ts)
+- Styling in [src/styles.css](src/styles.css)
+- Nix flake dev environment in [flake.nix](flake.nix)
 
 The current app focus is local PDF library management with embedded reading, notes, thumbnails, and viewer preferences.
 
@@ -77,7 +77,7 @@ When changing this logic, preserve migration behavior unless there is an explici
 
 ## Current Config Fields
 
-Example development config in [riida.toml](/Users/megurine/repo/rust/riida/riida.toml):
+Example development config in [riida.toml](riida.toml):
 
 ```toml
 library_roots = ["~/Documents/Ebooks/"]
@@ -150,7 +150,7 @@ The backend currently stores at least:
 - viewer preferences
 - reading positions
 
-Schema setup lives in the startup `CREATE TABLE IF NOT EXISTS` block in [src-tauri/src/lib.rs](/Users/megurine/repo/rust/riida/src-tauri/src/lib.rs).
+Schema setup lives in the startup `CREATE TABLE IF NOT EXISTS` block in [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
 
 If schema semantics change, consider migration behavior early.
 
@@ -192,7 +192,7 @@ nix --extra-experimental-features 'nix-command flakes' develop --command npm run
 
 Rust logic now uses both example-based unit tests and property-based tests.
 
-- deterministic unit tests live in [src-tauri/src/lib.rs](/Users/megurine/repo/rust/riida/src-tauri/src/lib.rs)
+- deterministic unit tests live in [src-tauri/src/lib.rs](src-tauri/src/lib.rs)
 - property-based tests use `proptest`
 
 Good candidates for future `proptest` coverage:
@@ -223,7 +223,7 @@ nix --extra-experimental-features 'nix-command flakes' develop --command npm run
 
 `rust:lint` currently runs `cargo clippy --all-targets -- -D warnings`.
 
-Project defaults live in [.cargo/mutants.toml](/Users/megurine/repo/rust/riida/.cargo/mutants.toml), and currently focus on [src-tauri/src/lib.rs](/Users/megurine/repo/rust/riida/src-tauri/src/lib.rs).
+Project defaults live in [.cargo/mutants.toml](.cargo/mutants.toml), and currently focus on [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
 
 ## Frontend Linting And Formatting
 
@@ -250,7 +250,7 @@ Current scope is intentionally narrow:
 This keeps adoption simple while still covering the main frontend code path.
 
 `npm run check:frontend` now ends with a lightweight bundle-size report from
-[scripts/report-bundle-size.mjs](/Users/megurine/repo/rust/riida/scripts/report-bundle-size.mjs)
+[scripts/report-bundle-size.mjs](scripts/report-bundle-size.mjs)
 so large asset growth is visible in local runs and CI logs.
 
 ## Notes

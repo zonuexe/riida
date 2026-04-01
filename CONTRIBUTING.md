@@ -82,9 +82,9 @@ Frontend checks also print a small bundle-size report after `npm run build` so l
 
 ## Project Structure
 
-- [src-tauri/src/lib.rs](/Users/megurine/repo/rust/riida/src-tauri/src/lib.rs): backend, config, SQLite, library scan/watch, thumbnails
-- [src/main.ts](/Users/megurine/repo/rust/riida/src/main.ts): frontend state, navigation, PDF viewer, notes
-- [src/styles.css](/Users/megurine/repo/rust/riida/src/styles.css): UI styling
+- [src-tauri/src/lib.rs](src-tauri/src/lib.rs): backend, config, SQLite, library scan/watch, thumbnails
+- [src/main.ts](src/main.ts): frontend state, navigation, PDF viewer, notes
+- [src/styles.css](src/styles.css): UI styling
 
 ## Expectations
 

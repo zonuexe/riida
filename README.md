@@ -48,7 +48,7 @@ Example:
 
 ```toml
 library_roots = ["~/Documents/Ebooks/"]
-excluded_patterns = ["**/backup/**", "*.bak"]
+excluded_patterns = ["**/backup/**", "*.bak.pdf"]
 pdf_renderer = "pdfjs"
 ```
 

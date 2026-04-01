@@ -17,7 +17,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use walkdir::WalkDir;
 
 const CONFIG_FILE: &str = "riida.toml";
-const DEFAULT_EXCLUDED_PATTERNS: &[&str] = &["**/backup/**", "*.bak"];
+const DEFAULT_EXCLUDED_PATTERNS: &[&str] = &["**/backup/**", "*.bak.pdf"];
 const DEFAULT_PDF_RENDERER: &str = "native";
 const VIEWER_DEFAULT_SCOPE_KEY: &str = "__default__";
 const DEFAULT_VIEWER_PAGE_MODE: &str = "spread";
@@ -383,10 +383,14 @@ fn legacy_file_suffix_to_pattern(value: &str) -> Option<String> {
         return None;
     }
 
-    Some(if trimmed.starts_with('*') {
-        trimmed
+    Some(if trimmed.ends_with(".pdf") {
+        if trimmed.starts_with('*') {
+            trimmed
+        } else {
+            format!("*{trimmed}")
+        }
     } else {
-        format!("*{trimmed}")
+        format!("*{trimmed}.pdf")
     })
 }
 
@@ -1577,7 +1581,7 @@ mod tests {
 
     #[test]
     fn normalize_excluded_patterns_merges_legacy_entries() {
-        let defaults = vec!["**/backup/**".to_string(), "*.bak".to_string()];
+        let defaults = vec!["**/backup/**".to_string(), "*.bak.pdf".to_string()];
 
         let normalized = normalize_excluded_patterns(
             Some(vec!["prefix_*".to_string()]),
@@ -1590,7 +1594,7 @@ mod tests {
             normalized,
             vec![
                 "**/backup/**".to_string(),
-                "*.bak".to_string(),
+                "*.bak.pdf".to_string(),
                 "prefix_*".to_string(),
             ]
         );
@@ -1598,7 +1602,7 @@ mod tests {
 
     #[test]
     fn normalize_excluded_patterns_falls_back_to_defaults() {
-        let defaults = vec!["**/backup/**".to_string(), "*.bak".to_string()];
+        let defaults = vec!["**/backup/**".to_string(), "*.bak.pdf".to_string()];
 
         let normalized = normalize_excluded_patterns(None, None, None, &defaults);
 
@@ -1608,7 +1612,7 @@ mod tests {
     #[test]
     fn excluded_patterns_match_paths_and_file_names() {
         let compiled =
-            compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak", "prefix_*"]))
+            compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak.pdf", "prefix_*"]))
                 .expect("patterns should compile");
 
         assert!(matches_excluded_pattern(
@@ -1620,6 +1624,10 @@ mod tests {
             &compiled
         ));
         assert!(matches_excluded_pattern(
+            Path::new("/tmp/library/archive/document.bak.pdf"),
+            &compiled
+        ));
+        assert!(!matches_excluded_pattern(
             Path::new("/tmp/library/archive/document.bak"),
             &compiled
         ));
@@ -1631,7 +1639,7 @@ mod tests {
 
     #[test]
     fn should_include_pdf_only_accepts_non_excluded_pdfs() {
-        let compiled = compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak"]))
+        let compiled = compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak.pdf"]))
             .expect("patterns should compile");
 
         assert!(should_include_pdf(
@@ -1640,6 +1648,10 @@ mod tests {
         ));
         assert!(!should_include_pdf(
             Path::new("/tmp/library/backup/document.pdf"),
+            &compiled
+        ));
+        assert!(!should_include_pdf(
+            Path::new("/tmp/library/regular/document.bak.pdf"),
             &compiled
         ));
         assert!(!should_include_pdf(

@@ -7,7 +7,10 @@ import {
 
 describe("parseExcludedPatternsInput", () => {
   test("splits lines and trims blank entries", () => {
-    expect(parseExcludedPatternsInput("  *.bak \n\n prefix_*\n")).toEqual(["*.bak", "prefix_*"]);
+    expect(parseExcludedPatternsInput("  *.bak.pdf \n\n prefix_*\n")).toEqual([
+      "*.bak.pdf",
+      "prefix_*",
+    ]);
   });
 });
 
@@ -26,9 +29,9 @@ describe("addLibraryRoot", () => {
 
 describe("buildAppConfigDraft", () => {
   test("builds a normalized draft from form values", () => {
-    expect(buildAppConfigDraft(["~/Books"], " *.bak \n prefix_*\n", "pdfjs")).toEqual({
+    expect(buildAppConfigDraft(["~/Books"], " *.bak.pdf \n prefix_*\n", "pdfjs")).toEqual({
       libraryRoots: ["~/Books"],
-      excludedPatterns: ["*.bak", "prefix_*"],
+      excludedPatterns: ["*.bak.pdf", "prefix_*"],
       pdfRenderer: "pdfjs",
     });
   });

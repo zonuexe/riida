@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  isNavigationBackShortcut,
-  isNavigationForwardShortcut,
-} from "./navigation-shortcuts";
+import { isNavigationBackShortcut, isNavigationForwardShortcut } from "./navigation-shortcuts";
 
 describe("navigation shortcuts", () => {
   it("matches macOS back shortcuts", () => {

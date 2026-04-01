@@ -35,7 +35,7 @@ export function normalizeSearchText(value: string) {
   return value
     .normalize("NFKC")
     .toLocaleLowerCase("ja")
-    .replace(/[\s\-_.\/]+/g, "");
+    .replace(/[\s\-_./]+/g, "");
 }
 
 export function deriveDirectories(snapshot: DirectorySnapshot): DirectoryNode[] {
@@ -75,8 +75,7 @@ export function deriveDirectories(snapshot: DirectorySnapshot): DirectoryNode[] 
     .map(([path, count]) => {
       const root = findRootForPath(path);
       const isRoot = normalizedRoots.includes(path);
-      const relativePath =
-        root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : "";
+      const relativePath = root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : "";
 
       return {
         id: path,

@@ -12,14 +12,8 @@ import {
   formatFileSize,
   type DirectoryNode,
 } from "./library-utils";
-import {
-  buildNavigationUrl,
-  navigationStateSignature,
-} from "./navigation-utils";
-import {
-  isNavigationBackShortcut,
-  isNavigationForwardShortcut,
-} from "./navigation-shortcuts";
+import { buildNavigationUrl, navigationStateSignature } from "./navigation-utils";
+import { isNavigationBackShortcut, isNavigationForwardShortcut } from "./navigation-shortcuts";
 import {
   clampReadingPositionOffsetRatio,
   parseCachedReadingPosition,
@@ -30,10 +24,7 @@ import {
   ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
   preserveNoteWindowBottomRightOffset,
 } from "./note-window-utils";
-import {
-  buildPageGroups,
-  getVisualPageOrder,
-} from "./viewer-layout-utils";
+import { buildPageGroups, getVisualPageOrder } from "./viewer-layout-utils";
 import { buildPdfRenderWindowPlan } from "./pdf-render-window-utils";
 import {
   applyViewerSettingsPayloadToState,
@@ -677,7 +668,9 @@ function renderLibraryRootsList() {
 
       lastAppConfig = {
         ...lastAppConfig,
-        libraryRoots: lastAppConfig.libraryRoots.filter((_, candidateIndex) => candidateIndex !== index),
+        libraryRoots: lastAppConfig.libraryRoots.filter(
+          (_, candidateIndex) => candidateIndex !== index,
+        ),
       };
       setAppSettingsStatus("");
       syncAppSettingsUi();
@@ -706,7 +699,9 @@ function setAppSettingsStatus(message: string, tone: "neutral" | "success" | "er
 
 function syncAppSettingsUi() {
   const modalEl = document.querySelector<HTMLElement>("#app-settings-modal");
-  const excludedPatternsEl = document.querySelector<HTMLTextAreaElement>("#config-excluded-patterns");
+  const excludedPatternsEl = document.querySelector<HTMLTextAreaElement>(
+    "#config-excluded-patterns",
+  );
   const pdfRendererEl = document.querySelector<HTMLSelectElement>("#config-pdf-renderer");
   const configPathEl = document.querySelector<HTMLElement>("#app-settings-config-path");
 
@@ -797,7 +792,9 @@ async function loadAppConfig() {
 }
 
 async function saveAppSettingsFromForm() {
-  const excludedPatternsEl = document.querySelector<HTMLTextAreaElement>("#config-excluded-patterns");
+  const excludedPatternsEl = document.querySelector<HTMLTextAreaElement>(
+    "#config-excluded-patterns",
+  );
   const pdfRendererEl = document.querySelector<HTMLSelectElement>("#config-pdf-renderer");
 
   const libraryRoots = [...(lastAppConfig?.libraryRoots ?? [])];
@@ -888,7 +885,9 @@ function syncViewerSettingsUi() {
 }
 
 function currentViewerPreferences(): ViewerSettings {
-  return { ...(viewerSettings.scope === "file" ? viewerSettings.fileDraft : viewerSettings.globalDraft) };
+  return {
+    ...(viewerSettings.scope === "file" ? viewerSettings.fileDraft : viewerSettings.globalDraft),
+  };
 }
 
 function setViewerDraft(scope: ViewerSettingsScope, preferences: ViewerSettings) {
@@ -1157,7 +1156,8 @@ function updateNoteInteraction(event: PointerEvent) {
     nextWidth = Math.max(MIN_NOTE_WIDTH, noteInteractionState.startWidth - dx);
     nextLeft = noteInteractionState.startLeft + dx;
     if (nextWidth === MIN_NOTE_WIDTH) {
-      nextLeft = noteInteractionState.startLeft + (noteInteractionState.startWidth - MIN_NOTE_WIDTH);
+      nextLeft =
+        noteInteractionState.startLeft + (noteInteractionState.startWidth - MIN_NOTE_WIDTH);
     }
   }
 
@@ -1165,7 +1165,8 @@ function updateNoteInteraction(event: PointerEvent) {
     nextHeight = Math.max(MIN_NOTE_HEIGHT, noteInteractionState.startHeight - dy);
     nextTop = noteInteractionState.startTop + dy;
     if (nextHeight === MIN_NOTE_HEIGHT) {
-      nextTop = noteInteractionState.startTop + (noteInteractionState.startHeight - MIN_NOTE_HEIGHT);
+      nextTop =
+        noteInteractionState.startTop + (noteInteractionState.startHeight - MIN_NOTE_HEIGHT);
     }
   }
 
@@ -1252,7 +1253,10 @@ function syncNavigationHistoryState(state: NavigationState, mode: "push" | "repl
   syncNavigationControlsUi();
 }
 
-async function navigateToState(state: Omit<NavigationState, "historyIndex">, mode: "push" | "replace") {
+async function navigateToState(
+  state: Omit<NavigationState, "historyIndex">,
+  mode: "push" | "replace",
+) {
   const nextState: NavigationState = {
     historyIndex: navigationHistoryIndex,
     ...state,
@@ -1276,7 +1280,7 @@ async function applyNavigationState(state: NavigationState) {
   viewerState.activeDirectory = state.activeDirectory;
 
   const nextBook = state.bookFilePath
-    ? snapshot.books.find((book) => book.filePath === state.bookFilePath) ?? null
+    ? (snapshot.books.find((book) => book.filePath === state.bookFilePath) ?? null)
     : null;
 
   if (nextBook) {
@@ -1309,9 +1313,7 @@ function isEditableTarget(target: EventTarget | null) {
   }
 
   return Boolean(
-    element.closest(
-      'input, textarea, select, [contenteditable="true"], .ProseMirror, .milkdown',
-    ),
+    element.closest('input, textarea, select, [contenteditable="true"], .ProseMirror, .milkdown'),
   );
 }
 
@@ -1374,7 +1376,10 @@ function cacheReadingPosition(position: ReadingPosition | null) {
   }
 
   try {
-    window.localStorage.setItem(readingPositionStorageKey(position.filePath), JSON.stringify(position));
+    window.localStorage.setItem(
+      readingPositionStorageKey(position.filePath),
+      JSON.stringify(position),
+    );
   } catch (error) {
     console.error("Failed to cache reading position:", error);
   }
@@ -1396,7 +1401,10 @@ async function flushReadingPositionSave() {
     readingPositionSaveTimer = null;
   }
 
-  if (!activeReadingPosition || activeReadingPosition.filePath !== viewerState.currentBook?.filePath) {
+  if (
+    !activeReadingPosition ||
+    activeReadingPosition.filePath !== viewerState.currentBook?.filePath
+  ) {
     return;
   }
 
@@ -1615,7 +1623,9 @@ async function renderCurrentPage() {
 
         const pageSlots = new Map<number, HTMLElement>();
         for (const pageNumber of visualOrder) {
-          const estimatedViewport = (await pdfDocument.getPage(pageNumber)).getViewport({ scale: baseScale });
+          const estimatedViewport = (await pdfDocument.getPage(pageNumber)).getViewport({
+            scale: baseScale,
+          });
           const pageEl = document.createElement("section");
           pageEl.className = "pdfjs-page page";
           pageEl.dataset.pageNumber = String(pageNumber);
@@ -1828,9 +1838,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     const emptyEl = document.createElement("div");
     emptyEl.className = "empty-state";
     emptyEl.textContent =
-      viewerState.searchQuery || viewerState.activeDirectory
-        ? "No matching PDFs."
-        : "No PDFs yet.";
+      viewerState.searchQuery || viewerState.activeDirectory ? "No matching PDFs." : "No PDFs yet.";
     container.appendChild(emptyEl);
     return;
   }
@@ -1986,10 +1994,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   const appSettingsCancelEl = document.querySelector<HTMLButtonElement>("#app-settings-cancel");
   const appSettingsSaveEl = document.querySelector<HTMLButtonElement>("#app-settings-save");
   const appSettingsBackdropEl = document.querySelector<HTMLElement>("#app-settings-backdrop");
-  const appSettingsAddRootEl = document.querySelector<HTMLButtonElement>("#config-library-roots-add");
+  const appSettingsAddRootEl = document.querySelector<HTMLButtonElement>(
+    "#config-library-roots-add",
+  );
   const noteToggleEl = document.querySelector<HTMLButtonElement>("#note-toggle");
   const noteCloseEl = document.querySelector<HTMLButtonElement>("#note-close");
-  const viewerSettingsToggleEl = document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
+  const viewerSettingsToggleEl =
+    document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
   const viewerSettingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
   const viewerSettingsScopeGlobalEl = document.querySelector<HTMLButtonElement>(
     "#viewer-settings-scope-global",
@@ -2001,8 +2012,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   const viewerBindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
   const viewerZoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
   const viewerAlignModeEl = document.querySelector<HTMLSelectElement>("#viewer-align-mode");
-  const viewerVerticalGapModeEl =
-    document.querySelector<HTMLSelectElement>("#viewer-vertical-gap-mode");
+  const viewerVerticalGapModeEl = document.querySelector<HTMLSelectElement>(
+    "#viewer-vertical-gap-mode",
+  );
   const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
   const noteDragHandleEl = document.querySelector<HTMLElement>("#note-drag-handle");
   const noteResizeEls = document.querySelectorAll<HTMLElement>(".note-resize-handle");
@@ -2328,14 +2340,10 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   window.addEventListener("resize", () => {
     if (shouldAnchorNoteWindowToBottomRight()) {
-      const nextState = preserveNoteWindowBottomRightOffset(
-        noteState,
-        lastViewportSize,
-        {
-          width: window.innerWidth,
-          height: window.innerHeight,
-        },
-      );
+      const nextState = preserveNoteWindowBottomRightOffset(noteState, lastViewportSize, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
       noteState.x = nextState.x;
       noteState.y = nextState.y;
     }
@@ -2402,7 +2410,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       navigationEntries = [{ ...nextState, historyIndex: 0 }];
     }
 
-    navigationHistoryIndex = Math.max(0, Math.min(nextState.historyIndex ?? 0, navigationEntries.length - 1));
+    navigationHistoryIndex = Math.max(
+      0,
+      Math.min(nextState.historyIndex ?? 0, navigationEntries.length - 1),
+    );
     navigationHistoryMax = Math.max(0, navigationEntries.length - 1);
     syncNavigationControlsUi();
 

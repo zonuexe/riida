@@ -29,10 +29,7 @@ export function preserveNoteWindowBottomRightOffset(
   };
 }
 
-export function clampNoteWindowPosition(
-  noteWindow: NoteWindowLike,
-  viewport: ViewportSize,
-) {
+export function clampNoteWindowPosition(noteWindow: NoteWindowLike, viewport: ViewportSize) {
   const maxLeft = Math.max(12, viewport.width - noteWindow.width - 12);
   const maxTop = Math.max(12, viewport.height - noteWindow.height - 12);
 
@@ -43,10 +40,7 @@ export function clampNoteWindowPosition(
   };
 }
 
-export function ensureNoteWindowPlacement(
-  noteWindow: NoteWindowLike,
-  viewport: ViewportSize,
-) {
+export function ensureNoteWindowPlacement(noteWindow: NoteWindowLike, viewport: ViewportSize) {
   const positioned =
     noteWindow.x === null || noteWindow.y === null
       ? {

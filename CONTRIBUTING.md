@@ -30,6 +30,8 @@ npm run tauri dev
 Run both checks before submitting changes.
 
 ```bash
+npm run lint
+npm run fmt:check
 npm run build
 cargo check --manifest-path src-tauri/Cargo.toml
 ```

@@ -40,6 +40,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run frontend lint
+        run: npm run lint
+
+      - name: Check frontend formatting
+        run: npm run fmt:check
+
       - name: Run TypeScript tests
         run: npm test
 

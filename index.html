@@ -152,13 +152,16 @@
           </article>
         </section>
 
-        <button id="note-toggle" class="note-toggle-button" type="button" hidden>
-          Notes
-        </button>
+        <button id="note-toggle" class="note-toggle-button" type="button" hidden>Notes</button>
         <aside id="note-panel" class="note-panel" hidden>
           <div class="note-panel-header" id="note-drag-handle">
             <p class="note-panel-label">Notes</p>
-            <button id="note-close" class="note-close-button" type="button" aria-label="Close notes">
+            <button
+              id="note-close"
+              class="note-close-button"
+              type="button"
+              aria-label="Close notes"
+            >
               ×
             </button>
           </div>
@@ -177,13 +180,23 @@
 
     <div id="app-settings-modal" class="app-settings-modal" hidden>
       <div id="app-settings-backdrop" class="app-settings-backdrop"></div>
-      <section class="app-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="app-settings-title">
+      <section
+        class="app-settings-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="app-settings-title"
+      >
         <div class="app-settings-header">
           <div>
             <p class="app-settings-kicker">Configuration</p>
             <h2 id="app-settings-title">Settings</h2>
           </div>
-          <button id="app-settings-close" class="app-settings-close" type="button" aria-label="Close settings">
+          <button
+            id="app-settings-close"
+            class="app-settings-close"
+            type="button"
+            aria-label="Close settings"
+          >
             ×
           </button>
         </div>
@@ -191,7 +204,11 @@
           <section class="app-settings-field">
             <span>Library roots</span>
             <div id="config-library-roots-list" class="settings-root-list"></div>
-            <button id="config-library-roots-add" class="app-settings-secondary app-settings-inline" type="button">
+            <button
+              id="config-library-roots-add"
+              class="app-settings-secondary app-settings-inline"
+              type="button"
+            >
               Add folder
             </button>
             <small>Changes to file watching may require an app restart.</small>
@@ -199,7 +216,10 @@
           <label class="app-settings-field">
             <span>Excluded patterns</span>
             <textarea id="config-excluded-patterns" rows="5" spellcheck="false"></textarea>
-            <small>One glob pattern per line, for example <code>*.bak</code>, <code>prefix_*</code>, or <code>**/backup/**</code>.</small>
+            <small
+              >One glob pattern per line, for example <code>*.bak</code>, <code>prefix_*</code>, or
+              <code>**/backup/**</code>.</small
+            >
           </label>
           <label class="app-settings-field">
             <span>PDF renderer</span>
@@ -212,24 +232,42 @@
           <p id="app-settings-status" class="app-settings-status" hidden></p>
         </div>
         <div class="app-settings-actions">
-          <button id="app-about-open" class="app-settings-secondary app-settings-leading" type="button">
+          <button
+            id="app-about-open"
+            class="app-settings-secondary app-settings-leading"
+            type="button"
+          >
             About riida
           </button>
-          <button id="app-settings-cancel" class="app-settings-secondary" type="button">Cancel</button>
-          <button id="app-settings-save" class="app-settings-primary" type="button">Save and close</button>
+          <button id="app-settings-cancel" class="app-settings-secondary" type="button">
+            Cancel
+          </button>
+          <button id="app-settings-save" class="app-settings-primary" type="button">
+            Save and close
+          </button>
         </div>
       </section>
     </div>
 
     <div id="app-about-modal" class="app-settings-modal" hidden>
       <div id="app-about-backdrop" class="app-settings-backdrop"></div>
-      <section class="app-settings-dialog app-about-dialog" role="dialog" aria-modal="true" aria-labelledby="app-about-title">
+      <section
+        class="app-settings-dialog app-about-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="app-about-title"
+      >
         <div class="app-settings-header">
           <div>
             <p class="app-settings-kicker">Application</p>
             <h2 id="app-about-title">About riida</h2>
           </div>
-          <button id="app-about-close" class="app-settings-close" type="button" aria-label="Close about dialog">
+          <button
+            id="app-about-close"
+            class="app-settings-close"
+            type="button"
+            aria-label="Close about dialog"
+          >
             ×
           </button>
         </div>
@@ -244,12 +282,18 @@
             <p class="app-about-meta"><strong>License</strong> MPL-2.0</p>
             <p class="app-about-meta">
               <strong>Source</strong>
-              <a id="app-about-source" href="https://github.com/zonuexe/riida" target="_blank" rel="noreferrer noopener">
+              <a
+                id="app-about-source"
+                href="https://github.com/zonuexe/riida"
+                target="_blank"
+                rel="noreferrer noopener"
+              >
                 github.com/zonuexe/riida
               </a>
             </p>
             <p class="app-about-copy">
-              riida is distributed under the Mozilla Public License 2.0. The license text is shown below.
+              riida is distributed under the Mozilla Public License 2.0. The license text is shown
+              below.
             </p>
           </section>
           <section class="app-about-license">

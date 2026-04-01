@@ -40,8 +40,6 @@ describe("buildNavigationUrl", () => {
         activeDirectory: "/Books/Tech",
         searchQuery: "rust patterns",
       }),
-    ).toBe(
-      "/?q=rust+patterns&dir=%2FBooks%2FTech&book=%2FBooks%2FTech%2FRust+Book.pdf",
-    );
+    ).toBe("/?q=rust+patterns&dir=%2FBooks%2FTech&book=%2FBooks%2FTech%2FRust+Book.pdf");
   });
 });

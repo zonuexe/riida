@@ -18,11 +18,7 @@ export function isNavigationBackShortcut(input: NavigationShortcutInput) {
       !input.ctrlKey &&
       !input.altKey &&
       (input.key === "[" || input.key === "ArrowLeft")) ||
-    (!isMac &&
-      input.altKey &&
-      !input.metaKey &&
-      !input.ctrlKey &&
-      input.key === "ArrowLeft")
+    (!isMac && input.altKey && !input.metaKey && !input.ctrlKey && input.key === "ArrowLeft")
   );
 }
 
@@ -37,10 +33,6 @@ export function isNavigationForwardShortcut(input: NavigationShortcutInput) {
       !input.ctrlKey &&
       !input.altKey &&
       (input.key === "]" || input.key === "ArrowRight")) ||
-    (!isMac &&
-      input.altKey &&
-      !input.metaKey &&
-      !input.ctrlKey &&
-      input.key === "ArrowRight")
+    (!isMac && input.altKey && !input.metaKey && !input.ctrlKey && input.key === "ArrowRight")
   );
 }

@@ -153,11 +153,37 @@ If schema semantics change, consider migration behavior early.
 Common local checks:
 
 ```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run lint
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run fmt:check
 nix --extra-experimental-features 'nix-command flakes' develop --command cargo test --manifest-path src-tauri/Cargo.toml
 nix --extra-experimental-features 'nix-command flakes' develop --command npm test
 nix --extra-experimental-features 'nix-command flakes' develop --command cargo check --manifest-path src-tauri/Cargo.toml
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run build
 ```
+
+## Frontend Linting And Formatting
+
+The frontend now uses the Oxc toolchain:
+
+- `oxlint` for TypeScript linting
+- `oxfmt` for formatting checks
+
+Primary commands:
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run lint
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run lint:fix
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run fmt
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run fmt:check
+```
+
+Current scope is intentionally narrow:
+
+- `src`
+- `index.html`
+- `vite.config.ts`
+
+This keeps adoption simple while still covering the main frontend code path.
 
 ## Notes
 

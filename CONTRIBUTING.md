@@ -33,6 +33,12 @@ Run both checks before submitting changes.
 npm run check
 ```
 
+For a release-facing verification pass, use:
+
+```bash
+npm run check:release
+```
+
 Or run the individual checks when iterating on one area:
 
 ```bash

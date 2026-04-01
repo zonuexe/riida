@@ -12,6 +12,7 @@
     "check:notices": "npm run generate:third-party-licenses && git diff --exit-code -- THIRD-PARTY-LICENSES-rust.md THIRD-PARTY-LICENSES-js.md",
     "check:licenses": "npm run check:licenses:npm && npm run check:notices",
     "check": "npm run check:rust && npm run check:frontend",
+    "check:release": "npm run check && npm run check:licenses",
     "check:rust": "npm run rust:fmt:check && npm run rust:lint && cargo test --manifest-path src-tauri/Cargo.toml && cargo check --manifest-path src-tauri/Cargo.toml",
     "check:frontend": "npm run lint && npm run fmt:check && npm test && npm run build",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml",

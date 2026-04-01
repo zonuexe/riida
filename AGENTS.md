@@ -162,6 +162,12 @@ Common local checks:
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run check
 ```
 
+Release-facing verification shortcut:
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run check:release
+```
+
 Or run the narrower commands when iterating on one area:
 
 ```bash

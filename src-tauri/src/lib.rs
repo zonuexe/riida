@@ -1413,7 +1413,7 @@ mod tests {
     use notify::{event::DataChange, EventKind};
     use proptest::prelude::*;
     use rusqlite::Connection;
-    use std::fs;
+    use std::{fs, path::PathBuf};
 
     fn test_connection() -> Connection {
         let connection = Connection::open_in_memory().expect("in-memory db should open");
@@ -1460,6 +1460,31 @@ mod tests {
             library_roots: Vec::new(),
             excluded_patterns: patterns.iter().map(|value| value.to_string()).collect(),
             pdf_renderer: DEFAULT_PDF_RENDERER.to_string(),
+        }
+    }
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "riida-test-{label}-{}",
+            std::time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("time should move forward")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&path).expect("temp dir should be created");
+        path
+    }
+
+    fn test_app_paths(root: &Path) -> AppPaths {
+        AppPaths {
+            config_file: root.join("config").join(CONFIG_FILE),
+            data_dir: root.join("data"),
+            database_file: root.join("data").join("app.db"),
+            cache_dir: root.join("cache"),
+            thumbnail_root: root.join("cache").join("thumbnails"),
+            legacy_config_file: root.join("legacy").join(CONFIG_FILE),
+            legacy_database_file: root.join("legacy").join("app.db"),
+            legacy_thumbnail_root: root.join("legacy").join("thumbnails"),
         }
     }
 
@@ -1601,6 +1626,108 @@ mod tests {
         );
         assert_eq!(payload.excluded_patterns, vec!["**/backup/**".to_string()]);
         assert_eq!(payload.pdf_renderer, "pdfjs");
+    }
+
+    #[test]
+    fn database_file_requires_initialized_app_paths() {
+        let error = database_file().expect_err("database_file should fail without initialized paths");
+        assert!(error.contains("application paths have not been initialized"));
+    }
+
+    #[test]
+    fn project_root_points_to_repository_root() {
+        let root = project_root();
+
+        assert!(root.exists());
+        assert_eq!(root.file_name().and_then(|name| name.to_str()), Some("riida"));
+    }
+
+    #[test]
+    fn config_and_thumbnail_paths_fall_back_under_project_root() {
+        let root = project_root();
+
+        assert_eq!(config_file(), root.join(CONFIG_FILE));
+        assert_eq!(thumbnail_root(), root.join("data").join("thumbnails"));
+    }
+
+    #[test]
+    fn migrate_directory_contents_copies_files_recursively_when_destination_missing() {
+        let temp_root = unique_temp_dir("migrate-directory-contents");
+        let source = temp_root.join("source");
+        let destination = temp_root.join("destination");
+        let nested_source = source.join("nested");
+        fs::create_dir_all(&nested_source).expect("source tree should be created");
+        fs::write(source.join("top.txt"), "top").expect("top file should be written");
+        fs::write(nested_source.join("child.txt"), "nested").expect("nested file should be written");
+
+        migrate_directory_contents(&source, &destination).expect("migration should succeed");
+
+        assert_eq!(
+            fs::read_to_string(destination.join("top.txt")).expect("top file should be copied"),
+            "top"
+        );
+        assert_eq!(
+            fs::read_to_string(destination.join("nested").join("child.txt"))
+                .expect("nested file should be copied"),
+            "nested"
+        );
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn prepare_storage_copies_legacy_files_only_when_targets_are_missing() {
+        let temp_root = unique_temp_dir("prepare-storage");
+        let paths = test_app_paths(&temp_root);
+
+        fs::create_dir_all(paths.legacy_thumbnail_root.join("nested"))
+            .expect("legacy thumbnail dir should be created");
+        fs::write(&paths.legacy_config_file, "pdf_renderer = \"pdfjs\"\n")
+            .expect("legacy config should be written");
+        fs::write(&paths.legacy_database_file, "db").expect("legacy database should be written");
+        fs::write(paths.legacy_thumbnail_root.join("nested").join("thumb.jpg"), "thumb")
+            .expect("legacy thumbnail should be written");
+
+        prepare_storage(&paths).expect("storage preparation should succeed");
+
+        assert_eq!(
+            fs::read_to_string(&paths.config_file).expect("config should be copied"),
+            "pdf_renderer = \"pdfjs\"\n"
+        );
+        assert_eq!(
+            fs::read_to_string(&paths.database_file).expect("database should be copied"),
+            "db"
+        );
+        assert_eq!(
+            fs::read_to_string(paths.thumbnail_root.join("nested").join("thumb.jpg"))
+                .expect("thumbnail should be migrated"),
+            "thumb"
+        );
+
+        fs::write(&paths.config_file, "pdf_renderer = \"native\"\n")
+            .expect("existing config should be overwritten for test");
+        prepare_storage(&paths).expect("second storage preparation should succeed");
+        assert_eq!(
+            fs::read_to_string(&paths.config_file).expect("existing config should remain"),
+            "pdf_renderer = \"native\"\n"
+        );
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn load_config_reads_and_normalizes_existing_config_file() {
+        let config_path = project_root().join(CONFIG_FILE);
+        let config_contents =
+            fs::read_to_string(&config_path).expect("repo config file should be readable");
+        let file_config: AppConfigFile =
+            toml::from_str(&config_contents).expect("repo config file should parse");
+        let expected = normalize_config_input(file_config);
+        let loaded = load_config().expect("load_config should succeed");
+
+        assert_eq!(loaded.library_roots, expected.library_roots);
+        assert_eq!(loaded.excluded_patterns, expected.excluded_patterns);
+        assert_eq!(loaded.pdf_renderer, expected.pdf_renderer);
     }
 
     #[test]

@@ -17,6 +17,10 @@ import {
   navigationStateSignature,
 } from "./navigation-utils";
 import {
+  isNavigationBackShortcut,
+  isNavigationForwardShortcut,
+} from "./navigation-shortcuts";
+import {
   clampReadingPositionOffsetRatio,
   parseCachedReadingPosition,
   readingPositionStorageKey,
@@ -2305,17 +2309,16 @@ window.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    const isMac = navigator.platform.toUpperCase().includes("MAC");
-    const wantsBack =
-      event.key === "BrowserBack" ||
-      (isMac && event.metaKey && !event.shiftKey && !event.ctrlKey && !event.altKey &&
-        (event.key === "[" || event.key === "ArrowLeft")) ||
-      (!isMac && event.altKey && !event.metaKey && !event.ctrlKey && event.key === "ArrowLeft");
-    const wantsForward =
-      event.key === "BrowserForward" ||
-      (isMac && event.metaKey && !event.shiftKey && !event.ctrlKey && !event.altKey &&
-        (event.key === "]" || event.key === "ArrowRight")) ||
-      (!isMac && event.altKey && !event.metaKey && !event.ctrlKey && event.key === "ArrowRight");
+    const shortcutInput = {
+      platform: navigator.platform,
+      key: event.key,
+      metaKey: event.metaKey,
+      altKey: event.altKey,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+    };
+    const wantsBack = isNavigationBackShortcut(shortcutInput);
+    const wantsForward = isNavigationForwardShortcut(shortcutInput);
 
     if (wantsBack) {
       event.preventDefault();

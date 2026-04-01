@@ -7,6 +7,10 @@ import { GlobalWorkerOptions, TextLayer, getDocument } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { mountNoteEditor, type NoteEditorHandle } from "./note-editor";
 import {
+  addLibraryRoot,
+  buildAppConfigDraft,
+} from "./app-config-utils";
+import {
   deriveDirectories,
   filterVisibleBooks,
   formatFileSize,
@@ -807,12 +811,11 @@ async function saveAppSettingsFromForm() {
   try {
     const payload = await invoke<AppConfigPayload>("save_app_config", {
       input: {
-        libraryRoots,
-        excludedPatterns: (excludedPatternsEl?.value ?? "")
-          .split("\n")
-          .map((value) => value.trim())
-          .filter(Boolean),
-        pdfRenderer: pdfRendererEl?.value ?? "native",
+        ...buildAppConfigDraft(
+          libraryRoots,
+          excludedPatternsEl?.value ?? "",
+          pdfRendererEl?.value,
+        ),
       },
     });
 
@@ -2104,11 +2107,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
 
       const collapsedSelection = await collapseHomePath(normalizedSelection);
-      const currentRoots = new Set(lastAppConfig?.libraryRoots ?? []);
-      currentRoots.add(collapsedSelection);
+      const currentRoots = addLibraryRoot(lastAppConfig?.libraryRoots ?? [], collapsedSelection);
       lastAppConfig = {
         configPath: lastAppConfig?.configPath ?? "",
-        libraryRoots: [...currentRoots],
+        libraryRoots: currentRoots,
         excludedPatterns: lastAppConfig?.excludedPatterns ?? [],
         pdfRenderer: lastAppConfig?.pdfRenderer ?? "native",
       };

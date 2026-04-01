@@ -29,9 +29,6 @@ import {
   applyViewerSettingsPayloadToState,
   switchViewerSettingsScopeInState,
 } from "./viewer-settings-utils";
-import licenseTextUrl from "../LICENSE?url";
-import thirdPartyRustLicenseUrl from "../THIRD-PARTY-LICENSES-rust.md?url";
-import thirdPartyJsLicenseUrl from "../THIRD-PARTY-LICENSES-js.md?url";
 
 type BookSummary = {
   fileName: string;
@@ -799,26 +796,15 @@ function syncAboutUi() {
 
 async function loadThirdPartyLicenses() {
   try {
-    const [licenseResponse, rustResponse, jsResponse] = await Promise.all([
-      fetch(licenseTextUrl),
-      fetch(thirdPartyRustLicenseUrl),
-      fetch(thirdPartyJsLicenseUrl),
+    const [licenseModule, rustModule, jsModule] = await Promise.all([
+      import("../LICENSE?raw"),
+      import("../THIRD-PARTY-LICENSES-rust.md?raw"),
+      import("../THIRD-PARTY-LICENSES-js.md?raw"),
     ]);
-    if (!licenseResponse.ok) {
-      throw new Error(
-        `Application license: ${licenseResponse.status} ${licenseResponse.statusText}`,
-      );
-    }
-    if (!rustResponse.ok) {
-      throw new Error(`Rust notices: ${rustResponse.status} ${rustResponse.statusText}`);
-    }
-    if (!jsResponse.ok) {
-      throw new Error(`JavaScript notices: ${jsResponse.status} ${jsResponse.statusText}`);
-    }
 
-    cachedLicenseText = (await licenseResponse.text()).trim();
-    cachedThirdPartyRustText = (await rustResponse.text()).trim();
-    cachedThirdPartyJsText = (await jsResponse.text()).trim();
+    cachedLicenseText = licenseModule.default.trim();
+    cachedThirdPartyRustText = rustModule.default.trim();
+    cachedThirdPartyJsText = jsModule.default.trim();
   } catch (error) {
     const message = `Failed to load third-party notices: ${String(error)}`;
     cachedLicenseText = message;

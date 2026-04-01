@@ -28,6 +28,7 @@ import {
 import {
   clampNoteWindowPosition,
   ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
+  preserveNoteWindowBottomRightOffset,
 } from "./note-window-utils";
 import {
   buildPageGroups,
@@ -224,6 +225,10 @@ let cachedThirdPartyRustText = "Loading Rust notices...";
 let cachedThirdPartyJsText = "Loading JavaScript notices...";
 const PDF_RENDER_RADIUS = 2;
 const PDF_KEEP_RADIUS = 3;
+let lastViewportSize = {
+  width: window.innerWidth,
+  height: window.innerHeight,
+};
 
 async function collapseHomePath(path: string) {
   if (!cachedHomeDir) {
@@ -597,6 +602,10 @@ function ensureNoteWindowPlacement() {
   });
   noteState.x = nextState.x;
   noteState.y = nextState.y;
+}
+
+function shouldAnchorNoteWindowToBottomRight() {
+  return viewerSettings.alignMode === "left" || viewerSettings.alignMode === "center";
 }
 
 function syncNoteUi() {
@@ -2318,8 +2327,25 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   window.addEventListener("resize", () => {
+    if (shouldAnchorNoteWindowToBottomRight()) {
+      const nextState = preserveNoteWindowBottomRightOffset(
+        noteState,
+        lastViewportSize,
+        {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        },
+      );
+      noteState.x = nextState.x;
+      noteState.y = nextState.y;
+    }
+
     clampNoteWindow();
     syncNoteUi();
+    lastViewportSize = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    };
 
     if (pdfRenderResizeTimer !== null) {
       window.clearTimeout(pdfRenderResizeTimer);

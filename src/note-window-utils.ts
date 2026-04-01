@@ -10,6 +10,25 @@ type ViewportSize = {
   height: number;
 };
 
+export function preserveNoteWindowBottomRightOffset(
+  noteWindow: NoteWindowLike,
+  previousViewport: ViewportSize,
+  nextViewport: ViewportSize,
+) {
+  if (noteWindow.x === null || noteWindow.y === null) {
+    return noteWindow;
+  }
+
+  const rightOffset = previousViewport.width - (noteWindow.x + noteWindow.width);
+  const bottomOffset = previousViewport.height - (noteWindow.y + noteWindow.height);
+
+  return {
+    ...noteWindow,
+    x: nextViewport.width - noteWindow.width - rightOffset,
+    y: nextViewport.height - noteWindow.height - bottomOffset,
+  };
+}
+
 export function clampNoteWindowPosition(
   noteWindow: NoteWindowLike,
   viewport: ViewportSize,

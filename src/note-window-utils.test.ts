@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { clampNoteWindowPosition, ensureNoteWindowPlacement } from "./note-window-utils";
+import {
+  clampNoteWindowPosition,
+  ensureNoteWindowPlacement,
+  preserveNoteWindowBottomRightOffset,
+} from "./note-window-utils";
 
 describe("clampNoteWindowPosition", () => {
   it("keeps the note window inside the viewport", () => {
@@ -87,6 +91,60 @@ describe("ensureNoteWindowPlacement", () => {
     ).toEqual({
       x: 100,
       y: 120,
+      width: 420,
+      height: 300,
+    });
+  });
+});
+
+describe("preserveNoteWindowBottomRightOffset", () => {
+  it("keeps the same right and bottom distance after viewport growth", () => {
+    expect(
+      preserveNoteWindowBottomRightOffset(
+        {
+          x: 756,
+          y: 476,
+          width: 420,
+          height: 300,
+        },
+        {
+          width: 1200,
+          height: 800,
+        },
+        {
+          width: 1600,
+          height: 1000,
+        },
+      ),
+    ).toEqual({
+      x: 1156,
+      y: 676,
+      width: 420,
+      height: 300,
+    });
+  });
+
+  it("leaves unpositioned notes unchanged", () => {
+    expect(
+      preserveNoteWindowBottomRightOffset(
+        {
+          x: null,
+          y: null,
+          width: 420,
+          height: 300,
+        },
+        {
+          width: 1200,
+          height: 800,
+        },
+        {
+          width: 1600,
+          height: 1000,
+        },
+      ),
+    ).toEqual({
+      x: null,
+      y: null,
       width: 420,
       height: 300,
     });

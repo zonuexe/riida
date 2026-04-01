@@ -50,11 +50,8 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Run grouped quality checks
-        run: npm run check
-
-      - name: Generate third-party license notices
-        run: npm run generate:third-party-licenses
+      - name: Run release verification checks
+        run: npm run check:release
 
       - name: Build Linux release bundle
         if: startsWith(github.ref, 'refs/tags/')

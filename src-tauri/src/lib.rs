@@ -1591,11 +1591,9 @@ mod tests {
         assert_eq!(paths.database_file, root.join("data").join("app.db"));
         assert_eq!(paths.cache_dir, root.join("cache"));
         assert_eq!(paths.thumbnail_root, root.join("cache").join("thumbnails"));
-        assert!(
-            paths
-                .legacy_thumbnail_roots
-                .contains(&root.join("data").join("thumbnails"))
-        );
+        assert!(paths
+            .legacy_thumbnail_roots
+            .contains(&root.join("data").join("thumbnails")));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -1859,18 +1857,28 @@ mod tests {
         paths.legacy_database_files = vec![old_database_file.clone()];
         paths.legacy_thumbnail_roots = vec![old_thumbnail_root.clone()];
 
-        fs::create_dir_all(old_config_file.parent().expect("config parent should exist"))
-            .expect("old namespace config dir should be created");
-        fs::create_dir_all(old_database_file.parent().expect("database parent should exist"))
-            .expect("old namespace data dir should be created");
+        fs::create_dir_all(
+            old_config_file
+                .parent()
+                .expect("config parent should exist"),
+        )
+        .expect("old namespace config dir should be created");
+        fs::create_dir_all(
+            old_database_file
+                .parent()
+                .expect("database parent should exist"),
+        )
+        .expect("old namespace data dir should be created");
         fs::create_dir_all(old_thumbnail_root.join("nested"))
             .expect("old namespace thumbnail dir should be created");
         fs::write(&old_config_file, "pdf_renderer = \"pdfjs\"\n")
             .expect("old namespace config should be written");
-        fs::write(&old_database_file, "db2")
-            .expect("old namespace database should be written");
-        fs::write(old_thumbnail_root.join("nested").join("thumb.jpg"), "thumb2")
-            .expect("old namespace thumbnail should be written");
+        fs::write(&old_database_file, "db2").expect("old namespace database should be written");
+        fs::write(
+            old_thumbnail_root.join("nested").join("thumb.jpg"),
+            "thumb2",
+        )
+        .expect("old namespace thumbnail should be written");
 
         prepare_storage(&paths).expect("storage preparation should succeed");
 

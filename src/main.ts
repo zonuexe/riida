@@ -216,7 +216,7 @@ let activeReadingPosition: ReadingPosition | null = null;
 let lastAppConfig: AppConfigPayload | null = null;
 let cachedHomeDir: string | null = null;
 let cachedAppName = "riida";
-let cachedAppVersion = "0.0.5";
+let cachedAppVersion = "0.0.6";
 const buildDate = __BUILD_DATE__;
 let cachedLicenseText = "Loading license text...";
 let cachedThirdPartyRustText = "Loading Rust notices...";
@@ -1239,7 +1239,8 @@ function describeEmptyLibraryState(snapshot: LibrarySnapshot, books: BookSummary
   if (snapshot.existingLibraryRoots.length === 0) {
     return {
       message: "The configured library folders do not exist.",
-      detail: "Update Library roots in Settings and choose folders that are available on this machine.",
+      detail:
+        "Update Library roots in Settings and choose folders that are available on this machine.",
     };
   }
 

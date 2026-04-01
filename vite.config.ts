@@ -10,11 +10,7 @@ export default defineConfig(async () => ({
   define: {
     __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)),
   },
-  assetsInclude: [
-    "**/LICENSE",
-    "**/THIRD-PARTY-LICENSES-rust.md",
-    "**/THIRD-PARTY-LICENSES-js.md",
-  ],
+  assetsInclude: ["**/LICENSE", "**/THIRD-PARTY-LICENSES-rust.md", "**/THIRD-PARTY-LICENSES-js.md"],
 
   plugins: [
     viteStaticCopy({

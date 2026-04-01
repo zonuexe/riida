@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-04-02
+
+### Changed
+
+- First-run setup is smoother: when no `riida.toml` exists yet, the Settings dialog now opens automatically so you can choose library folders immediately.
+- Library settings now explain the PDF renderer choices more clearly, and the default exclusion example is aligned with PDF-only usage as `*.bak.pdf`.
+- Development builds now keep config, data, and cache under the repository root so everyday testing does not interfere with real user data.
+
+### Fixed
+
+- Empty or misconfigured libraries no longer stay on a `Loading...` placeholder. The app now explains whether library folders are missing, empty, or just have no matching PDFs.
+- The About dialog now loads bundled license texts correctly in development mode.
+
 ## [0.0.5] - 2026-04-02
 
 ### Changed
@@ -65,7 +78,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/zonuexe/riida/releases/tag/v0.0.6
 [0.0.5]: https://github.com/zonuexe/riida/releases/tag/v0.0.5
 [0.0.4]: https://github.com/zonuexe/riida/releases/tag/v0.0.4
 [0.0.3]: https://github.com/zonuexe/riida/releases/tag/v0.0.3

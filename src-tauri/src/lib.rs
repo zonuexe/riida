@@ -1767,6 +1767,38 @@ mod tests {
         }
     }
 
+    prop_compose! {
+        fn normalized_viewer_preferences_strategy()(
+            page_mode in prop_oneof![Just("single".to_string()), Just("spread".to_string())],
+            binding_direction in prop_oneof![Just("left".to_string()), Just("right".to_string())],
+            zoom_mode in prop_oneof![
+                Just("fit-width".to_string()),
+                Just("fit-height".to_string()),
+                Just("original".to_string())
+            ],
+            align_mode in prop_oneof![
+                Just("left".to_string()),
+                Just("center".to_string()),
+                Just("right".to_string())
+            ],
+            vertical_gap_mode in prop_oneof![
+                Just("wide".to_string()),
+                Just("compact".to_string()),
+                Just("none".to_string())
+            ],
+            treat_first_page_as_cover in any::<bool>(),
+        ) -> ViewerPreferences {
+            ViewerPreferences {
+                page_mode,
+                binding_direction,
+                zoom_mode,
+                align_mode,
+                vertical_gap_mode,
+                treat_first_page_as_cover,
+            }
+        }
+    }
+
     proptest! {
         #[test]
         fn normalized_viewer_preferences_always_use_supported_values(
@@ -1800,6 +1832,25 @@ mod tests {
             let normalized = normalize_page_offset_ratio(value);
 
             prop_assert_eq!(normalized, value);
+        }
+
+        #[test]
+        fn file_viewer_preferences_storage_round_trips_effective_settings(
+            global in normalized_viewer_preferences_strategy(),
+            effective in normalized_viewer_preferences_strategy(),
+        ) {
+            let stored = build_file_viewer_preferences_for_storage(&global, effective.clone());
+            let merged = merge_file_viewer_preferences(&global, &stored);
+
+            prop_assert_eq!(merged.page_mode, effective.page_mode);
+            prop_assert_eq!(merged.binding_direction, effective.binding_direction);
+            prop_assert_eq!(merged.zoom_mode, effective.zoom_mode);
+            prop_assert_eq!(merged.align_mode, effective.align_mode);
+            prop_assert_eq!(merged.vertical_gap_mode, effective.vertical_gap_mode);
+            prop_assert_eq!(
+                merged.treat_first_page_as_cover,
+                effective.treat_first_page_as_cover
+            );
         }
     }
 }

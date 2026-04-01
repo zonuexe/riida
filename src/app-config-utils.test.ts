@@ -7,10 +7,7 @@ import {
 
 describe("parseExcludedPatternsInput", () => {
   test("splits lines and trims blank entries", () => {
-    expect(parseExcludedPatternsInput("  *.bak \n\n prefix_*\n")).toEqual([
-      "*.bak",
-      "prefix_*",
-    ]);
+    expect(parseExcludedPatternsInput("  *.bak \n\n prefix_*\n")).toEqual(["*.bak", "prefix_*"]);
   });
 });
 
@@ -23,10 +20,7 @@ describe("addLibraryRoot", () => {
   });
 
   test("appends a new root", () => {
-    expect(addLibraryRoot(["~/Books"], "/tmp/library")).toEqual([
-      "~/Books",
-      "/tmp/library",
-    ]);
+    expect(addLibraryRoot(["~/Books"], "/tmp/library")).toEqual(["~/Books", "/tmp/library"]);
   });
 });
 

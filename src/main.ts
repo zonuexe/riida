@@ -6,10 +6,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { GlobalWorkerOptions, TextLayer, getDocument } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { mountNoteEditor, type NoteEditorHandle } from "./note-editor";
-import {
-  addLibraryRoot,
-  buildAppConfigDraft,
-} from "./app-config-utils";
+import { addLibraryRoot, buildAppConfigDraft } from "./app-config-utils";
 import {
   deriveDirectories,
   filterVisibleBooks,
@@ -811,11 +808,7 @@ async function saveAppSettingsFromForm() {
   try {
     const payload = await invoke<AppConfigPayload>("save_app_config", {
       input: {
-        ...buildAppConfigDraft(
-          libraryRoots,
-          excludedPatternsEl?.value ?? "",
-          pdfRendererEl?.value,
-        ),
+        ...buildAppConfigDraft(libraryRoots, excludedPatternsEl?.value ?? "", pdfRendererEl?.value),
       },
     });
 

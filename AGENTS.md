@@ -249,6 +249,10 @@ Current scope is intentionally narrow:
 
 This keeps adoption simple while still covering the main frontend code path.
 
+`npm run check:frontend` now ends with a lightweight bundle-size report from
+[scripts/report-bundle-size.mjs](/Users/megurine/repo/rust/riida/scripts/report-bundle-size.mjs)
+so large asset growth is visible in local runs and CI logs.
+
 ## Notes
 
 Notes use a floating Milkdown editor and persist to SQLite.

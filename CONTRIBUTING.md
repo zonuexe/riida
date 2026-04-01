@@ -78,6 +78,8 @@ When dependencies or bundled notices change, also run:
 npm run check:licenses
 ```
 
+Frontend checks also print a small bundle-size report after `npm run build` so large regressions are easier to notice during review.
+
 ## Project Structure
 
 - [src-tauri/src/lib.rs](/Users/megurine/repo/rust/riida/src-tauri/src/lib.rs): backend, config, SQLite, library scan/watch, thumbnails

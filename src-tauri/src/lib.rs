@@ -202,17 +202,33 @@ fn preferred_config_file(project_dirs: &ProjectDirs) -> PathBuf {
 }
 
 fn development_app_paths(project_root: &Path) -> AppPaths {
-    let legacy_project_dirs = ProjectDirs::from("com", "megurine", "riida");
     let data_dir = project_root.join("data");
     let cache_dir = project_root.join("cache");
     let mut legacy_config_files = Vec::new();
     let mut legacy_database_files = Vec::new();
     let mut legacy_thumbnail_roots = vec![project_root.join("data").join("thumbnails")];
 
-    if let Some(legacy_project_dirs) = legacy_project_dirs {
-        legacy_config_files.push(preferred_config_file(&legacy_project_dirs));
-        legacy_database_files.push(legacy_project_dirs.data_dir().join("app.db"));
-        legacy_thumbnail_roots.push(legacy_project_dirs.cache_dir().join("thumbnails"));
+    for legacy_project_dirs in [
+        ProjectDirs::from("com", "zonuexe", "riida"),
+        ProjectDirs::from("com", "megurine", "riida"),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        let legacy_config_file = preferred_config_file(&legacy_project_dirs);
+        if !legacy_config_files.contains(&legacy_config_file) {
+            legacy_config_files.push(legacy_config_file);
+        }
+
+        let legacy_database_file = legacy_project_dirs.data_dir().join("app.db");
+        if !legacy_database_files.contains(&legacy_database_file) {
+            legacy_database_files.push(legacy_database_file);
+        }
+
+        let legacy_thumbnail_root = legacy_project_dirs.cache_dir().join("thumbnails");
+        if !legacy_thumbnail_roots.contains(&legacy_thumbnail_root) {
+            legacy_thumbnail_roots.push(legacy_thumbnail_root);
+        }
     }
 
     AppPaths {
@@ -233,9 +249,8 @@ fn resolve_app_paths() -> Result<AppPaths, String> {
         return Ok(development_app_paths(&project_root));
     }
 
-    let project_dirs = ProjectDirs::from("com", "zonuexe", "riida")
+    let project_dirs = ProjectDirs::from("me", "zonu", "riida")
         .ok_or_else(|| "failed to resolve app directories".to_string())?;
-    let legacy_project_dirs = ProjectDirs::from("com", "megurine", "riida");
     let data_dir = project_dirs.data_dir().to_path_buf();
     let cache_dir = project_dirs.cache_dir().to_path_buf();
     let config_file = preferred_config_file(&project_dirs);
@@ -244,7 +259,13 @@ fn resolve_app_paths() -> Result<AppPaths, String> {
     let mut legacy_database_files = vec![project_root.join("data").join("app.db")];
     let mut legacy_thumbnail_roots = vec![project_root.join("data").join("thumbnails")];
 
-    if let Some(legacy_project_dirs) = legacy_project_dirs {
+    for legacy_project_dirs in [
+        ProjectDirs::from("com", "zonuexe", "riida"),
+        ProjectDirs::from("com", "megurine", "riida"),
+    ]
+    .into_iter()
+    .flatten()
+    {
         let legacy_config_file = preferred_config_file(&legacy_project_dirs);
         if !legacy_config_files.contains(&legacy_config_file) {
             legacy_config_files.push(legacy_config_file);

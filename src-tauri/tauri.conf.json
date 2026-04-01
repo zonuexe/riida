@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "riida",
   "version": "0.0.5",
-  "identifier": "com.zonuexe.riida",
+  "identifier": "me.zonu.riida",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",

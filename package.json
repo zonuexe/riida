@@ -13,6 +13,8 @@
     "lint:fix": "oxlint --vitest-plugin --fix src vite.config.ts",
     "fmt": "oxfmt --write src index.html vite.config.ts",
     "fmt:check": "oxfmt --check src index.html vite.config.ts",
+    "mutants:rust": "bash scripts/run-cargo-mutants.sh",
+    "mutants:rust:list": "bash scripts/run-cargo-mutants.sh --list",
     "build": "tsc && vite build",
     "test": "vitest run",
     "build:macos-local": "npm run tauri build && bash scripts/fix-macos-local-build.sh",

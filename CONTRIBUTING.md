@@ -43,6 +43,14 @@ npm test
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
+For deeper Rust test-quality audits, you can also run mutation testing locally:
+
+```bash
+cargo install cargo-mutants --locked
+npm run mutants:rust:list
+npm run mutants:rust
+```
+
 ## Project Structure
 
 - [src-tauri/src/lib.rs](/Users/megurine/repo/rust/riida/src-tauri/src/lib.rs): backend, config, SQLite, library scan/watch, thumbnails

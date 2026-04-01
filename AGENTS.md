@@ -181,10 +181,13 @@ Suggested local workflow:
 
 ```bash
 cargo install cargo-mutants --locked
-nix --extra-experimental-features 'nix-command flakes' develop --command cargo mutants --manifest-path src-tauri/Cargo.toml --test-tool cargo test
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run mutants:rust:list
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run mutants:rust
 ```
 
 Use mutation testing selectively on logic-heavy Rust code because it is much slower than the normal test suite.
+
+Project defaults live in [.cargo/mutants.toml](/Users/megurine/repo/rust/riida/.cargo/mutants.toml), and currently focus on [src-tauri/src/lib.rs](/Users/megurine/repo/rust/riida/src-tauri/src/lib.rs).
 
 ## Frontend Linting And Formatting
 

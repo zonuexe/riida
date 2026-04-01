@@ -1,0 +1,4 @@
+interface:
+  display_name: "riida Release Prep"
+  short_description: "Prepare and verify a riida release version update."
+  default_prompt: "Prepare the next riida release by bumping versions, updating the changelog, regenerating bundled license notices, and running verification commands."

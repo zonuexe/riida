@@ -20,6 +20,8 @@
             clippy
             nodejs_22
             pkg-config
+            python3
+            python3Packages.pyyaml
             rust-analyzer
             rustc
             rustfmt

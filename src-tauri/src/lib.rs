@@ -149,6 +149,7 @@ struct ThumbnailReadyEvent {
 #[serde(rename_all = "camelCase")]
 struct AppConfigPayload {
     config_path: String,
+    config_exists: bool,
     library_roots: Vec<String>,
     excluded_patterns: Vec<String>,
     pdf_renderer: String,
@@ -477,8 +478,10 @@ fn lock_config<'a>(
 }
 
 fn app_config_to_payload(config: &AppConfig) -> AppConfigPayload {
+    let config_path = config_file();
     AppConfigPayload {
-        config_path: config_file().to_string_lossy().into_owned(),
+        config_path: config_path.to_string_lossy().into_owned(),
+        config_exists: config_path.exists(),
         library_roots: config
             .library_roots
             .iter()

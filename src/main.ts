@@ -77,6 +77,7 @@ type ViewerState = {
 
 type AppConfigPayload = {
   configPath: string;
+  configExists: boolean;
   libraryRoots: string[];
   excludedPatterns: string[];
   pdfRenderer: "native" | "pdfjs";
@@ -828,6 +829,10 @@ async function loadThirdPartyLicenses() {
 
 async function loadAppConfig() {
   lastAppConfig = await invoke<AppConfigPayload>("load_app_config");
+  if (!lastAppConfig.configExists) {
+    viewerState.isAppSettingsOpen = true;
+    setAppSettingsStatus("Choose at least one library folder to get started.");
+  }
   syncAppSettingsUi();
 }
 
@@ -2204,6 +2209,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       const currentRoots = addLibraryRoot(lastAppConfig?.libraryRoots ?? [], collapsedSelection);
       lastAppConfig = {
         configPath: lastAppConfig?.configPath ?? "",
+        configExists: lastAppConfig?.configExists ?? false,
         libraryRoots: currentRoots,
         excludedPatterns: lastAppConfig?.excludedPatterns ?? [],
         pdfRenderer: lastAppConfig?.pdfRenderer ?? "native",

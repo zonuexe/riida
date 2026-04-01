@@ -12,6 +12,15 @@ import {
   formatFileSize,
   type DirectoryNode,
 } from "./library-utils";
+import {
+  buildNavigationUrl,
+  navigationStateSignature,
+} from "./navigation-utils";
+import {
+  clampReadingPositionOffsetRatio,
+  parseCachedReadingPosition,
+  readingPositionStorageKey,
+} from "./reading-position-utils";
 import licenseText from "../LICENSE?raw";
 import thirdPartyRustLicenseUrl from "../THIRD-PARTY-LICENSES-rust.md?url";
 import thirdPartyJsLicenseUrl from "../THIRD-PARTY-LICENSES-js.md?url";
@@ -198,10 +207,6 @@ let cachedThirdPartyRustText = "Loading Rust notices...";
 let cachedThirdPartyJsText = "Loading JavaScript notices...";
 const PDF_RENDER_RADIUS = 2;
 const PDF_KEEP_RADIUS = 3;
-
-function readingPositionStorageKey(filePath: string) {
-  return `riida:reading-position:${filePath}`;
-}
 
 async function collapseHomePath(path: string) {
   if (!cachedHomeDir) {
@@ -1213,33 +1218,6 @@ function currentNavigationState(): NavigationState {
   };
 }
 
-function navigationStateSignature(state: NavigationState) {
-  return JSON.stringify({
-    bookFilePath: state.bookFilePath,
-    activeDirectory: state.activeDirectory,
-    searchQuery: state.searchQuery,
-  });
-}
-
-function buildNavigationUrl(state: NavigationState): string {
-  const params = new URLSearchParams();
-
-  if (state.searchQuery) {
-    params.set("q", state.searchQuery);
-  }
-
-  if (state.activeDirectory) {
-    params.set("dir", state.activeDirectory);
-  }
-
-  if (state.bookFilePath) {
-    params.set("book", state.bookFilePath);
-  }
-
-  const query = params.toString();
-  return query ? `/?${query}` : "/";
-}
-
 function syncNavigationHistory(mode: "push" | "replace") {
   if (suppressHistoryUpdates) {
     return;
@@ -1428,25 +1406,7 @@ function cacheReadingPosition(position: ReadingPosition | null) {
 function loadCachedReadingPosition(filePath: string): ReadingPosition | null {
   try {
     const rawValue = window.localStorage.getItem(readingPositionStorageKey(filePath));
-    if (!rawValue) {
-      return null;
-    }
-
-    const parsed = JSON.parse(rawValue) as Partial<ReadingPosition>;
-    if (
-      typeof parsed.filePath !== "string" ||
-      typeof parsed.pageNumber !== "number" ||
-      typeof parsed.pageOffsetRatio !== "number"
-    ) {
-      return null;
-    }
-
-    return {
-      filePath: parsed.filePath,
-      pageNumber: parsed.pageNumber,
-      pageOffsetRatio: parsed.pageOffsetRatio,
-      updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : null,
-    };
+    return parseCachedReadingPosition(rawValue);
   } catch (error) {
     console.error("Failed to read cached reading position:", error);
     return null;
@@ -1535,7 +1495,7 @@ function restoreReadingPositionAttempt() {
 
   const stageRect = stageEl.getBoundingClientRect();
   const pageRect = pageEl.getBoundingClientRect();
-  const pageOffsetRatio = Math.min(Math.max(activeReadingPosition.pageOffsetRatio, 0), 1);
+  const pageOffsetRatio = clampReadingPositionOffsetRatio(activeReadingPosition.pageOffsetRatio);
   const pageTopInStage = stageEl.scrollTop + (pageRect.top - stageRect.top);
   const targetTop = pageTopInStage + pageEl.offsetHeight * pageOffsetRatio;
 

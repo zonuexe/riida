@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-04-01
+
+### Changed
+
+- Library exclusion rules now use a unified `excluded_patterns` glob list instead of separate directory-name and file-suffix settings.
+
 ## [0.0.3] - 2026-03-31
 
 ### Changed
@@ -48,7 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/zonuexe/riida/releases/tag/v0.0.4
 [0.0.3]: https://github.com/zonuexe/riida/releases/tag/v0.0.3
 [0.0.2]: https://github.com/zonuexe/riida/releases/tag/v0.0.2
 [0.0.1]: https://github.com/zonuexe/riida/releases/tag/v0.0.1

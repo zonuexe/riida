@@ -21,6 +21,10 @@ import {
   parseCachedReadingPosition,
   readingPositionStorageKey,
 } from "./reading-position-utils";
+import {
+  buildPageGroups,
+  getVisualPageOrder,
+} from "./viewer-layout-utils";
 import licenseText from "../LICENSE?raw";
 import thirdPartyRustLicenseUrl from "../THIRD-PARTY-LICENSES-rust.md?url";
 import thirdPartyJsLicenseUrl from "../THIRD-PARTY-LICENSES-js.md?url";
@@ -401,44 +405,6 @@ function renderPdfJsLinks(
     sectionEl.appendChild(linkEl);
     container.appendChild(sectionEl);
   }
-}
-
-function buildPageGroups(totalPages: number) {
-  const groups: number[][] = [];
-
-  if (viewerSettings.pageMode === "single") {
-    for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
-      groups.push([pageNumber]);
-    }
-    return groups;
-  }
-
-  let pageNumber = 1;
-
-  if (viewerSettings.treatFirstPageAsCover && totalPages > 0) {
-    groups.push([1]);
-    pageNumber = 2;
-  }
-
-  while (pageNumber <= totalPages) {
-    if (pageNumber === totalPages) {
-      groups.push([pageNumber]);
-      break;
-    }
-
-    groups.push([pageNumber, pageNumber + 1]);
-    pageNumber += 2;
-  }
-
-  return groups;
-}
-
-function getVisualPageOrder(group: number[]) {
-  if (group.length < 2 || viewerSettings.bindingDirection === "left") {
-    return group;
-  }
-
-  return [...group].reverse();
 }
 
 function releasePdfRenderPlan(plan: PdfRenderPlan) {
@@ -1601,7 +1567,7 @@ async function renderCurrentPage() {
       }
 
       pdfjsViewerEl.innerHTML = "";
-      const pageGroups = buildPageGroups(pdfDocument.numPages);
+      const pageGroups = buildPageGroups(pdfDocument.numPages, viewerSettings);
       const restoreTargetPage = activeReadingPosition?.pageNumber ?? null;
       const pageGap = viewerSettings.pageMode === "spread" ? 6 : 0;
       const viewerWidth = Math.max(pdfjsViewerEl.clientWidth, 720);
@@ -1611,7 +1577,7 @@ async function renderCurrentPage() {
       const renderPlans: PdfRenderPlan[] = [];
 
       for (const [groupIndex, group] of pageGroups.entries()) {
-        const visualOrder = getVisualPageOrder(group);
+        const visualOrder = getVisualPageOrder(group, viewerSettings);
         const spreadEl = document.createElement("section");
         spreadEl.className = "pdfjs-spread";
         spreadEl.dataset.pageCount = String(visualOrder.length);

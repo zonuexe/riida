@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-04-02
+
+### Changed
+
+- Initial app loading is now lighter because PDF.js, the PDF worker, and the note editor are loaded on demand, and the PDF.js runtime uses smaller minified bundles.
+
+### Fixed
+
+- The Settings modal once again opens closed by default and can be dismissed normally.
+- Reader layout sizing was adjusted so the main pane no longer leaves an extra gap at the bottom, while Home and search results remain scrollable.
+
 ## [0.0.4] - 2026-04-01
 
 ### Changed
@@ -54,7 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/zonuexe/riida/releases/tag/v0.0.5
 [0.0.4]: https://github.com/zonuexe/riida/releases/tag/v0.0.4
 [0.0.3]: https://github.com/zonuexe/riida/releases/tag/v0.0.3
 [0.0.2]: https://github.com/zonuexe/riida/releases/tag/v0.0.2

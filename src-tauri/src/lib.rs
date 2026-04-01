@@ -1630,7 +1630,8 @@ mod tests {
 
     #[test]
     fn database_file_requires_initialized_app_paths() {
-        let error = database_file().expect_err("database_file should fail without initialized paths");
+        let error =
+            database_file().expect_err("database_file should fail without initialized paths");
         assert!(error.contains("application paths have not been initialized"));
     }
 
@@ -1639,7 +1640,10 @@ mod tests {
         let root = project_root();
 
         assert!(root.exists());
-        assert_eq!(root.file_name().and_then(|name| name.to_str()), Some("riida"));
+        assert_eq!(
+            root.file_name().and_then(|name| name.to_str()),
+            Some("riida")
+        );
     }
 
     #[test]
@@ -1658,7 +1662,8 @@ mod tests {
         let nested_source = source.join("nested");
         fs::create_dir_all(&nested_source).expect("source tree should be created");
         fs::write(source.join("top.txt"), "top").expect("top file should be written");
-        fs::write(nested_source.join("child.txt"), "nested").expect("nested file should be written");
+        fs::write(nested_source.join("child.txt"), "nested")
+            .expect("nested file should be written");
 
         migrate_directory_contents(&source, &destination).expect("migration should succeed");
 
@@ -1685,8 +1690,11 @@ mod tests {
         fs::write(&paths.legacy_config_file, "pdf_renderer = \"pdfjs\"\n")
             .expect("legacy config should be written");
         fs::write(&paths.legacy_database_file, "db").expect("legacy database should be written");
-        fs::write(paths.legacy_thumbnail_root.join("nested").join("thumb.jpg"), "thumb")
-            .expect("legacy thumbnail should be written");
+        fs::write(
+            paths.legacy_thumbnail_root.join("nested").join("thumb.jpg"),
+            "thumb",
+        )
+        .expect("legacy thumbnail should be written");
 
         prepare_storage(&paths).expect("storage preparation should succeed");
 

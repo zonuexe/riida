@@ -89,9 +89,9 @@ struct AppPaths {
     database_file: PathBuf,
     cache_dir: PathBuf,
     thumbnail_root: PathBuf,
-    legacy_config_file: PathBuf,
-    legacy_database_file: PathBuf,
-    legacy_thumbnail_root: PathBuf,
+    legacy_config_files: Vec<PathBuf>,
+    legacy_database_files: Vec<PathBuf>,
+    legacy_thumbnail_roots: Vec<PathBuf>,
 }
 
 struct CompiledExcludePatterns {
@@ -189,18 +189,44 @@ fn thumbnail_root() -> PathBuf {
         .unwrap_or_else(|_| project_root().join("data").join("thumbnails"))
 }
 
-fn resolve_app_paths() -> Result<AppPaths, String> {
-    let project_dirs = ProjectDirs::from("com", "zonuexe", "riida")
-        .ok_or_else(|| "failed to resolve app directories".to_string())?;
-    let project_root = project_root();
-    let data_dir = project_dirs.data_dir().to_path_buf();
-    let cache_dir = project_dirs.cache_dir().to_path_buf();
-    let config_file = std::env::var_os("HOME")
+fn preferred_config_file(project_dirs: &ProjectDirs) -> PathBuf {
+    std::env::var_os("HOME")
         .map(PathBuf::from)
         .map(|home| home.join(".config"))
         .filter(|xdg_dir| xdg_dir.exists())
         .map(|xdg_dir| xdg_dir.join("riida").join(CONFIG_FILE))
-        .unwrap_or_else(|| project_dirs.config_dir().join(CONFIG_FILE));
+        .unwrap_or_else(|| project_dirs.config_dir().join(CONFIG_FILE))
+}
+
+fn resolve_app_paths() -> Result<AppPaths, String> {
+    let project_dirs = ProjectDirs::from("com", "zonuexe", "riida")
+        .ok_or_else(|| "failed to resolve app directories".to_string())?;
+    let legacy_project_dirs = ProjectDirs::from("com", "megurine", "riida");
+    let project_root = project_root();
+    let data_dir = project_dirs.data_dir().to_path_buf();
+    let cache_dir = project_dirs.cache_dir().to_path_buf();
+    let config_file = preferred_config_file(&project_dirs);
+
+    let mut legacy_config_files = vec![project_root.join(CONFIG_FILE)];
+    let mut legacy_database_files = vec![project_root.join("data").join("app.db")];
+    let mut legacy_thumbnail_roots = vec![project_root.join("data").join("thumbnails")];
+
+    if let Some(legacy_project_dirs) = legacy_project_dirs {
+        let legacy_config_file = preferred_config_file(&legacy_project_dirs);
+        if !legacy_config_files.contains(&legacy_config_file) {
+            legacy_config_files.push(legacy_config_file);
+        }
+
+        let legacy_database_file = legacy_project_dirs.data_dir().join("app.db");
+        if !legacy_database_files.contains(&legacy_database_file) {
+            legacy_database_files.push(legacy_database_file);
+        }
+
+        let legacy_thumbnail_root = legacy_project_dirs.cache_dir().join("thumbnails");
+        if !legacy_thumbnail_roots.contains(&legacy_thumbnail_root) {
+            legacy_thumbnail_roots.push(legacy_thumbnail_root);
+        }
+    }
 
     Ok(AppPaths {
         config_file,
@@ -208,9 +234,9 @@ fn resolve_app_paths() -> Result<AppPaths, String> {
         thumbnail_root: cache_dir.join("thumbnails"),
         data_dir,
         cache_dir,
-        legacy_config_file: project_root.join(CONFIG_FILE),
-        legacy_database_file: project_root.join("data").join("app.db"),
-        legacy_thumbnail_root: project_root.join("data").join("thumbnails"),
+        legacy_config_files,
+        legacy_database_files,
+        legacy_thumbnail_roots,
     })
 }
 
@@ -242,6 +268,18 @@ fn migrate_directory_contents(source: &Path, destination: &Path) -> Result<(), S
     Ok(())
 }
 
+fn migrate_first_existing_file(sources: &[PathBuf], destination: &Path) -> Result<(), String> {
+    if destination.exists() {
+        return Ok(());
+    }
+
+    if let Some(source) = sources.iter().find(|source| source.exists()) {
+        fs::copy(source, destination).map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
 fn prepare_storage(paths: &AppPaths) -> Result<(), String> {
     let config_dir = paths
         .config_file
@@ -252,17 +290,12 @@ fn prepare_storage(paths: &AppPaths) -> Result<(), String> {
     fs::create_dir_all(&paths.data_dir).map_err(|error| error.to_string())?;
     fs::create_dir_all(&paths.cache_dir).map_err(|error| error.to_string())?;
 
-    if !paths.config_file.exists() && paths.legacy_config_file.exists() {
-        fs::copy(&paths.legacy_config_file, &paths.config_file)
-            .map_err(|error| error.to_string())?;
-    }
+    migrate_first_existing_file(&paths.legacy_config_files, &paths.config_file)?;
+    migrate_first_existing_file(&paths.legacy_database_files, &paths.database_file)?;
 
-    if !paths.database_file.exists() && paths.legacy_database_file.exists() {
-        fs::copy(&paths.legacy_database_file, &paths.database_file)
-            .map_err(|error| error.to_string())?;
+    for legacy_thumbnail_root in &paths.legacy_thumbnail_roots {
+        migrate_directory_contents(legacy_thumbnail_root, &paths.thumbnail_root)?;
     }
-
-    migrate_directory_contents(&paths.legacy_thumbnail_root, &paths.thumbnail_root)?;
 
     Ok(())
 }
@@ -1482,9 +1515,9 @@ mod tests {
             database_file: root.join("data").join("app.db"),
             cache_dir: root.join("cache"),
             thumbnail_root: root.join("cache").join("thumbnails"),
-            legacy_config_file: root.join("legacy").join(CONFIG_FILE),
-            legacy_database_file: root.join("legacy").join("app.db"),
-            legacy_thumbnail_root: root.join("legacy").join("thumbnails"),
+            legacy_config_files: vec![root.join("legacy").join(CONFIG_FILE)],
+            legacy_database_files: vec![root.join("legacy").join("app.db")],
+            legacy_thumbnail_roots: vec![root.join("legacy").join("thumbnails")],
         }
     }
 
@@ -1684,14 +1717,17 @@ mod tests {
     fn prepare_storage_copies_legacy_files_only_when_targets_are_missing() {
         let temp_root = unique_temp_dir("prepare-storage");
         let paths = test_app_paths(&temp_root);
+        let legacy_thumbnail_root = paths.legacy_thumbnail_roots[0].clone();
+        let legacy_config_file = paths.legacy_config_files[0].clone();
+        let legacy_database_file = paths.legacy_database_files[0].clone();
 
-        fs::create_dir_all(paths.legacy_thumbnail_root.join("nested"))
+        fs::create_dir_all(legacy_thumbnail_root.join("nested"))
             .expect("legacy thumbnail dir should be created");
-        fs::write(&paths.legacy_config_file, "pdf_renderer = \"pdfjs\"\n")
+        fs::write(&legacy_config_file, "pdf_renderer = \"pdfjs\"\n")
             .expect("legacy config should be written");
-        fs::write(&paths.legacy_database_file, "db").expect("legacy database should be written");
+        fs::write(&legacy_database_file, "db").expect("legacy database should be written");
         fs::write(
-            paths.legacy_thumbnail_root.join("nested").join("thumb.jpg"),
+            legacy_thumbnail_root.join("nested").join("thumb.jpg"),
             "thumb",
         )
         .expect("legacy thumbnail should be written");
@@ -1718,6 +1754,51 @@ mod tests {
         assert_eq!(
             fs::read_to_string(&paths.config_file).expect("existing config should remain"),
             "pdf_renderer = \"native\"\n"
+        );
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn prepare_storage_migrates_from_old_app_namespace_paths() {
+        let temp_root = unique_temp_dir("prepare-storage-old-namespace");
+        let mut paths = test_app_paths(&temp_root);
+        let old_namespace_root = temp_root.join("old-namespace");
+        let old_config_file = old_namespace_root.join("config").join(CONFIG_FILE);
+        let old_database_file = old_namespace_root.join("data").join("app.db");
+        let old_thumbnail_root = old_namespace_root.join("cache").join("thumbnails");
+
+        paths.legacy_config_files = vec![old_config_file.clone()];
+        paths.legacy_database_files = vec![old_database_file.clone()];
+        paths.legacy_thumbnail_roots = vec![old_thumbnail_root.clone()];
+
+        fs::create_dir_all(old_config_file.parent().expect("config parent should exist"))
+            .expect("old namespace config dir should be created");
+        fs::create_dir_all(old_database_file.parent().expect("database parent should exist"))
+            .expect("old namespace data dir should be created");
+        fs::create_dir_all(old_thumbnail_root.join("nested"))
+            .expect("old namespace thumbnail dir should be created");
+        fs::write(&old_config_file, "pdf_renderer = \"pdfjs\"\n")
+            .expect("old namespace config should be written");
+        fs::write(&old_database_file, "db2")
+            .expect("old namespace database should be written");
+        fs::write(old_thumbnail_root.join("nested").join("thumb.jpg"), "thumb2")
+            .expect("old namespace thumbnail should be written");
+
+        prepare_storage(&paths).expect("storage preparation should succeed");
+
+        assert_eq!(
+            fs::read_to_string(&paths.config_file).expect("config should be copied"),
+            "pdf_renderer = \"pdfjs\"\n"
+        );
+        assert_eq!(
+            fs::read_to_string(&paths.database_file).expect("database should be copied"),
+            "db2"
+        );
+        assert_eq!(
+            fs::read_to_string(paths.thumbnail_root.join("nested").join("thumb.jpg"))
+                .expect("thumbnail should be migrated"),
+            "thumb2"
         );
 
         let _ = fs::remove_dir_all(temp_root);

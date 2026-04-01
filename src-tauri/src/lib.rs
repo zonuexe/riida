@@ -1852,5 +1852,23 @@ mod tests {
                 effective.treat_first_page_as_cover
             );
         }
+
+        #[test]
+        fn gui_config_normalization_produces_lowercase_forward_slash_patterns(
+            library_roots in prop::collection::vec(".*", 0..4),
+            excluded_patterns in prop::collection::vec(".*", 0..8),
+            pdf_renderer in ".*",
+        ) {
+            let normalized = normalize_gui_config_input(AppConfigInput {
+                library_roots,
+                excluded_patterns,
+                pdf_renderer,
+            });
+
+            for pattern in &normalized.excluded_patterns {
+                prop_assert_eq!(pattern, &pattern.to_lowercase());
+                prop_assert!(!pattern.contains('\\'));
+            }
+        }
     }
 }

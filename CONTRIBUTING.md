@@ -30,6 +30,12 @@ npm run tauri dev
 Run both checks before submitting changes.
 
 ```bash
+npm run check
+```
+
+Or run the individual checks when iterating on one area:
+
+```bash
 npm run rust:fmt:check
 npm run rust:lint
 npm run lint

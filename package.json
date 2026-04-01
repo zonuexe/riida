@@ -9,6 +9,7 @@
     "dev": "vite",
     "generate:third-party-licenses": "node scripts/generate-third-party-licenses.mjs",
     "check:licenses:npm": "license-checker --production --excludePrivatePackages --onlyAllow 'MIT;MIT OR Apache-2.0;Apache-2.0;Apache-2.0 OR MIT;(MPL-2.0 OR Apache-2.0);BSD-2-Clause;BSD-3-Clause;ISC'",
+    "check": "npm run rust:fmt:check && npm run rust:lint && npm run lint && npm run fmt:check && npm test && cargo test --manifest-path src-tauri/Cargo.toml && cargo check --manifest-path src-tauri/Cargo.toml && npm run build",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml",
     "rust:fmt:check": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "rust:lint": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",

@@ -3,9 +3,7 @@ import { getName, getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
-import { GlobalWorkerOptions, TextLayer, getDocument } from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
-import { mountNoteEditor, type NoteEditorHandle } from "./note-editor";
+import type { NoteEditorHandle } from "./note-editor";
 import { addLibraryRoot, buildAppConfigDraft } from "./app-config-utils";
 import {
   deriveDirectories,
@@ -31,7 +29,7 @@ import {
   applyViewerSettingsPayloadToState,
   switchViewerSettingsScopeInState,
 } from "./viewer-settings-utils";
-import licenseText from "../LICENSE?raw";
+import licenseTextUrl from "../LICENSE?url";
 import thirdPartyRustLicenseUrl from "../THIRD-PARTY-LICENSES-rust.md?url";
 import thirdPartyJsLicenseUrl from "../THIRD-PARTY-LICENSES-js.md?url";
 
@@ -162,6 +160,11 @@ type PdfRenderSession = {
   pendingFocusGroupIndex: number | null;
 };
 
+type PdfJsRuntime = {
+  TextLayer: typeof import("pdfjs-dist").TextLayer;
+  getDocument: typeof import("pdfjs-dist").getDocument;
+};
+
 const viewerState: ViewerState = {
   books: [],
   currentBook: null,
@@ -213,8 +216,11 @@ let cachedHomeDir: string | null = null;
 let cachedAppName = "riida";
 let cachedAppVersion = "0.0.4";
 const buildDate = __BUILD_DATE__;
+let cachedLicenseText = "Loading license text...";
 let cachedThirdPartyRustText = "Loading Rust notices...";
 let cachedThirdPartyJsText = "Loading JavaScript notices...";
+let pdfJsRuntimePromise: Promise<PdfJsRuntime> | null = null;
+let noteEditorModulePromise: Promise<typeof import("./note-editor")> | null = null;
 const PDF_RENDER_RADIUS = 2;
 const PDF_KEEP_RADIUS = 3;
 let lastViewportSize = {
@@ -246,7 +252,26 @@ async function collapseHomePath(path: string) {
   return path;
 }
 
-GlobalWorkerOptions.workerSrc = workerUrl;
+async function loadPdfJsRuntime() {
+  pdfJsRuntimePromise ??= Promise.all([
+    import("pdfjs-dist"),
+    import("pdfjs-dist/build/pdf.worker.mjs?url"),
+  ]).then(([runtime, workerModule]) => {
+    runtime.GlobalWorkerOptions.workerSrc = workerModule.default;
+
+    return {
+      TextLayer: runtime.TextLayer,
+      getDocument: runtime.getDocument,
+    };
+  });
+
+  return pdfJsRuntimePromise;
+}
+
+async function loadNoteEditorModule() {
+  noteEditorModulePromise ??= import("./note-editor");
+  return noteEditorModulePromise;
+}
 
 const noteState: NoteState = {
   isOpen: false,
@@ -445,6 +470,8 @@ function currentVisiblePdfGroupIndex(session: PdfRenderSession) {
 }
 
 async function renderPdfRenderPlan(session: PdfRenderSession, plan: PdfRenderPlan) {
+  const { TextLayer } = await loadPdfJsRuntime();
+
   for (const pageNumber of plan.visualOrder) {
     if (session.token !== pdfRenderToken) {
       return;
@@ -753,7 +780,7 @@ function syncAboutUi() {
   }
 
   if (licenseEl) {
-    licenseEl.textContent = licenseText.trim();
+    licenseEl.textContent = cachedLicenseText;
   }
 
   if (thirdPartyRustEl) {
@@ -767,10 +794,16 @@ function syncAboutUi() {
 
 async function loadThirdPartyLicenses() {
   try {
-    const [rustResponse, jsResponse] = await Promise.all([
+    const [licenseResponse, rustResponse, jsResponse] = await Promise.all([
+      fetch(licenseTextUrl),
       fetch(thirdPartyRustLicenseUrl),
       fetch(thirdPartyJsLicenseUrl),
     ]);
+    if (!licenseResponse.ok) {
+      throw new Error(
+        `Application license: ${licenseResponse.status} ${licenseResponse.statusText}`,
+      );
+    }
     if (!rustResponse.ok) {
       throw new Error(`Rust notices: ${rustResponse.status} ${rustResponse.statusText}`);
     }
@@ -778,10 +811,12 @@ async function loadThirdPartyLicenses() {
       throw new Error(`JavaScript notices: ${jsResponse.status} ${jsResponse.statusText}`);
     }
 
+    cachedLicenseText = (await licenseResponse.text()).trim();
     cachedThirdPartyRustText = (await rustResponse.text()).trim();
     cachedThirdPartyJsText = (await jsResponse.text()).trim();
   } catch (error) {
     const message = `Failed to load third-party notices: ${String(error)}`;
+    cachedLicenseText = message;
     cachedThirdPartyRustText = message;
     cachedThirdPartyJsText = message;
   }
@@ -1053,6 +1088,7 @@ async function loadNoteForCurrentBook() {
     noteState.savedContent = note.content;
     noteState.statusMessage = note.updatedAt ? "Saved" : "Notes are saved automatically.";
 
+    const { mountNoteEditor } = await loadNoteEditorModule();
     noteEditor = await mountNoteEditor({
       root: noteRootEl,
       initialMarkdown: note.content,
@@ -1567,6 +1603,7 @@ async function renderCurrentPage() {
     pdfjsViewerEl.appendChild(loadingEl);
 
     try {
+      const { getDocument } = await loadPdfJsRuntime();
       const documentTask = getDocument({
         url: sourceUrl,
         cMapUrl: "/pdfjs/cmaps/node_modules/pdfjs-dist/cmaps/",

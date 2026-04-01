@@ -22,6 +22,10 @@ import {
   readingPositionStorageKey,
 } from "./reading-position-utils";
 import {
+  clampNoteWindowPosition,
+  ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
+} from "./note-window-utils";
+import {
   buildPageGroups,
   getVisualPageOrder,
 } from "./viewer-layout-utils";
@@ -581,20 +585,21 @@ function schedulePdfRenderWindowUpdate(session: PdfRenderSession, focusGroupInde
 }
 
 function clampNoteWindow() {
-  const maxLeft = Math.max(12, window.innerWidth - noteState.width - 12);
-  const maxTop = Math.max(12, window.innerHeight - noteState.height - 12);
-
-  noteState.x = Math.min(Math.max(noteState.x ?? maxLeft, 12), maxLeft);
-  noteState.y = Math.min(Math.max(noteState.y ?? maxTop, 12), maxTop);
+  const nextState = clampNoteWindowPosition(noteState, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+  noteState.x = nextState.x;
+  noteState.y = nextState.y;
 }
 
 function ensureNoteWindowPlacement() {
-  if (noteState.x === null || noteState.y === null) {
-    noteState.x = Math.max(12, window.innerWidth - noteState.width - 24);
-    noteState.y = Math.max(12, window.innerHeight - noteState.height - 24);
-  }
-
-  clampNoteWindow();
+  const nextState = ensureNoteWindowPlacementForViewport(noteState, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+  noteState.x = nextState.x;
+  noteState.y = nextState.y;
 }
 
 function syncNoteUi() {

@@ -1296,6 +1296,27 @@ h1 {
   min-width: 104px;
 }
 
+.tag-editor-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-editor-suggestion {
+  border: 1px solid rgba(96, 70, 33, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.72);
+  padding: 6px 10px;
+  color: rgba(125, 78, 33, 0.92);
+  font: inherit;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.tag-editor-suggestion:hover {
+  background: rgba(255, 250, 240, 0.96);
+}
+
 @media (max-width: 640px) {
   .tag-editor-add-row {
     grid-template-columns: 1fr;

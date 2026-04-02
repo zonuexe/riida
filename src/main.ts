@@ -837,10 +837,7 @@ function syncAppSettingsUi() {
   renderLibraryRootsList();
 }
 
-function setTagEditorStatus(
-  message: string,
-  tone: "neutral" | "success" | "error" = "neutral",
-) {
+function setTagEditorStatus(message: string, tone: "neutral" | "success" | "error" = "neutral") {
   const statusEl = document.querySelector<HTMLElement>("#tag-editor-status");
   if (!statusEl) {
     return;
@@ -2161,8 +2158,7 @@ function renderSidebar(snapshot: LibrarySnapshot) {
 
   const futureHeader = document.createElement("p");
   futureHeader.className = "nav-section-title";
-  futureHeader.innerHTML =
-    '<i class="fa-solid fa-tags" aria-hidden="true"></i><span>Tags</span>';
+  futureHeader.innerHTML = '<i class="fa-solid fa-tags" aria-hidden="true"></i><span>Tags</span>';
   navEl.appendChild(futureHeader);
 
   for (const tag of deriveTags(snapshot.books)) {
@@ -2386,11 +2382,11 @@ function renderMain(snapshot: LibrarySnapshot) {
     books: snapshot.books,
   });
   const selectedDirectoryNode = viewerState.activeDirectory
-    ? directoryNodes.find((node) => node.path === viewerState.activeDirectory) ?? null
+    ? (directoryNodes.find((node) => node.path === viewerState.activeDirectory) ?? null)
     : null;
   const tagNodes = deriveTags(snapshot.books);
   const selectedTagNode = viewerState.activeTag
-    ? tagNodes.find((tag) => tag.id === viewerState.activeTag) ?? null
+    ? (tagNodes.find((tag) => tag.id === viewerState.activeTag) ?? null)
     : null;
   const displayedBookCount = viewerState.searchQuery
     ? books.length

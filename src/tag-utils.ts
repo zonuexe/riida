@@ -1,6 +1,4 @@
-export type TagValidationResult =
-  | { ok: true; value: string }
-  | { ok: false; message: string };
+export type TagValidationResult = { ok: true; value: string } | { ok: false; message: string };
 
 export function validateTagValue(value: string): TagValidationResult {
   const candidate = value.trim();

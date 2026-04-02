@@ -166,7 +166,14 @@ describe("deriveTags", () => {
     expect(tags).toEqual([
       { id: "fiction", label: "fiction", count: 1, depth: 0, explicit: true, hasChildren: false },
       { id: "language", label: "language", count: 1, depth: 0, explicit: false, hasChildren: true },
-      { id: "language/lean", label: "lean", count: 1, depth: 1, explicit: true, hasChildren: false },
+      {
+        id: "language/lean",
+        label: "lean",
+        count: 1,
+        depth: 1,
+        explicit: true,
+        hasChildren: false,
+      },
       { id: "magazine", label: "magazine", count: 1, depth: 0, explicit: false, hasChildren: true },
       { id: "magazine/web", label: "web", count: 1, depth: 1, explicit: true, hasChildren: false },
       { id: "tech", label: "tech", count: 2, depth: 0, explicit: true, hasChildren: false },

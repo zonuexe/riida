@@ -1040,7 +1040,9 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
 
     let mut tags_by_file_path: HashMap<String, Vec<String>> = HashMap::new();
     let tag_rows = tags_statement
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
         .map_err(|error| error.to_string())?;
 
     for row in tag_rows {

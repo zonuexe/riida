@@ -73,6 +73,7 @@ type ViewerState = {
   activeTagDirectOnly: boolean;
   searchQuery: string;
   expandedDirectories: Set<string>;
+  expandedTags: Set<string>;
   sidebarCollapsed: boolean;
   isAppSettingsOpen: boolean;
   isAboutOpen: boolean;
@@ -197,6 +198,7 @@ const viewerState: ViewerState = {
   activeTagDirectOnly: false,
   searchQuery: "",
   expandedDirectories: new Set<string>(),
+  expandedTags: new Set<string>(),
   sidebarCollapsed: false,
   isAppSettingsOpen: false,
   isAboutOpen: false,
@@ -435,6 +437,37 @@ function isNodeVisible(node: DirectoryNode) {
   }
 
   return node.parentPath ? viewerState.expandedDirectories.has(node.parentPath) : true;
+}
+
+function parentTagId(tagId: string) {
+  const separator = tagId.lastIndexOf("/");
+  return separator >= 0 ? tagId.slice(0, separator) : null;
+}
+
+function ensureExpandedTag(tagId: string | null) {
+  if (!tagId) {
+    return;
+  }
+
+  let currentTag = tagId;
+  while (true) {
+    const parent = parentTagId(currentTag);
+    if (!parent) {
+      break;
+    }
+
+    viewerState.expandedTags.add(parent);
+    currentTag = parent;
+  }
+}
+
+function isTagVisible(tagId: string, depth: number) {
+  if (depth === 0) {
+    return true;
+  }
+
+  const parent = parentTagId(tagId);
+  return parent ? viewerState.expandedTags.has(parent) : true;
 }
 
 function renderPdfJsLinks(
@@ -1562,6 +1595,9 @@ async function applyNavigationState(state: NavigationState) {
     ? (snapshot.books.find((book) => book.filePath === state.bookFilePath) ?? null)
     : null;
 
+  ensureExpandedPath(state.activeDirectory);
+  ensureExpandedTag(state.activeTag);
+
   if (nextBook) {
     await openBook(nextBook, { updateHistory: "none" });
     return;
@@ -2090,6 +2126,10 @@ function renderSidebar(snapshot: LibrarySnapshot) {
   navEl.appendChild(futureHeader);
 
   for (const tag of deriveTags(snapshot.books)) {
+    if (!isTagVisible(tag.id, tag.depth)) {
+      continue;
+    }
+
     const row = document.createElement("div");
     row.className = "nav-tree-row";
     row.style.setProperty("--depth", String(tag.depth));
@@ -2100,11 +2140,28 @@ function renderSidebar(snapshot: LibrarySnapshot) {
     const countEl = document.createElement("small");
     countEl.textContent = String(tag.count);
 
-    const spacer = document.createElement("span");
-    spacer.className = "nav-toggle-spacer";
-    spacer.setAttribute("aria-hidden", "true");
-
-    row.appendChild(spacer);
+    if (tag.hasChildren) {
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "nav-toggle";
+      toggle.textContent = viewerState.expandedTags.has(tag.id) ? "▾" : "▸";
+      toggle.setAttribute("aria-label", `Expand or collapse ${tag.id}`);
+      toggle.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (viewerState.expandedTags.has(tag.id)) {
+          viewerState.expandedTags.delete(tag.id);
+        } else {
+          viewerState.expandedTags.add(tag.id);
+        }
+        renderApp();
+      });
+      row.appendChild(toggle);
+    } else {
+      const spacer = document.createElement("span");
+      spacer.className = "nav-toggle-spacer";
+      spacer.setAttribute("aria-hidden", "true");
+      row.appendChild(spacer);
+    }
 
     const button = document.createElement("button");
     button.type = "button";
@@ -2125,6 +2182,7 @@ function renderSidebar(snapshot: LibrarySnapshot) {
         },
         "push",
       );
+      ensureExpandedTag(tag.id);
     });
     row.appendChild(button);
 

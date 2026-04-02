@@ -470,14 +470,12 @@ fn compile_exclude_patterns(config: &AppConfig) -> Result<CompiledExcludePattern
     Ok(CompiledExcludePatterns { matchers })
 }
 
-fn load_config() -> Result<AppConfig, String> {
-    let config_path = config_file();
-
+fn load_config_file(config_path: &Path) -> Result<AppConfig, String> {
     if !config_path.exists() {
         return Ok(default_config());
     }
 
-    let config_contents = fs::read_to_string(&config_path).map_err(|error| error.to_string())?;
+    let config_contents = fs::read_to_string(config_path).map_err(|error| error.to_string())?;
     let file_config: AppConfigFile =
         toml::from_str(&config_contents).map_err(|error| error.to_string())?;
     let defaults = default_config();
@@ -499,6 +497,10 @@ fn load_config() -> Result<AppConfig, String> {
             file_config.pdf_renderer.unwrap_or(defaults.pdf_renderer),
         ),
     })
+}
+
+fn load_config() -> Result<AppConfig, String> {
+    load_config_file(&config_file())
 }
 
 fn lock_config<'a>(
@@ -1989,14 +1991,14 @@ mod tests {
     }
 
     #[test]
-    fn load_config_reads_and_normalizes_existing_config_file() {
-        let config_path = project_root().join(CONFIG_FILE);
+    fn load_config_file_reads_and_normalizes_existing_config_file() {
+        let config_path = project_root().join("riida.toml.example");
         let config_contents =
-            fs::read_to_string(&config_path).expect("repo config file should be readable");
+            fs::read_to_string(&config_path).expect("example config file should be readable");
         let file_config: AppConfigFile =
-            toml::from_str(&config_contents).expect("repo config file should parse");
+            toml::from_str(&config_contents).expect("example config file should parse");
         let expected = normalize_config_input(file_config);
-        let loaded = load_config().expect("load_config should succeed");
+        let loaded = load_config_file(&config_path).expect("load_config_file should succeed");
 
         assert_eq!(loaded.library_roots, expected.library_roots);
         assert_eq!(loaded.excluded_patterns, expected.excluded_patterns);

@@ -1,0 +1,2 @@
+# Vendored third-party assets (oxfmt reads this file by default)
+src/vendor

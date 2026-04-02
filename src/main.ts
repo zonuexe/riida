@@ -2194,9 +2194,22 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
       tagsEl.hidden = true;
     } else {
       for (const tag of book.tags) {
-        const tagEl = document.createElement("span");
+        const tagEl = document.createElement("button");
+        tagEl.type = "button";
         tagEl.className = "book-tag";
-        tagEl.textContent = tag;
+        tagEl.innerHTML = `<i class="fa-solid fa-tag" aria-hidden="true"></i><span>${tag}</span>`;
+        tagEl.addEventListener("click", (event) => {
+          event.stopPropagation();
+          void navigateToState(
+            {
+              bookFilePath: null,
+              activeDirectory: null,
+              activeTag: tag,
+              searchQuery: viewerState.searchQuery,
+            },
+            "push",
+          );
+        });
         tagsEl.appendChild(tagEl);
       }
     }
@@ -2285,9 +2298,21 @@ function renderMain(snapshot: LibrarySnapshot) {
     const tags = viewerState.currentBook?.tags ?? [];
     viewerTagsEl.hidden = tags.length === 0;
     for (const tag of tags) {
-      const tagEl = document.createElement("span");
+      const tagEl = document.createElement("button");
+      tagEl.type = "button";
       tagEl.className = "book-tag";
-      tagEl.textContent = tag;
+      tagEl.innerHTML = `<i class="fa-solid fa-tag" aria-hidden="true"></i><span>${tag}</span>`;
+      tagEl.addEventListener("click", () => {
+        void navigateToState(
+          {
+            bookFilePath: null,
+            activeDirectory: null,
+            activeTag: tag,
+            searchQuery: viewerState.searchQuery,
+          },
+          "push",
+        );
+      });
       viewerTagsEl.appendChild(tagEl);
     }
   }

@@ -1142,7 +1142,7 @@ h1 {
 .book-thumb {
   width: 72px;
   height: 102px;
-  border-radius: 8px;
+  border-radius: 4px;
   object-fit: cover;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(235, 225, 201, 0.9));
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
@@ -1165,19 +1165,28 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  flex: 1;
+  min-width: 0;
 }
 
 .book-tag {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 24px;
-  padding: 2px 10px;
-  border-radius: 999px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  border: 0;
   background: rgba(125, 78, 33, 0.12);
   color: rgba(31, 27, 22, 0.82);
-  font-size: 0.76rem;
+  font-size: 0.72rem;
+  font: inherit;
   line-height: 1.2;
+  cursor: pointer;
+}
+
+.book-tag .fa-tag {
+  font-size: 0.7rem;
 }
 
 .book-tag-remove {
@@ -1197,6 +1206,9 @@ h1 {
   font: inherit;
   font-size: 0.8rem;
   white-space: nowrap;
+  margin-left: auto;
+  align-self: center;
+  text-align: right;
 }
 
 .book-item strong {

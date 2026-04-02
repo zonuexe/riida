@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-04-03
+
+### Added
+
+- Books can now have editable tags, including hierarchical tags, partial autocomplete while typing, and tag-based filtering from the sidebar and book list.
+
+### Changed
+
+- Tag browsing is more flexible: tag trees can be expanded and collapsed, direct-child filtering is available where it matters, and displayed counts now stay aligned with the active filter.
+- Reader navigation and overlay controls were refined so back/forward actions and in-view tools feel easier to reach while reading.
+
+### Fixed
+
+- Tag entry now handles IME composition more safely, avoiding accidental confirmation while composing text.
+
 ## [0.0.7] - 2026-04-02
 
 ### Changed
@@ -84,7 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.0.7...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/zonuexe/riida/releases/tag/v0.1.0
 [0.0.7]: https://github.com/zonuexe/riida/releases/tag/v0.0.7
 [0.0.6]: https://github.com/zonuexe/riida/releases/tag/v0.0.6
 [0.0.5]: https://github.com/zonuexe/riida/releases/tag/v0.0.5

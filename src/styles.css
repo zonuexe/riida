@@ -231,6 +231,11 @@ h1 {
   position: fixed;
   inset: 0;
   z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  box-sizing: border-box;
+  overflow: auto;
 }
 
 .app-settings-backdrop {
@@ -241,12 +246,9 @@ h1 {
 }
 
 .app-settings-dialog {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: min(620px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
-  transform: translate(-50%, -50%);
+  position: relative;
+  width: min(620px, 100%);
+  max-height: 100%;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   border: 1px solid rgba(96, 70, 33, 0.16);
@@ -297,6 +299,7 @@ h1 {
   padding: 20px 24px;
   display: grid;
   gap: 16px;
+  min-height: 0;
 }
 
 .app-settings-field {
@@ -836,10 +839,13 @@ h1 {
   top: 56px;
   right: 14px;
   z-index: 6;
-  width: 240px;
+  width: min(240px, calc(100% - 28px));
+  max-height: calc(100% - 70px);
   display: grid;
   gap: 12px;
   padding: 12px 14px 14px;
+  box-sizing: border-box;
+  overflow-y: auto;
   border: 1px solid rgba(96, 70, 33, 0.16);
   border-radius: 18px;
   background: rgba(255, 250, 240, 0.96);

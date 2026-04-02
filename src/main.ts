@@ -1043,6 +1043,7 @@ async function saveAppSettingsFromForm() {
 function syncViewerSettingsUi() {
   const settingsToggleEl = document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
   const settingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
+  const tagsOpenEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
   const scopeGlobalEl = document.querySelector<HTMLButtonElement>("#viewer-settings-scope-global");
   const scopeFileEl = document.querySelector<HTMLButtonElement>("#viewer-settings-scope-file");
   const pageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
@@ -1058,6 +1059,10 @@ function syncViewerSettingsUi() {
   if (settingsToggleEl) {
     settingsToggleEl.hidden = !isPdfJs;
     settingsToggleEl.setAttribute("aria-expanded", String(viewerSettings.isSettingsOpen));
+  }
+
+  if (tagsOpenEl) {
+    tagsOpenEl.hidden = !isPdfJs || !viewerSettings.isSettingsOpen;
   }
 
   if (settingsPanelEl) {
@@ -2274,7 +2279,6 @@ function renderMain(snapshot: LibrarySnapshot) {
   const searchInput = document.querySelector<HTMLInputElement>("#library-search");
   const homeCountEl = document.querySelector<HTMLElement>("#indexed-count");
   const viewerOverlayControlsEl = document.querySelector<HTMLElement>("#viewer-overlay-controls");
-  const viewerTagsOpenEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
 
   const books = visibleBooks(snapshot);
 
@@ -2293,9 +2297,6 @@ function renderMain(snapshot: LibrarySnapshot) {
     searchInput.value = viewerState.searchQuery;
   }
 
-  if (viewerTagsOpenEl) {
-    viewerTagsOpenEl.hidden = !viewerState.currentBook;
-  }
   if (viewerOverlayControlsEl) {
     viewerOverlayControlsEl.hidden = !viewerState.currentBook;
   }

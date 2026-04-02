@@ -17,6 +17,7 @@ import {
 } from "./library-utils";
 import { buildNavigationUrl, navigationStateSignature } from "./navigation-utils";
 import { isNavigationBackShortcut, isNavigationForwardShortcut } from "./navigation-shortcuts";
+import { suggestTagCompletions } from "./tag-suggestions";
 import { validateTagValue } from "./tag-utils";
 import {
   clampReadingPositionOffsetRatio,
@@ -860,6 +861,7 @@ function syncTagEditorUi() {
   const bookEl = document.querySelector<HTMLElement>("#tag-editor-book");
   const listEl = document.querySelector<HTMLElement>("#tag-editor-list");
   const inputEl = document.querySelector<HTMLInputElement>("#tag-editor-input");
+  const suggestionsEl = document.querySelector<HTMLElement>("#tag-editor-suggestions");
 
   if (modalEl) {
     modalEl.hidden = !tagEditorState.isOpen;
@@ -871,6 +873,31 @@ function syncTagEditorUi() {
 
   if (inputEl) {
     inputEl.value = tagEditorState.input;
+  }
+
+  if (suggestionsEl) {
+    suggestionsEl.innerHTML = "";
+    const explicitTags = deriveTags(lastSnapshot?.books ?? viewerState.books)
+      .filter((tag) => tag.explicit)
+      .map((tag) => tag.id);
+    const suggestions = suggestTagCompletions(
+      explicitTags,
+      tagEditorState.input,
+      tagEditorState.tags,
+    );
+    suggestionsEl.hidden = suggestions.length === 0;
+
+    for (const tag of suggestions) {
+      const suggestionEl = document.createElement("button");
+      suggestionEl.type = "button";
+      suggestionEl.className = "tag-editor-suggestion";
+      suggestionEl.textContent = tag;
+      suggestionEl.addEventListener("click", () => {
+        tagEditorState.input = tag;
+        addTagFromEditorInput();
+      });
+      suggestionsEl.appendChild(suggestionEl);
+    }
   }
 
   if (!listEl) {
@@ -2354,9 +2381,26 @@ function renderMain(snapshot: LibrarySnapshot) {
   const viewerOverlayControlsEl = document.querySelector<HTMLElement>("#viewer-overlay-controls");
 
   const books = visibleBooks(snapshot);
-  const selectedTagNode = viewerState.activeTag
-    ? deriveTags(snapshot.books).find((tag) => tag.id === viewerState.activeTag) ?? null
+  const directoryNodes = deriveDirectories({
+    libraryRoots: snapshot.libraryRoots,
+    books: snapshot.books,
+  });
+  const selectedDirectoryNode = viewerState.activeDirectory
+    ? directoryNodes.find((node) => node.path === viewerState.activeDirectory) ?? null
     : null;
+  const tagNodes = deriveTags(snapshot.books);
+  const selectedTagNode = viewerState.activeTag
+    ? tagNodes.find((tag) => tag.id === viewerState.activeTag) ?? null
+    : null;
+  const displayedBookCount = viewerState.searchQuery
+    ? books.length
+    : viewerState.activeTag
+      ? viewerState.activeTagDirectOnly
+        ? books.length
+        : (selectedTagNode?.count ?? books.length)
+      : viewerState.activeDirectory
+        ? (selectedDirectoryNode?.count ?? books.length)
+        : snapshot.indexedCount;
 
   appShellEl?.classList.toggle("sidebar-collapsed", viewerState.sidebarCollapsed);
   if (sidebarToggleEl) {
@@ -2390,7 +2434,7 @@ function renderMain(snapshot: LibrarySnapshot) {
   }
 
   if (homeCountEl) {
-    homeCountEl.textContent = String(snapshot.indexedCount);
+    homeCountEl.textContent = String(displayedBookCount);
   }
 
   if (viewerState.currentBook) {
@@ -2643,6 +2687,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
   tagEditorInputEl?.addEventListener("input", () => {
     tagEditorState.input = tagEditorInputEl.value;
+    syncTagEditorUi();
   });
   tagEditorInputEl?.addEventListener("compositionstart", () => {
     isTagEditorComposing = true;

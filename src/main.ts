@@ -17,6 +17,7 @@ import {
 } from "./library-utils";
 import { buildNavigationUrl, navigationStateSignature } from "./navigation-utils";
 import { isNavigationBackShortcut, isNavigationForwardShortcut } from "./navigation-shortcuts";
+import { validateTagValue } from "./tag-utils";
 import {
   clampReadingPositionOffsetRatio,
   parseCachedReadingPosition,
@@ -944,16 +945,20 @@ function closeTagEditor() {
 
 function addTagFromEditorInput() {
   const inputEl = document.querySelector<HTMLInputElement>("#tag-editor-input");
-  const candidate = inputEl?.value.trim() ?? tagEditorState.input.trim();
-  if (!candidate) {
+  const rawValue = inputEl?.value ?? tagEditorState.input;
+  const result = validateTagValue(rawValue);
+  if (!result.ok) {
+    setTagEditorStatus(result.message, "error");
     return;
   }
+  const candidate = result.value;
 
   if (!tagEditorState.tags.includes(candidate)) {
     tagEditorState.tags = [...tagEditorState.tags, candidate];
   }
 
   tagEditorState.input = "";
+  setTagEditorStatus("");
   if (inputEl) {
     inputEl.value = "";
   }
@@ -963,6 +968,14 @@ function addTagFromEditorInput() {
 async function saveTagEditorChanges() {
   if (!tagEditorState.filePath) {
     return;
+  }
+
+  for (const tag of tagEditorState.tags) {
+    const result = validateTagValue(tag);
+    if (!result.ok) {
+      setTagEditorStatus(result.message, "error");
+      return;
+    }
   }
 
   try {

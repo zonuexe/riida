@@ -243,6 +243,7 @@ const buildDate = __BUILD_DATE__;
 let cachedLicenseText = "Loading license text...";
 let cachedThirdPartyRustText = "Loading Rust notices...";
 let cachedThirdPartyJsText = "Loading JavaScript notices...";
+let isTagEditorComposing = false;
 let pdfJsRuntimePromise: Promise<PdfJsRuntime> | null = null;
 let noteEditorModulePromise: Promise<typeof import("./note-editor")> | null = null;
 const tagEditorState: TagEditorState = {
@@ -2527,8 +2528,19 @@ window.addEventListener("DOMContentLoaded", async () => {
   tagEditorInputEl?.addEventListener("input", () => {
     tagEditorState.input = tagEditorInputEl.value;
   });
+  tagEditorInputEl?.addEventListener("compositionstart", () => {
+    isTagEditorComposing = true;
+  });
+  tagEditorInputEl?.addEventListener("compositionend", () => {
+    isTagEditorComposing = false;
+  });
   tagEditorInputEl?.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
+    if (
+      event.key === "Enter" &&
+      !event.isComposing &&
+      !isTagEditorComposing &&
+      event.keyCode !== 229
+    ) {
       event.preventDefault();
       addTagFromEditorInput();
     }

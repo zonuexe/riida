@@ -141,6 +141,20 @@ The frontend now has focused Vitest coverage for:
 
 Prefer adding tests in these helper modules when changing logic that can be expressed without DOM rendering.
 
+## Frontend Input And IME Notes
+
+Text-entry flows must account for IME composition.
+
+- Do not treat `Enter` in `keydown` as a confirmed submit action while composition is active.
+- Prefer guarding submit shortcuts with both `event.isComposing` and a local composition-state flag from `compositionstart` / `compositionend`.
+- For Enter handling in text inputs, also treat `keyCode === 229` as IME-related and avoid submitting in that case.
+
+Re-check these behaviors manually when changing text-entry UI such as:
+
+- tag editing
+- search fields with keyboard shortcuts
+- future inline editors or rename flows
+
 ## SQLite Notes
 
 The backend currently stores at least:

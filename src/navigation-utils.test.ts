@@ -7,12 +7,14 @@ describe("navigationStateSignature", () => {
       historyIndex: 0,
       bookFilePath: "/Books/book.pdf",
       activeDirectory: "/Books",
+      activeTag: "tech",
       searchQuery: "rust",
     });
     const second = navigationStateSignature({
       historyIndex: 8,
       bookFilePath: "/Books/book.pdf",
       activeDirectory: "/Books",
+      activeTag: "tech",
       searchQuery: "rust",
     });
 
@@ -27,6 +29,7 @@ describe("buildNavigationUrl", () => {
         historyIndex: 0,
         bookFilePath: null,
         activeDirectory: null,
+        activeTag: null,
         searchQuery: "",
       }),
     ).toBe("/");
@@ -38,8 +41,11 @@ describe("buildNavigationUrl", () => {
         historyIndex: 3,
         bookFilePath: "/Books/Tech/Rust Book.pdf",
         activeDirectory: "/Books/Tech",
+        activeTag: "tech",
         searchQuery: "rust patterns",
       }),
-    ).toBe("/?q=rust+patterns&dir=%2FBooks%2FTech&book=%2FBooks%2FTech%2FRust+Book.pdf");
+    ).toBe(
+      "/?q=rust+patterns&dir=%2FBooks%2FTech&tag=tech&book=%2FBooks%2FTech%2FRust+Book.pdf",
+    );
   });
 });

@@ -3,10 +3,13 @@ import { getName, getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
+import "./vendor/fontawesome/css/fontawesome.min.css";
+import "./vendor/fontawesome/css/solid.min.css";
 import type { NoteEditorHandle } from "./note-editor";
 import { addLibraryRoot, buildAppConfigDraft } from "./app-config-utils";
 import {
   deriveDirectories,
+  deriveTags,
   filterVisibleBooks,
   formatBookLocation,
   formatFileSize,
@@ -66,6 +69,7 @@ type ViewerState = {
   books: BookSummary[];
   currentBook: BookSummary | null;
   activeDirectory: string | null;
+  activeTag: string | null;
   searchQuery: string;
   expandedDirectories: Set<string>;
   sidebarCollapsed: boolean;
@@ -112,6 +116,7 @@ type NavigationState = {
   historyIndex: number;
   bookFilePath: string | null;
   activeDirectory: string | null;
+  activeTag: string | null;
   searchQuery: string;
 };
 
@@ -186,6 +191,7 @@ const viewerState: ViewerState = {
   books: [],
   currentBook: null,
   activeDirectory: null,
+  activeTag: null,
   searchQuery: "",
   expandedDirectories: new Set<string>(),
   sidebarCollapsed: false,
@@ -1390,11 +1396,16 @@ function endNoteInteraction() {
 }
 
 function visibleBooks(snapshot: LibrarySnapshot) {
-  return filterVisibleBooks(snapshot.books, viewerState.activeDirectory, viewerState.searchQuery);
+  return filterVisibleBooks(
+    snapshot.books,
+    viewerState.activeDirectory,
+    viewerState.activeTag,
+    viewerState.searchQuery,
+  );
 }
 
 function describeEmptyLibraryState(snapshot: LibrarySnapshot, books: BookSummary[]) {
-  if (viewerState.searchQuery || viewerState.activeDirectory) {
+  if (viewerState.searchQuery || viewerState.activeDirectory || viewerState.activeTag) {
     return {
       message: "No matching PDFs.",
       detail: null as string | null,
@@ -1446,6 +1457,7 @@ function currentNavigationState(): NavigationState {
     historyIndex: navigationHistoryIndex,
     bookFilePath: viewerState.currentBook?.filePath ?? null,
     activeDirectory: viewerState.activeDirectory,
+    activeTag: viewerState.activeTag,
     searchQuery: viewerState.searchQuery,
   };
 }
@@ -1532,6 +1544,7 @@ async function applyNavigationState(state: NavigationState) {
 
   viewerState.searchQuery = state.searchQuery;
   viewerState.activeDirectory = state.activeDirectory;
+  viewerState.activeTag = state.activeTag;
 
   const nextBook = state.bookFilePath
     ? (snapshot.books.find((book) => book.filePath === state.bookFilePath) ?? null)
@@ -1992,16 +2005,22 @@ function renderSidebar(snapshot: LibrarySnapshot) {
   const homeButton = document.createElement("button");
   homeButton.type = "button";
   homeButton.className = "nav-link";
-  homeButton.textContent = "Home";
+  const homeLabelEl = document.createElement("span");
+  homeLabelEl.className = "nav-link-label";
+  homeLabelEl.innerHTML = '<i class="fa-solid fa-house" aria-hidden="true"></i><span>Home</span>';
+  homeButton.appendChild(homeLabelEl);
   homeButton.classList.toggle(
     "is-active",
-    viewerState.currentBook === null && viewerState.activeDirectory === null,
+    viewerState.currentBook === null &&
+      viewerState.activeDirectory === null &&
+      viewerState.activeTag === null,
   );
   homeButton.addEventListener("click", () => {
     void navigateToState(
       {
         bookFilePath: null,
         activeDirectory: null,
+        activeTag: null,
         searchQuery: viewerState.searchQuery,
       },
       "push",
@@ -2011,7 +2030,8 @@ function renderSidebar(snapshot: LibrarySnapshot) {
 
   const directoryHeader = document.createElement("p");
   directoryHeader.className = "nav-section-title";
-  directoryHeader.textContent = "Directories";
+  directoryHeader.innerHTML =
+    '<i class="fa-solid fa-folder" aria-hidden="true"></i><span>Directories</span>';
   navEl.appendChild(directoryHeader);
 
   for (const node of deriveDirectories(snapshot)) {
@@ -2041,6 +2061,7 @@ function renderSidebar(snapshot: LibrarySnapshot) {
         {
           bookFilePath: null,
           activeDirectory: node.path,
+          activeTag: null,
           searchQuery: viewerState.searchQuery,
         },
         "push",
@@ -2077,13 +2098,37 @@ function renderSidebar(snapshot: LibrarySnapshot) {
 
   const futureHeader = document.createElement("p");
   futureHeader.className = "nav-section-title";
-  futureHeader.textContent = "Later";
+  futureHeader.innerHTML =
+    '<i class="fa-solid fa-tags" aria-hidden="true"></i><span>Tags</span>';
   navEl.appendChild(futureHeader);
 
-  const futureTag = document.createElement("div");
-  futureTag.className = "nav-placeholder";
-  futureTag.textContent = "Tags";
-  navEl.appendChild(futureTag);
+  for (const tag of deriveTags(snapshot.books)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "nav-link nav-tree-link";
+    button.classList.toggle("is-active", viewerState.activeTag === tag.id);
+
+    const labelEl = document.createElement("span");
+    labelEl.textContent = tag.label;
+
+    const countEl = document.createElement("small");
+    countEl.textContent = String(tag.count);
+
+    button.appendChild(labelEl);
+    button.appendChild(countEl);
+    button.addEventListener("click", () => {
+      void navigateToState(
+        {
+          bookFilePath: null,
+          activeDirectory: null,
+          activeTag: tag.id,
+          searchQuery: viewerState.searchQuery,
+        },
+        "push",
+      );
+    });
+    navEl.appendChild(button);
+  }
 }
 
 function renderBookList(books: BookSummary[], container: HTMLElement) {
@@ -2179,6 +2224,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
         {
           bookFilePath: book.filePath,
           activeDirectory: viewerState.activeDirectory,
+          activeTag: viewerState.activeTag,
           searchQuery: viewerState.searchQuery,
         },
         "push",
@@ -2191,6 +2237,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
           {
             bookFilePath: book.filePath,
             activeDirectory: viewerState.activeDirectory,
+            activeTag: viewerState.activeTag,
             searchQuery: viewerState.searchQuery,
           },
           "push",
@@ -2347,6 +2394,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       {
         bookFilePath: null,
         activeDirectory: null,
+        activeTag: null,
         searchQuery: searchInput.value.trim(),
       },
       "replace",
@@ -2755,6 +2803,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       historyIndex: 0,
       bookFilePath: null,
       activeDirectory: null,
+      activeTag: null,
       searchQuery: "",
     };
 
@@ -2785,6 +2834,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         historyIndex: 0,
         bookFilePath: params.get("book"),
         activeDirectory: params.get("dir"),
+        activeTag: params.get("tag"),
         searchQuery: params.get("q") ?? "",
       };
 

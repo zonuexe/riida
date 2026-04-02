@@ -70,6 +70,8 @@ This project is licensed under the [Mozilla Public License 2.0](https://www.mozi
 
 Licenses and notice texts for bundled Rust and JavaScript dependencies are collected in [`THIRD-PARTY-LICENSES-rust.md`](THIRD-PARTY-LICENSES-rust.md) and [`THIRD-PARTY-LICENSES-js.md`](THIRD-PARTY-LICENSES-js.md).
 
+Vendored third-party assets are kept with their own license text in the repository when needed. For example, the bundled Font Awesome files include [their license text](src/vendor/fontawesome/LICENSE.txt).
+
 > This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of the MPL was not distributed with this file, You can obtain one at <https://mozilla.org/MPL/2.0/>.
 
 Copyright belongs to the contributors to this repository unless otherwise noted.

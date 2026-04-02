@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveDirectories,
+  deriveTags,
   filterVisibleBooks,
   formatBookLocation,
   formatFileSize,
@@ -39,27 +40,36 @@ describe("filterVisibleBooks", () => {
     {
       fileName: "WEB+DB-PRESS-Vol.131.pdf",
       filePath: "/Books/Tech/WEB+DB-PRESS-Vol.131.pdf",
+      tags: ["magazine", "tech"],
     },
     {
       fileName: "Rust Book.pdf",
       filePath: "/Books/Tech/Rust Book.pdf",
+      tags: ["tech"],
     },
     {
       fileName: "Novel.pdf",
       filePath: "/Books/Fiction/Novel.pdf",
+      tags: ["fiction"],
     },
   ];
 
   it("matches normalized search text against file name and path", () => {
-    const results = filterVisibleBooks(books, null, "WEB+DB PRESS");
+    const results = filterVisibleBooks(books, null, null, "WEB+DB PRESS");
 
     expect(results).toEqual([books[0]]);
   });
 
   it("applies directory filtering before search matching", () => {
-    const results = filterVisibleBooks(books, "/Books/Tech", "rust");
+    const results = filterVisibleBooks(books, "/Books/Tech", null, "rust");
 
     expect(results).toEqual([books[1]]);
+  });
+
+  it("filters by active tag", () => {
+    const results = filterVisibleBooks(books, null, "tech", "");
+
+    expect(results).toEqual([books[0], books[1]]);
   });
 });
 
@@ -116,5 +126,22 @@ describe("deriveDirectories", () => {
         }),
       ]),
     );
+  });
+});
+
+describe("deriveTags", () => {
+  it("counts tags across books", () => {
+    const tags = deriveTags([
+      { tags: ["tech", "magazine"] },
+      { tags: ["tech"] },
+      { tags: ["fiction"] },
+      { tags: [] },
+    ]);
+
+    expect(tags).toEqual([
+      { id: "fiction", label: "fiction", count: 1 },
+      { id: "magazine", label: "magazine", count: 1 },
+      { id: "tech", label: "tech", count: 2 },
+    ]);
   });
 });

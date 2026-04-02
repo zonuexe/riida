@@ -146,6 +146,7 @@ Prefer adding tests in these helper modules when changing logic that can be expr
 The backend currently stores at least:
 
 - indexed books
+- book tags
 - notes
 - viewer preferences
 - reading positions
@@ -153,6 +154,12 @@ The backend currently stores at least:
 Schema setup lives in the startup `CREATE TABLE IF NOT EXISTS` block in [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
 
 If schema semantics change, consider migration behavior early.
+
+## Vendored Frontend Assets
+
+- Font Awesome 7.2.0 is vendored under [src/vendor/fontawesome](src/vendor/fontawesome).
+- Keep only the minimum required files when updating vendored assets.
+- Preserve the upstream license file alongside the vendored copy.
 
 ## Local Verification
 

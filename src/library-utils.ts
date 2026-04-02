@@ -16,6 +16,13 @@ type DirectorySnapshot = {
 type SearchableBook = {
   fileName: string;
   filePath: string;
+  tags?: string[];
+};
+
+export type TagNode = {
+  id: string;
+  label: string;
+  count: number;
 };
 
 export function formatFileSize(fileSize: number) {
@@ -115,6 +122,7 @@ export function deriveDirectories(snapshot: DirectorySnapshot): DirectoryNode[] 
 export function filterVisibleBooks<T extends SearchableBook>(
   books: T[],
   activeDirectory: string | null,
+  activeTag: string | null,
   searchQuery: string,
 ) {
   return books.filter((book) => {
@@ -127,6 +135,10 @@ export function filterVisibleBooks<T extends SearchableBook>(
       }
     }
 
+    if (activeTag && !(book.tags ?? []).includes(activeTag)) {
+      return false;
+    }
+
     if (!searchQuery) {
       return true;
     }
@@ -137,4 +149,22 @@ export function filterVisibleBooks<T extends SearchableBook>(
 
     return normalizedName.includes(query) || normalizedPath.includes(query);
   });
+}
+
+export function deriveTags(books: Array<{ tags?: string[] }>): TagNode[] {
+  const counts = new Map<string, number>();
+
+  for (const book of books) {
+    for (const tag of book.tags ?? []) {
+      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+  }
+
+  return [...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, "ja"))
+    .map(([tag, count]) => ({
+      id: tag,
+      label: tag,
+      count,
+    }));
 }

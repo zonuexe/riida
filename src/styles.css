@@ -85,7 +85,9 @@ body {
 }
 
 .sidebar-search-label {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: rgba(31, 27, 22, 0.62);
   font-size: 0.85rem;
   font-weight: 700;
@@ -113,11 +115,21 @@ body {
 
 .nav-section-title {
   margin: 12px 0 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: rgba(31, 27, 22, 0.5);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.nav-link-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .nav-link,
@@ -172,6 +184,14 @@ body {
 .nav-toggle:hover {
   background: rgba(125, 78, 33, 0.1);
   color: var(--accent);
+}
+
+.sidebar-settings-button,
+.viewer-tags-button,
+.note-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .nav-link small {
@@ -491,6 +511,12 @@ h1 {
   backdrop-filter: blur(10px);
 }
 
+.navigation-button .fa-solid,
+.sidebar-edge-toggle .fa-solid,
+.viewer-settings-toggle .fa-solid {
+  font-size: 0.95rem;
+}
+
 .navigation-button:disabled {
   opacity: 0.35;
   cursor: default;
@@ -797,23 +823,14 @@ h1 {
   width: 42px;
   height: 42px;
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
   border: 1px solid rgba(96, 70, 33, 0.16);
   border-radius: 999px;
   background: rgba(255, 250, 240, 0.9);
   color: var(--accent);
   cursor: pointer;
   padding: 0;
-}
-
-.viewer-settings-toggle span {
-  width: 16px;
-  height: 1.5px;
-  border-radius: 999px;
-  background: currentColor;
 }
 
 .viewer-settings-toggle:hover {

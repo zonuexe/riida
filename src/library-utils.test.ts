@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveDirectories,
   filterVisibleBooks,
+  formatBookLocation,
   formatFileSize,
   normalizeSearchText,
 } from "./library-utils";
@@ -11,6 +12,18 @@ describe("formatFileSize", () => {
     expect(formatFileSize(999)).toBe("999 B");
     expect(formatFileSize(1024)).toBe("1.0 KB");
     expect(formatFileSize(5 * 1024 * 1024)).toBe("5.0 MB");
+  });
+});
+
+describe("formatBookLocation", () => {
+  it("shows the parent directory and collapses the home directory", () => {
+    expect(
+      formatBookLocation("/Users/example/Dropbox/EBook/BOOKSCAN/title.pdf", "/Users/example"),
+    ).toBe("~/Dropbox/EBook/BOOKSCAN");
+  });
+
+  it("omits the file name even without a home directory hint", () => {
+    expect(formatBookLocation("/Books/Tech/Rust Book.pdf", null)).toBe("/Books/Tech");
   });
 });
 

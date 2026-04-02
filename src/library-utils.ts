@@ -38,6 +38,29 @@ export function normalizeSearchText(value: string) {
     .replace(/[\s\-_./]+/g, "");
 }
 
+export function formatBookLocation(filePath: string, homePath: string | null) {
+  const normalizedPath = filePath.replace(/\/+$/, "");
+  const lastSlashIndex = normalizedPath.lastIndexOf("/");
+  const directoryPath =
+    lastSlashIndex > 0 ? normalizedPath.slice(0, lastSlashIndex) : normalizedPath;
+
+  if (!homePath) {
+    return directoryPath;
+  }
+
+  const normalizedHomePath = homePath.replace(/\/+$/, "");
+
+  if (directoryPath === normalizedHomePath) {
+    return "~";
+  }
+
+  if (directoryPath.startsWith(`${normalizedHomePath}/`)) {
+    return `~/${directoryPath.slice(normalizedHomePath.length + 1)}`;
+  }
+
+  return directoryPath;
+}
+
 export function deriveDirectories(snapshot: DirectorySnapshot): DirectoryNode[] {
   const counts = new Map<string, number>();
   const normalizedRoots = snapshot.libraryRoots

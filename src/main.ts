@@ -8,6 +8,7 @@ import { addLibraryRoot, buildAppConfigDraft } from "./app-config-utils";
 import {
   deriveDirectories,
   filterVisibleBooks,
+  formatBookLocation,
   formatFileSize,
   type DirectoryNode,
 } from "./library-utils";
@@ -252,6 +253,18 @@ async function collapseHomePath(path: string) {
   }
 
   return path;
+}
+
+async function primeHomeDirCache() {
+  if (cachedHomeDir !== null) {
+    return;
+  }
+
+  try {
+    cachedHomeDir = (await homeDir()).replace(/\/+$/, "");
+  } catch {
+    cachedHomeDir = "";
+  }
 }
 
 async function loadPdfJsRuntime() {
@@ -1955,7 +1968,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     titleEl.textContent = book.fileName;
 
     const pathEl = document.createElement("span");
-    pathEl.textContent = book.filePath;
+    pathEl.textContent = formatBookLocation(book.filePath, cachedHomeDir);
 
     const metaEl = document.createElement("small");
     metaEl.className = "book-meta";
@@ -2069,6 +2082,7 @@ function renderApp() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  await primeHomeDirCache();
   const searchInput = document.querySelector<HTMLInputElement>("#library-search");
   const viewerStageEl = currentViewerStage();
   const navBackEl = document.querySelector<HTMLButtonElement>("#nav-back");

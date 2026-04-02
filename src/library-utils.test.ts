@@ -52,6 +52,11 @@ describe("filterVisibleBooks", () => {
       filePath: "/Books/Fiction/Novel.pdf",
       tags: ["fiction"],
     },
+    {
+      fileName: "Nested.pdf",
+      filePath: "/Books/Tech/Rust/Nested.pdf",
+      tags: ["tech"],
+    },
   ];
 
   it("matches normalized search text against file name and path", () => {
@@ -66,10 +71,16 @@ describe("filterVisibleBooks", () => {
     expect(results).toEqual([books[1]]);
   });
 
+  it("only lists books placed directly inside the active directory", () => {
+    const results = filterVisibleBooks(books, "/Books/Tech", null, "");
+
+    expect(results).toEqual([books[0], books[1]]);
+  });
+
   it("filters by active tag", () => {
     const results = filterVisibleBooks(books, null, "tech", "");
 
-    expect(results).toEqual([books[0], books[1]]);
+    expect(results).toEqual([books[0], books[1], books[3]]);
   });
 });
 

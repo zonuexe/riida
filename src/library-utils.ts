@@ -128,9 +128,11 @@ export function filterVisibleBooks<T extends SearchableBook>(
   return books.filter((book) => {
     if (activeDirectory) {
       const directory = activeDirectory.replace(/\/+$/, "");
-      const prefix = `${directory}/`;
+      const normalizedPath = book.filePath.replace(/\/+$/, "");
+      const fileDirectory =
+        normalizedPath.slice(0, Math.max(normalizedPath.lastIndexOf("/"), 0)) || normalizedPath;
 
-      if (!book.filePath.startsWith(prefix)) {
+      if (fileDirectory !== directory) {
         return false;
       }
     }

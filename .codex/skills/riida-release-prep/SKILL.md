@@ -61,6 +61,8 @@ Run this command before committing:
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run check:release
 ```
 
+If `npm run check:release` requires formatting fixes, regenerated notices, or other non-version cleanup, commit that work separately before creating the version-bump commit. Do not fold release verification cleanup into the `Bump up version to x.y.z` commit.
+
 Run this extra check when the touched area warrants it:
 
 - `npm run check:licenses:npm` when JS dependencies or license generation changed
@@ -72,6 +74,8 @@ Prefer a single release-prep commit containing:
 - version bumps
 - changelog update
 - regenerated license notices
+
+Keep release verification cleanup and version bumps in separate commits. The final release-prep commit should be the version bump commit.
 
 Use:
 

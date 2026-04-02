@@ -590,6 +590,18 @@ h1 {
   margin-bottom: 14px;
 }
 
+.tag-direct-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(31, 27, 22, 0.68);
+  font-size: 0.88rem;
+}
+
+.tag-direct-filter input {
+  margin: 0;
+}
+
 .library-search {
   width: min(100%, 260px);
   border: 1px solid var(--border);

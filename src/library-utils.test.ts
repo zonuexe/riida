@@ -60,27 +60,41 @@ describe("filterVisibleBooks", () => {
   ];
 
   it("matches normalized search text against file name and path", () => {
-    const results = filterVisibleBooks(books, null, null, "WEB+DB PRESS");
+    const results = filterVisibleBooks(books, null, null, false, "WEB+DB PRESS");
 
     expect(results).toEqual([books[0]]);
   });
 
   it("applies directory filtering before search matching", () => {
-    const results = filterVisibleBooks(books, "/Books/Tech", null, "rust");
+    const results = filterVisibleBooks(books, "/Books/Tech", null, false, "rust");
 
     expect(results).toEqual([books[1]]);
   });
 
   it("only lists books placed directly inside the active directory", () => {
-    const results = filterVisibleBooks(books, "/Books/Tech", null, "");
+    const results = filterVisibleBooks(books, "/Books/Tech", null, false, "");
 
     expect(results).toEqual([books[0], books[1]]);
   });
 
   it("filters by active tag", () => {
-    const results = filterVisibleBooks(books, null, "tech", "");
+    const results = filterVisibleBooks(books, null, "tech", false, "");
 
     expect(results).toEqual([books[0], books[1], books[3]]);
+  });
+
+  it("can restrict parent tags to directly tagged files only", () => {
+    const booksWithHierarchicalTags = [
+      { fileName: "One.pdf", filePath: "/Books/One.pdf", tags: ["language/lean"] },
+      { fileName: "Two.pdf", filePath: "/Books/Two.pdf", tags: ["language"] },
+    ];
+
+    expect(filterVisibleBooks(booksWithHierarchicalTags, null, "language", false, "")).toEqual(
+      booksWithHierarchicalTags,
+    );
+    expect(filterVisibleBooks(booksWithHierarchicalTags, null, "language", true, "")).toEqual([
+      booksWithHierarchicalTags[1],
+    ]);
   });
 });
 
@@ -141,18 +155,21 @@ describe("deriveDirectories", () => {
 });
 
 describe("deriveTags", () => {
-  it("counts tags across books", () => {
+  it("counts tags across books and includes implicit parent labels", () => {
     const tags = deriveTags([
-      { tags: ["tech", "magazine"] },
-      { tags: ["tech"] },
+      { tags: ["tech", "magazine/web"] },
+      { tags: ["tech", "language/lean"] },
       { tags: ["fiction"] },
       { tags: [] },
     ]);
 
     expect(tags).toEqual([
-      { id: "fiction", label: "fiction", count: 1 },
-      { id: "magazine", label: "magazine", count: 1 },
-      { id: "tech", label: "tech", count: 2 },
+      { id: "fiction", label: "fiction", count: 1, depth: 0, explicit: true, hasChildren: false },
+      { id: "language", label: "language", count: 1, depth: 0, explicit: false, hasChildren: true },
+      { id: "language/lean", label: "lean", count: 1, depth: 1, explicit: true, hasChildren: false },
+      { id: "magazine", label: "magazine", count: 1, depth: 0, explicit: false, hasChildren: true },
+      { id: "magazine/web", label: "web", count: 1, depth: 1, explicit: true, hasChildren: false },
+      { id: "tech", label: "tech", count: 2, depth: 0, explicit: true, hasChildren: false },
     ]);
   });
 });

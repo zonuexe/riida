@@ -3,6 +3,7 @@ export type NavigationStateLike = {
   bookFilePath: string | null;
   activeDirectory: string | null;
   activeTag: string | null;
+  activeTagDirectOnly: boolean;
   searchQuery: string;
 };
 
@@ -11,6 +12,7 @@ export function navigationStateSignature(state: NavigationStateLike) {
     bookFilePath: state.bookFilePath,
     activeDirectory: state.activeDirectory,
     activeTag: state.activeTag,
+    activeTagDirectOnly: state.activeTagDirectOnly,
     searchQuery: state.searchQuery,
   });
 }
@@ -28,6 +30,10 @@ export function buildNavigationUrl(state: NavigationStateLike): string {
 
   if (state.activeTag) {
     params.set("tag", state.activeTag);
+  }
+
+  if (state.activeTagDirectOnly) {
+    params.set("tagMode", "direct");
   }
 
   if (state.bookFilePath) {

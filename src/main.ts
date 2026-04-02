@@ -70,6 +70,7 @@ type ViewerState = {
   currentBook: BookSummary | null;
   activeDirectory: string | null;
   activeTag: string | null;
+  activeTagDirectOnly: boolean;
   searchQuery: string;
   expandedDirectories: Set<string>;
   sidebarCollapsed: boolean;
@@ -117,6 +118,7 @@ type NavigationState = {
   bookFilePath: string | null;
   activeDirectory: string | null;
   activeTag: string | null;
+  activeTagDirectOnly: boolean;
   searchQuery: string;
 };
 
@@ -192,6 +194,7 @@ const viewerState: ViewerState = {
   currentBook: null,
   activeDirectory: null,
   activeTag: null,
+  activeTagDirectOnly: false,
   searchQuery: "",
   expandedDirectories: new Set<string>(),
   sidebarCollapsed: false,
@@ -1406,6 +1409,7 @@ function visibleBooks(snapshot: LibrarySnapshot) {
     snapshot.books,
     viewerState.activeDirectory,
     viewerState.activeTag,
+    viewerState.activeTagDirectOnly,
     viewerState.searchQuery,
   );
 }
@@ -1464,6 +1468,7 @@ function currentNavigationState(): NavigationState {
     bookFilePath: viewerState.currentBook?.filePath ?? null,
     activeDirectory: viewerState.activeDirectory,
     activeTag: viewerState.activeTag,
+    activeTagDirectOnly: viewerState.activeTagDirectOnly,
     searchQuery: viewerState.searchQuery,
   };
 }
@@ -1551,6 +1556,7 @@ async function applyNavigationState(state: NavigationState) {
   viewerState.searchQuery = state.searchQuery;
   viewerState.activeDirectory = state.activeDirectory;
   viewerState.activeTag = state.activeTag;
+  viewerState.activeTagDirectOnly = state.activeTagDirectOnly;
 
   const nextBook = state.bookFilePath
     ? (snapshot.books.find((book) => book.filePath === state.bookFilePath) ?? null)
@@ -2042,6 +2048,7 @@ function renderSidebar(snapshot: LibrarySnapshot) {
           bookFilePath: null,
           activeDirectory: node.path,
           activeTag: null,
+          activeTagDirectOnly: false,
           searchQuery: viewerState.searchQuery,
         },
         "push",
@@ -2083,10 +2090,9 @@ function renderSidebar(snapshot: LibrarySnapshot) {
   navEl.appendChild(futureHeader);
 
   for (const tag of deriveTags(snapshot.books)) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "nav-link nav-tree-link";
-    button.classList.toggle("is-active", viewerState.activeTag === tag.id);
+    const row = document.createElement("div");
+    row.className = "nav-tree-row";
+    row.style.setProperty("--depth", String(tag.depth));
 
     const labelEl = document.createElement("span");
     labelEl.textContent = tag.label;
@@ -2094,6 +2100,18 @@ function renderSidebar(snapshot: LibrarySnapshot) {
     const countEl = document.createElement("small");
     countEl.textContent = String(tag.count);
 
+    const spacer = document.createElement("span");
+    spacer.className = "nav-toggle-spacer";
+    spacer.setAttribute("aria-hidden", "true");
+
+    row.appendChild(spacer);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "nav-link nav-tree-link";
+    button.classList.toggle("nav-placeholder", !tag.explicit);
+    button.classList.toggle("is-active", viewerState.activeTag === tag.id);
+    button.title = tag.id;
     button.appendChild(labelEl);
     button.appendChild(countEl);
     button.addEventListener("click", () => {
@@ -2102,12 +2120,15 @@ function renderSidebar(snapshot: LibrarySnapshot) {
           bookFilePath: null,
           activeDirectory: null,
           activeTag: tag.id,
+          activeTagDirectOnly: false,
           searchQuery: viewerState.searchQuery,
         },
         "push",
       );
     });
-    navEl.appendChild(button);
+    row.appendChild(button);
+
+    navEl.appendChild(row);
   }
 }
 
@@ -2185,6 +2206,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
               bookFilePath: null,
               activeDirectory: null,
               activeTag: tag,
+              activeTagDirectOnly: false,
               searchQuery: viewerState.searchQuery,
             },
             "push",
@@ -2218,6 +2240,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
           bookFilePath: book.filePath,
           activeDirectory: viewerState.activeDirectory,
           activeTag: viewerState.activeTag,
+          activeTagDirectOnly: viewerState.activeTagDirectOnly,
           searchQuery: viewerState.searchQuery,
         },
         "push",
@@ -2231,6 +2254,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
             bookFilePath: book.filePath,
             activeDirectory: viewerState.activeDirectory,
             activeTag: viewerState.activeTag,
+            activeTagDirectOnly: viewerState.activeTagDirectOnly,
             searchQuery: viewerState.searchQuery,
           },
           "push",
@@ -2254,9 +2278,14 @@ function renderMain(snapshot: LibrarySnapshot) {
   const shelfEl = document.querySelector<HTMLElement>("#book-results");
   const searchInput = document.querySelector<HTMLInputElement>("#library-search");
   const homeCountEl = document.querySelector<HTMLElement>("#indexed-count");
+  const tagDirectFilterEl = document.querySelector<HTMLElement>("#tag-direct-filter");
+  const tagDirectOnlyEl = document.querySelector<HTMLInputElement>("#tag-direct-only");
   const viewerOverlayControlsEl = document.querySelector<HTMLElement>("#viewer-overlay-controls");
 
   const books = visibleBooks(snapshot);
+  const selectedTagNode = viewerState.activeTag
+    ? deriveTags(snapshot.books).find((tag) => tag.id === viewerState.activeTag) ?? null
+    : null;
 
   appShellEl?.classList.toggle("sidebar-collapsed", viewerState.sidebarCollapsed);
   if (sidebarToggleEl) {
@@ -2277,6 +2306,12 @@ function renderMain(snapshot: LibrarySnapshot) {
 
   if (searchInput && searchInput.value !== viewerState.searchQuery) {
     searchInput.value = viewerState.searchQuery;
+  }
+
+  if (tagDirectFilterEl && tagDirectOnlyEl) {
+    const shouldShow = Boolean(viewerState.activeTag && selectedTagNode?.hasChildren);
+    tagDirectFilterEl.hidden = !shouldShow;
+    tagDirectOnlyEl.checked = viewerState.activeTagDirectOnly;
   }
 
   if (viewerOverlayControlsEl) {
@@ -2368,6 +2403,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     "#viewer-vertical-gap-mode",
   );
   const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
+  const tagDirectOnlyEl = document.querySelector<HTMLInputElement>("#tag-direct-only");
   const noteDragHandleEl = document.querySelector<HTMLElement>("#note-drag-handle");
   const noteResizeEls = document.querySelectorAll<HTMLElement>(".note-resize-handle");
   const tagEditorBackdropEl = document.querySelector<HTMLElement>("#tag-editor-backdrop");
@@ -2383,6 +2419,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         bookFilePath: null,
         activeDirectory: null,
         activeTag: null,
+        activeTagDirectOnly: false,
         searchQuery: searchInput.value.trim(),
       },
       "replace",
@@ -2419,9 +2456,23 @@ window.addEventListener("DOMContentLoaded", async () => {
         bookFilePath: null,
         activeDirectory: null,
         activeTag: null,
+        activeTagDirectOnly: false,
         searchQuery: viewerState.searchQuery,
       },
       "push",
+    );
+  });
+
+  tagDirectOnlyEl?.addEventListener("change", () => {
+    void navigateToState(
+      {
+        bookFilePath: null,
+        activeDirectory: null,
+        activeTag: viewerState.activeTag,
+        activeTagDirectOnly: tagDirectOnlyEl.checked,
+        searchQuery: viewerState.searchQuery,
+      },
+      "replace",
     );
   });
 
@@ -2815,6 +2866,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       bookFilePath: null,
       activeDirectory: null,
       activeTag: null,
+      activeTagDirectOnly: false,
       searchQuery: "",
     };
 
@@ -2846,6 +2898,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         bookFilePath: params.get("book"),
         activeDirectory: params.get("dir"),
         activeTag: params.get("tag"),
+        activeTagDirectOnly: params.get("tagMode") === "direct",
         searchQuery: params.get("q") ?? "",
       };
 

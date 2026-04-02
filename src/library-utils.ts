@@ -23,6 +23,9 @@ export type TagNode = {
   id: string;
   label: string;
   count: number;
+  depth: number;
+  explicit: boolean;
+  hasChildren: boolean;
 };
 
 export function formatFileSize(fileSize: number) {
@@ -123,6 +126,7 @@ export function filterVisibleBooks<T extends SearchableBook>(
   books: T[],
   activeDirectory: string | null,
   activeTag: string | null,
+  activeTagDirectOnly: boolean,
   searchQuery: string,
 ) {
   return books.filter((book) => {
@@ -137,8 +141,15 @@ export function filterVisibleBooks<T extends SearchableBook>(
       }
     }
 
-    if (activeTag && !(book.tags ?? []).includes(activeTag)) {
-      return false;
+    if (activeTag) {
+      const tags = book.tags ?? [];
+      const matchesTag = activeTagDirectOnly
+        ? tags.includes(activeTag)
+        : tags.some((tag) => tag === activeTag || tag.startsWith(`${activeTag}/`));
+
+      if (!matchesTag) {
+        return false;
+      }
     }
 
     if (!searchQuery) {
@@ -155,10 +166,17 @@ export function filterVisibleBooks<T extends SearchableBook>(
 
 export function deriveTags(books: Array<{ tags?: string[] }>): TagNode[] {
   const counts = new Map<string, number>();
+  const explicitTags = new Set<string>();
 
   for (const book of books) {
     for (const tag of book.tags ?? []) {
-      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      explicitTags.add(tag);
+      const parts = tag.split("/").filter(Boolean);
+
+      for (let index = 0; index < parts.length; index += 1) {
+        const current = parts.slice(0, index + 1).join("/");
+        counts.set(current, (counts.get(current) ?? 0) + 1);
+      }
     }
   }
 
@@ -166,7 +184,10 @@ export function deriveTags(books: Array<{ tags?: string[] }>): TagNode[] {
     .sort(([a], [b]) => a.localeCompare(b, "ja"))
     .map(([tag, count]) => ({
       id: tag,
-      label: tag,
+      label: tag.split("/").filter(Boolean).pop() ?? tag,
       count,
+      depth: tag.split("/").filter(Boolean).length - 1,
+      explicit: explicitTags.has(tag),
+      hasChildren: [...counts.keys()].some((candidate) => candidate.startsWith(`${tag}/`)),
     }));
 }

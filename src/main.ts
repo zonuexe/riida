@@ -2273,7 +2273,7 @@ function renderMain(snapshot: LibrarySnapshot) {
   const shelfEl = document.querySelector<HTMLElement>("#book-results");
   const searchInput = document.querySelector<HTMLInputElement>("#library-search");
   const homeCountEl = document.querySelector<HTMLElement>("#indexed-count");
-  const viewerTagsEl = document.querySelector<HTMLElement>("#viewer-book-tags");
+  const viewerOverlayControlsEl = document.querySelector<HTMLElement>("#viewer-overlay-controls");
   const viewerTagsOpenEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
 
   const books = visibleBooks(snapshot);
@@ -2293,32 +2293,11 @@ function renderMain(snapshot: LibrarySnapshot) {
     searchInput.value = viewerState.searchQuery;
   }
 
-  if (viewerTagsEl) {
-    viewerTagsEl.innerHTML = "";
-    const tags = viewerState.currentBook?.tags ?? [];
-    viewerTagsEl.hidden = tags.length === 0;
-    for (const tag of tags) {
-      const tagEl = document.createElement("button");
-      tagEl.type = "button";
-      tagEl.className = "book-tag";
-      tagEl.innerHTML = `<i class="fa-solid fa-tag" aria-hidden="true"></i><span>${tag}</span>`;
-      tagEl.addEventListener("click", () => {
-        void navigateToState(
-          {
-            bookFilePath: null,
-            activeDirectory: null,
-            activeTag: tag,
-            searchQuery: viewerState.searchQuery,
-          },
-          "push",
-        );
-      });
-      viewerTagsEl.appendChild(tagEl);
-    }
-  }
-
   if (viewerTagsOpenEl) {
     viewerTagsOpenEl.hidden = !viewerState.currentBook;
+  }
+  if (viewerOverlayControlsEl) {
+    viewerOverlayControlsEl.hidden = !viewerState.currentBook;
   }
 
   if (homeCountEl) {

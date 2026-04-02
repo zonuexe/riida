@@ -787,24 +787,22 @@ h1 {
   position: relative;
 }
 
-.viewer-book-meta {
+.viewer-overlay-controls {
   position: absolute;
   top: 14px;
-  left: 14px;
-  right: 64px;
-  z-index: 4;
+  right: 14px;
+  z-index: 7;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: flex-end;
   gap: 10px;
-  pointer-events: none;
-}
-
-.viewer-tag-list,
-.viewer-tags-button {
-  pointer-events: auto;
+  max-width: calc(100% - 28px);
 }
 
 .viewer-tags-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: 1px solid rgba(96, 70, 33, 0.16);
   border-radius: 999px;
   background: rgba(255, 250, 240, 0.9);
@@ -816,10 +814,6 @@ h1 {
 }
 
 .viewer-settings-toggle {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  z-index: 5;
   width: 42px;
   height: 42px;
   display: inline-flex;

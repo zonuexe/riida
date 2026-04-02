@@ -18,3 +18,4 @@ data/*.db
 data/*.db-*
 data/thumbnails/
 cache/
+riida.toml

@@ -77,7 +77,7 @@ When changing this logic, preserve migration behavior unless there is an explici
 
 ## Current Config Fields
 
-Example development config in [riida.toml](riida.toml):
+Example development config in [riida.toml.example](riida.toml.example):
 
 ```toml
 library_roots = ["~/Documents/Ebooks/"]

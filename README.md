@@ -52,6 +52,8 @@ excluded_patterns = ["**/backup/**", "*.bak.pdf"]
 pdf_renderer = "pdfjs"
 ```
 
+For development, copy [`riida.toml.example`](riida.toml.example) to `riida.toml` and edit it locally.
+
 ## Local Storage
 
 The app separates storage by role:

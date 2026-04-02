@@ -6,6 +6,8 @@ It was created to meet the needs of an author who owns more than 1,000 ebooks an
 
 The name "Riida" comes from "Reader", reflecting that primary goal.
 
+![](img/screenshot-main.png)
+
 ## Install
 
 Download an installer for your platform from:

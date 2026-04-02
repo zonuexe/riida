@@ -2008,32 +2008,6 @@ function renderSidebar(snapshot: LibrarySnapshot) {
 
   navEl.innerHTML = "";
 
-  const homeButton = document.createElement("button");
-  homeButton.type = "button";
-  homeButton.className = "nav-link";
-  const homeLabelEl = document.createElement("span");
-  homeLabelEl.className = "nav-link-label";
-  homeLabelEl.innerHTML = '<i class="fa-solid fa-house" aria-hidden="true"></i><span>Home</span>';
-  homeButton.appendChild(homeLabelEl);
-  homeButton.classList.toggle(
-    "is-active",
-    viewerState.currentBook === null &&
-      viewerState.activeDirectory === null &&
-      viewerState.activeTag === null,
-  );
-  homeButton.addEventListener("click", () => {
-    void navigateToState(
-      {
-        bookFilePath: null,
-        activeDirectory: null,
-        activeTag: null,
-        searchQuery: viewerState.searchQuery,
-      },
-      "push",
-    );
-  });
-  navEl.appendChild(homeButton);
-
   const directoryHeader = document.createElement("p");
   directoryHeader.className = "nav-section-title";
   directoryHeader.innerHTML =
@@ -2274,6 +2248,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
 function renderMain(snapshot: LibrarySnapshot) {
   const appShellEl = document.querySelector<HTMLElement>(".two-pane");
   const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
+  const sidebarHomeOpenEl = document.querySelector<HTMLButtonElement>("#sidebar-home-open");
   const homeViewEl = document.querySelector<HTMLElement>("#home-view");
   const pdfViewEl = document.querySelector<HTMLElement>("#pdf-view");
   const shelfEl = document.querySelector<HTMLElement>("#book-results");
@@ -2292,6 +2267,12 @@ function renderMain(snapshot: LibrarySnapshot) {
     );
     sidebarToggleEl.setAttribute("aria-expanded", String(!viewerState.sidebarCollapsed));
   }
+  sidebarHomeOpenEl?.classList.toggle(
+    "is-active",
+    viewerState.currentBook === null &&
+      viewerState.activeDirectory === null &&
+      viewerState.activeTag === null,
+  );
   syncViewerSettingsUi();
 
   if (searchInput && searchInput.value !== viewerState.searchQuery) {
@@ -2354,6 +2335,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const navBackEl = document.querySelector<HTMLButtonElement>("#nav-back");
   const navForwardEl = document.querySelector<HTMLButtonElement>("#nav-forward");
   const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
+  const sidebarHomeOpenEl = document.querySelector<HTMLButtonElement>("#sidebar-home-open");
   const appSettingsOpenEl = document.querySelector<HTMLButtonElement>("#app-settings-open");
   const appAboutOpenEl = document.querySelector<HTMLButtonElement>("#app-about-open");
   const appAboutCloseEl = document.querySelector<HTMLButtonElement>("#app-about-close");
@@ -2429,6 +2411,18 @@ window.addEventListener("DOMContentLoaded", async () => {
   sidebarToggleEl?.addEventListener("click", () => {
     viewerState.sidebarCollapsed = !viewerState.sidebarCollapsed;
     renderApp();
+  });
+
+  sidebarHomeOpenEl?.addEventListener("click", () => {
+    void navigateToState(
+      {
+        bookFilePath: null,
+        activeDirectory: null,
+        activeTag: null,
+        searchQuery: viewerState.searchQuery,
+      },
+      "push",
+    );
   });
 
   const closeAppSettings = () => {

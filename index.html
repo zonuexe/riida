@@ -15,20 +15,23 @@
           <h1>riida</h1>
         </div>
         <section class="sidebar-tools">
-          <label class="sidebar-search-label" for="library-search">
-            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-            <span>Search library</span>
-          </label>
-          <input
-            id="library-search"
-            class="library-search sidebar-search"
-            type="search"
-            placeholder="Search by title or path"
-          />
+          <button id="sidebar-home-open" class="sidebar-settings-button" type="button">
+            <i class="fa-solid fa-house" aria-hidden="true"></i>
+            <span>Home</span>
+          </button>
           <button id="app-settings-open" class="sidebar-settings-button" type="button">
             <i class="fa-solid fa-gear" aria-hidden="true"></i>
             <span>Settings</span>
           </button>
+          <label class="sidebar-search-wrap" for="library-search">
+            <i class="fa-solid fa-magnifying-glass sidebar-search-icon" aria-hidden="true"></i>
+            <input
+              id="library-search"
+              class="library-search sidebar-search"
+              type="search"
+              placeholder="Search library"
+            />
+          </label>
         </section>
         <nav class="sidebar-nav" id="sidebar-nav"></nav>
       </aside>

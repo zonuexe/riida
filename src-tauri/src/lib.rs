@@ -4,7 +4,7 @@ use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{hash_map::DefaultHasher, HashSet},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
     fs,
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
@@ -35,6 +35,7 @@ struct BookSummary {
     file_name: String,
     file_path: String,
     file_size: u64,
+    tags: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -116,6 +117,13 @@ struct ReadingPosition {
     page_number: u32,
     page_offset_ratio: f64,
     updated_at: Option<u64>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BookTagsPayload {
+    file_path: String,
+    tags: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -618,6 +626,11 @@ fn open_database() -> Result<Connection, String> {
               page_offset_ratio REAL NOT NULL,
               updated_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS book_tags (
+              file_path TEXT NOT NULL,
+              tag TEXT NOT NULL,
+              PRIMARY KEY (file_path, tag)
+            );
             ",
         )
         .map_err(|error| error.to_string())?;
@@ -670,6 +683,25 @@ fn modified_unix_seconds(metadata: &fs::Metadata) -> u64 {
         .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_secs())
         .unwrap_or(0)
+}
+
+fn normalize_book_tags(tags: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::new();
+
+    for tag in tags {
+        let trimmed = tag.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let owned = trimmed.to_string();
+        if seen.insert(owned.clone()) {
+            normalized.push(owned);
+        }
+    }
+
+    normalized
 }
 
 fn default_viewer_preferences() -> ViewerPreferences {
@@ -996,11 +1028,33 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
         )
         .map_err(|error| error.to_string())?;
 
+    let mut tags_statement = connection
+        .prepare(
+            "
+            SELECT file_path, tag
+            FROM book_tags
+            ORDER BY tag COLLATE NOCASE ASC
+            ",
+        )
+        .map_err(|error| error.to_string())?;
+
+    let mut tags_by_file_path: HashMap<String, Vec<String>> = HashMap::new();
+    let tag_rows = tags_statement
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+        .map_err(|error| error.to_string())?;
+
+    for row in tag_rows {
+        let (file_path, tag) = row.map_err(|error| error.to_string())?;
+        tags_by_file_path.entry(file_path).or_default().push(tag);
+    }
+
     let books = statement
         .query_map([], |row| {
+            let file_path = row.get::<_, String>(1)?;
             Ok(BookSummary {
                 file_name: row.get(0)?,
-                file_path: row.get(1)?,
+                tags: tags_by_file_path.remove(&file_path).unwrap_or_default(),
+                file_path,
                 file_size: row.get(2)?,
             })
         })
@@ -1346,6 +1400,38 @@ fn save_note(file_path: String, content: String) -> Result<NoteDocument, String>
 }
 
 #[tauri::command]
+fn save_book_tags(file_path: String, tags: Vec<String>) -> Result<BookTagsPayload, String> {
+    let mut connection = open_database()?;
+    let normalized = normalize_book_tags(tags);
+    let transaction = connection
+        .transaction()
+        .map_err(|error| error.to_string())?;
+
+    transaction
+        .execute(
+            "DELETE FROM book_tags WHERE file_path = ?1",
+            params![file_path.clone()],
+        )
+        .map_err(|error| error.to_string())?;
+
+    for tag in &normalized {
+        transaction
+            .execute(
+                "INSERT INTO book_tags (file_path, tag) VALUES (?1, ?2)",
+                params![file_path.clone(), tag],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+
+    transaction.commit().map_err(|error| error.to_string())?;
+
+    Ok(BookTagsPayload {
+        file_path,
+        tags: normalized,
+    })
+}
+
+#[tauri::command]
 fn load_reading_position(file_path: String) -> Result<Option<ReadingPosition>, String> {
     let connection = open_database()?;
     let mut statement = connection
@@ -1488,6 +1574,7 @@ pub fn run() {
             book_thumbnail,
             load_note,
             save_note,
+            save_book_tags,
             load_reading_position,
             save_reading_position,
             load_viewer_preferences,
@@ -2181,5 +2268,19 @@ mod tests {
                 prop_assert!(!pattern.contains('\\'));
             }
         }
+    }
+
+    #[test]
+    fn normalize_book_tags_discards_empty_values_and_deduplicates() {
+        let normalized = normalize_book_tags(vec![
+            "  rust ".to_string(),
+            "".to_string(),
+            "pdf".to_string(),
+            "rust".to_string(),
+            "  ".to_string(),
+            "PDF".to_string(),
+        ]);
+
+        assert_eq!(normalized, vec!["rust", "pdf", "PDF"]);
     }
 }

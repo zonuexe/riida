@@ -35,6 +35,7 @@ type BookSummary = {
   fileName: string;
   filePath: string;
   fileSize: number;
+  tags: string[];
 };
 
 type LibrarySnapshot = {
@@ -126,6 +127,20 @@ type NoteState = {
   y: number | null;
   width: number;
   height: number;
+};
+
+type BookTagsPayload = {
+  filePath: string;
+  tags: string[];
+};
+
+type TagEditorState = {
+  isOpen: boolean;
+  filePath: string | null;
+  bookTitle: string;
+  tags: string[];
+  input: string;
+  statusMessage: string;
 };
 
 type NoteInteractionState = {
@@ -224,6 +239,14 @@ let cachedThirdPartyRustText = "Loading Rust notices...";
 let cachedThirdPartyJsText = "Loading JavaScript notices...";
 let pdfJsRuntimePromise: Promise<PdfJsRuntime> | null = null;
 let noteEditorModulePromise: Promise<typeof import("./note-editor")> | null = null;
+const tagEditorState: TagEditorState = {
+  isOpen: false,
+  filePath: null,
+  bookTitle: "",
+  tags: [],
+  input: "",
+  statusMessage: "",
+};
 const PDF_RENDER_RADIUS = 2;
 const PDF_KEEP_RADIUS = 3;
 let lastViewportSize = {
@@ -767,6 +790,149 @@ function syncAppSettingsUi() {
   }
 
   renderLibraryRootsList();
+}
+
+function setTagEditorStatus(
+  message: string,
+  tone: "neutral" | "success" | "error" = "neutral",
+) {
+  const statusEl = document.querySelector<HTMLElement>("#tag-editor-status");
+  if (!statusEl) {
+    return;
+  }
+
+  tagEditorState.statusMessage = message;
+  statusEl.hidden = message.length === 0;
+  statusEl.textContent = message;
+  if (tone === "neutral") {
+    delete statusEl.dataset.tone;
+  } else {
+    statusEl.dataset.tone = tone;
+  }
+}
+
+function syncTagEditorUi() {
+  const modalEl = document.querySelector<HTMLElement>("#tag-editor-modal");
+  const bookEl = document.querySelector<HTMLElement>("#tag-editor-book");
+  const listEl = document.querySelector<HTMLElement>("#tag-editor-list");
+  const inputEl = document.querySelector<HTMLInputElement>("#tag-editor-input");
+
+  if (modalEl) {
+    modalEl.hidden = !tagEditorState.isOpen;
+  }
+
+  if (bookEl) {
+    bookEl.textContent = tagEditorState.bookTitle;
+  }
+
+  if (inputEl) {
+    inputEl.value = tagEditorState.input;
+  }
+
+  if (!listEl) {
+    return;
+  }
+
+  listEl.innerHTML = "";
+
+  if (tagEditorState.tags.length === 0) {
+    const emptyEl = document.createElement("p");
+    emptyEl.className = "empty-state-detail";
+    emptyEl.textContent = "No tags yet.";
+    listEl.appendChild(emptyEl);
+    return;
+  }
+
+  for (const tag of tagEditorState.tags) {
+    const chipEl = document.createElement("span");
+    chipEl.className = "book-tag";
+
+    const labelEl = document.createElement("span");
+    labelEl.textContent = tag;
+
+    const removeEl = document.createElement("button");
+    removeEl.type = "button";
+    removeEl.className = "book-tag-remove";
+    removeEl.textContent = "×";
+    removeEl.setAttribute("aria-label", `Remove tag ${tag}`);
+    removeEl.addEventListener("click", () => {
+      tagEditorState.tags = tagEditorState.tags.filter((candidate) => candidate !== tag);
+      syncTagEditorUi();
+    });
+
+    chipEl.appendChild(labelEl);
+    chipEl.appendChild(removeEl);
+    listEl.appendChild(chipEl);
+  }
+}
+
+function updateBookTagsInState(filePath: string, tags: string[]) {
+  const apply = (book: BookSummary) =>
+    book.filePath === filePath ? { ...book, tags: [...tags] } : book;
+
+  viewerState.books = viewerState.books.map(apply);
+  if (lastSnapshot) {
+    lastSnapshot = {
+      ...lastSnapshot,
+      books: lastSnapshot.books.map(apply),
+    };
+  }
+  if (viewerState.currentBook?.filePath === filePath) {
+    viewerState.currentBook = { ...viewerState.currentBook, tags: [...tags] };
+  }
+}
+
+function openTagEditor(book: BookSummary) {
+  tagEditorState.isOpen = true;
+  tagEditorState.filePath = book.filePath;
+  tagEditorState.bookTitle = book.fileName;
+  tagEditorState.tags = [...book.tags];
+  tagEditorState.input = "";
+  setTagEditorStatus("");
+  syncTagEditorUi();
+}
+
+function closeTagEditor() {
+  tagEditorState.isOpen = false;
+  tagEditorState.input = "";
+  setTagEditorStatus("");
+  syncTagEditorUi();
+}
+
+function addTagFromEditorInput() {
+  const inputEl = document.querySelector<HTMLInputElement>("#tag-editor-input");
+  const candidate = inputEl?.value.trim() ?? tagEditorState.input.trim();
+  if (!candidate) {
+    return;
+  }
+
+  if (!tagEditorState.tags.includes(candidate)) {
+    tagEditorState.tags = [...tagEditorState.tags, candidate];
+  }
+
+  tagEditorState.input = "";
+  if (inputEl) {
+    inputEl.value = "";
+  }
+  syncTagEditorUi();
+}
+
+async function saveTagEditorChanges() {
+  if (!tagEditorState.filePath) {
+    return;
+  }
+
+  try {
+    const payload = await invoke<BookTagsPayload>("save_book_tags", {
+      filePath: tagEditorState.filePath,
+      tags: tagEditorState.tags,
+    });
+    updateBookTagsInState(payload.filePath, payload.tags);
+    closeTagEditor();
+    renderApp();
+  } catch (error) {
+    setTagEditorStatus(`Failed to save tags: ${String(error)}`, "error");
+  }
 }
 
 function syncAboutUi() {
@@ -1974,8 +2140,36 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     metaEl.className = "book-meta";
     metaEl.textContent = formatFileSize(book.fileSize);
 
+    const tagsRowEl = document.createElement("div");
+    tagsRowEl.className = "book-tags-row";
+
+    const tagsEl = document.createElement("div");
+    tagsEl.className = "book-tag-list";
+    if (book.tags.length === 0) {
+      tagsEl.hidden = true;
+    } else {
+      for (const tag of book.tags) {
+        const tagEl = document.createElement("span");
+        tagEl.className = "book-tag";
+        tagEl.textContent = tag;
+        tagsEl.appendChild(tagEl);
+      }
+    }
+
+    const editTagsEl = document.createElement("button");
+    editTagsEl.type = "button";
+    editTagsEl.className = "book-tags-edit";
+    editTagsEl.textContent = book.tags.length > 0 ? "Edit tags" : "Add tags";
+    editTagsEl.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openTagEditor(book);
+    });
+
     bodyEl.appendChild(titleEl);
     bodyEl.appendChild(pathEl);
+    tagsRowEl.appendChild(tagsEl);
+    tagsRowEl.appendChild(editTagsEl);
+    bodyEl.appendChild(tagsRowEl);
     bodyEl.appendChild(metaEl);
     itemEl.appendChild(thumbEl);
     itemEl.appendChild(bodyEl);
@@ -2019,6 +2213,8 @@ function renderMain(snapshot: LibrarySnapshot) {
   const shelfEl = document.querySelector<HTMLElement>("#book-results");
   const searchInput = document.querySelector<HTMLInputElement>("#library-search");
   const homeCountEl = document.querySelector<HTMLElement>("#indexed-count");
+  const viewerTagsEl = document.querySelector<HTMLElement>("#viewer-book-tags");
+  const viewerTagsOpenEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
 
   const books = visibleBooks(snapshot);
 
@@ -2035,6 +2231,22 @@ function renderMain(snapshot: LibrarySnapshot) {
 
   if (searchInput && searchInput.value !== viewerState.searchQuery) {
     searchInput.value = viewerState.searchQuery;
+  }
+
+  if (viewerTagsEl) {
+    viewerTagsEl.innerHTML = "";
+    const tags = viewerState.currentBook?.tags ?? [];
+    viewerTagsEl.hidden = tags.length === 0;
+    for (const tag of tags) {
+      const tagEl = document.createElement("span");
+      tagEl.className = "book-tag";
+      tagEl.textContent = tag;
+      viewerTagsEl.appendChild(tagEl);
+    }
+  }
+
+  if (viewerTagsOpenEl) {
+    viewerTagsOpenEl.hidden = !viewerState.currentBook;
   }
 
   if (homeCountEl) {
@@ -2079,6 +2291,7 @@ function renderApp() {
 
   renderSidebar(lastSnapshot);
   renderMain(lastSnapshot);
+  syncTagEditorUi();
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -2102,6 +2315,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   );
   const noteToggleEl = document.querySelector<HTMLButtonElement>("#note-toggle");
   const noteCloseEl = document.querySelector<HTMLButtonElement>("#note-close");
+  const viewerTagsOpenEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
   const viewerSettingsToggleEl =
     document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
   const viewerSettingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
@@ -2121,6 +2335,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
   const noteDragHandleEl = document.querySelector<HTMLElement>("#note-drag-handle");
   const noteResizeEls = document.querySelectorAll<HTMLElement>(".note-resize-handle");
+  const tagEditorBackdropEl = document.querySelector<HTMLElement>("#tag-editor-backdrop");
+  const tagEditorCloseEl = document.querySelector<HTMLButtonElement>("#tag-editor-close");
+  const tagEditorCancelEl = document.querySelector<HTMLButtonElement>("#tag-editor-cancel");
+  const tagEditorSaveEl = document.querySelector<HTMLButtonElement>("#tag-editor-save");
+  const tagEditorAddEl = document.querySelector<HTMLButtonElement>("#tag-editor-add");
+  const tagEditorInputEl = document.querySelector<HTMLInputElement>("#tag-editor-input");
 
   searchInput?.addEventListener("input", () => {
     void navigateToState(
@@ -2237,6 +2457,29 @@ window.addEventListener("DOMContentLoaded", async () => {
   appAboutCloseEl?.addEventListener("click", closeAbout);
   appAboutDoneEl?.addEventListener("click", closeAbout);
   appAboutBackdropEl?.addEventListener("click", closeAbout);
+
+  viewerTagsOpenEl?.addEventListener("click", () => {
+    if (viewerState.currentBook) {
+      openTagEditor(viewerState.currentBook);
+    }
+  });
+
+  tagEditorCloseEl?.addEventListener("click", closeTagEditor);
+  tagEditorCancelEl?.addEventListener("click", closeTagEditor);
+  tagEditorBackdropEl?.addEventListener("click", closeTagEditor);
+  tagEditorAddEl?.addEventListener("click", addTagFromEditorInput);
+  tagEditorSaveEl?.addEventListener("click", () => {
+    void saveTagEditorChanges();
+  });
+  tagEditorInputEl?.addEventListener("input", () => {
+    tagEditorState.input = tagEditorInputEl.value;
+  });
+  tagEditorInputEl?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addTagFromEditorInput();
+    }
+  });
 
   viewerSettingsToggleEl?.addEventListener("click", () => {
     const isOpening = !viewerSettings.isSettingsOpen;
@@ -2404,6 +2647,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && tagEditorState.isOpen) {
+      closeTagEditor();
+      return;
+    }
+
     if (event.key === "Escape" && viewerState.isAboutOpen) {
       closeAbout();
       return;

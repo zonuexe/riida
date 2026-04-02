@@ -761,6 +761,34 @@ h1 {
   position: relative;
 }
 
+.viewer-book-meta {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 64px;
+  z-index: 4;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.viewer-tag-list,
+.viewer-tags-button {
+  pointer-events: auto;
+}
+
+.viewer-tags-button {
+  border: 1px solid rgba(96, 70, 33, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.9);
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
 .viewer-settings-toggle {
   position: absolute;
   top: 14px;
@@ -1109,6 +1137,51 @@ h1 {
   gap: 4px;
 }
 
+.book-tags-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.book-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.book-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(125, 78, 33, 0.12);
+  color: rgba(31, 27, 22, 0.82);
+  font-size: 0.76rem;
+  line-height: 1.2;
+}
+
+.book-tag-remove {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.book-tags-edit {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
 .book-item strong {
   font-size: 1rem;
 }
@@ -1132,6 +1205,27 @@ h1 {
 .book-item.is-selected {
   background: rgba(125, 78, 33, 0.11);
   border-bottom-color: transparent;
+}
+
+.tag-editor-dialog {
+  max-width: 560px;
+}
+
+.tag-editor-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.tag-editor-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.tag-editor-add-row input {
+  width: 100%;
 }
 
 li + li {

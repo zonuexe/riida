@@ -68,6 +68,12 @@
 
         <section id="pdf-view" class="pdf-view" hidden>
           <article class="viewer-panel">
+            <div class="viewer-book-meta">
+              <div id="viewer-book-tags" class="book-tag-list viewer-tag-list" hidden></div>
+              <button id="viewer-tags-open" class="viewer-tags-button" type="button" hidden>
+                Tags
+              </button>
+            </div>
             <button
               id="viewer-settings-toggle"
               class="viewer-settings-toggle"
@@ -311,6 +317,52 @@
         </div>
         <div class="app-settings-actions">
           <button id="app-about-done" class="app-settings-primary" type="button">Done</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="tag-editor-modal" class="app-settings-modal" hidden>
+      <div id="tag-editor-backdrop" class="app-settings-backdrop"></div>
+      <section
+        class="app-settings-dialog tag-editor-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tag-editor-title"
+      >
+        <div class="app-settings-header">
+          <div>
+            <p class="app-settings-kicker">Book tags</p>
+            <h2 id="tag-editor-title">Tags</h2>
+          </div>
+          <button
+            id="tag-editor-close"
+            class="app-settings-close"
+            type="button"
+            aria-label="Close tags"
+          >
+            ×
+          </button>
+        </div>
+        <div class="app-settings-body">
+          <p id="tag-editor-book" class="app-settings-path"></p>
+          <div id="tag-editor-list" class="tag-editor-list"></div>
+          <label class="app-settings-field">
+            <span>Add tag</span>
+            <div class="tag-editor-add-row">
+              <input id="tag-editor-input" type="text" maxlength="200" />
+              <button id="tag-editor-add" class="app-settings-secondary" type="button">Add</button>
+            </div>
+            <small>Tags can contain any non-empty text.</small>
+          </label>
+          <p id="tag-editor-status" class="app-settings-status" hidden></p>
+        </div>
+        <div class="app-settings-actions">
+          <button id="tag-editor-cancel" class="app-settings-secondary" type="button">
+            Cancel
+          </button>
+          <button id="tag-editor-save" class="app-settings-primary" type="button">
+            Save and close
+          </button>
         </div>
       </section>
     </div>

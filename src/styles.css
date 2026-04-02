@@ -326,6 +326,7 @@ h1 {
   color: rgba(31, 27, 22, 0.8);
 }
 
+.app-settings-field input,
 .app-settings-field textarea,
 .app-settings-field select {
   width: 100%;
@@ -1281,11 +1282,28 @@ h1 {
 .tag-editor-add-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 14px;
+  align-items: start;
 }
 
 .tag-editor-add-row input {
   width: 100%;
+  min-width: 0;
+}
+
+.tag-editor-add-row .app-settings-secondary {
+  align-self: stretch;
+  min-width: 104px;
+}
+
+@media (max-width: 640px) {
+  .tag-editor-add-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tag-editor-add-row .app-settings-secondary {
+    justify-self: end;
+  }
 }
 
 li + li {

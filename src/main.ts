@@ -969,7 +969,7 @@ function closeTagEditor() {
 
 function addTagFromEditorInput() {
   const inputEl = document.querySelector<HTMLInputElement>("#tag-editor-input");
-  const rawValue = inputEl?.value ?? tagEditorState.input;
+  const rawValue = tagEditorState.input || inputEl?.value || "";
   const result = validateTagValue(rawValue);
   if (!result.ok) {
     setTagEditorStatus(result.message, "error");

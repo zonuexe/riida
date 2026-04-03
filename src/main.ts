@@ -24,6 +24,7 @@ import {
   parseCachedReadingPosition,
   readingPositionStorageKey,
 } from "./reading-position-utils";
+import { resolvePdfLinkTarget, type PdfAnnotationRecord } from "./pdf-link-utils";
 import {
   clampNoteWindowPosition,
   ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
@@ -177,6 +178,8 @@ type PdfRenderSession = {
   pdfDocument: {
     numPages: number;
     getPage: (pageNumber: number) => Promise<any>;
+    getDestination?: (destinationId: string) => Promise<unknown>;
+    getPageIndex?: (pageRef: any) => Promise<number>;
   };
   viewerEl: HTMLElement;
   stageEl: HTMLElement;
@@ -472,10 +475,42 @@ function isTagVisible(tagId: string, depth: number) {
   return parent ? viewerState.expandedTags.has(parent) : true;
 }
 
-function renderPdfJsLinks(
+function findPdfRenderGroupIndexForPage(session: PdfRenderSession, pageNumber: number) {
+  return session.plans.findIndex((plan) => plan.pageSlots.has(pageNumber));
+}
+
+function jumpToPdfJsPage(pageNumber: number) {
+  const currentBook = viewerState.currentBook;
+  const session = activePdfRenderSession;
+
+  if (!currentBook || !session) {
+    return;
+  }
+
+  const boundedPageNumber = Math.min(
+    Math.max(Math.trunc(pageNumber), 1),
+    session.pdfDocument.numPages,
+  );
+  activeReadingPosition = {
+    filePath: currentBook.filePath,
+    pageNumber: boundedPageNumber,
+    pageOffsetRatio: 0,
+    updatedAt: activeReadingPosition?.updatedAt ?? null,
+  };
+  cacheReadingPosition(activeReadingPosition);
+  session.restoreTargetPage = boundedPageNumber;
+  const groupIndex = findPdfRenderGroupIndexForPage(session, boundedPageNumber);
+  schedulePdfRenderWindowUpdate(session, groupIndex >= 0 ? groupIndex : undefined);
+  scheduleReadingPositionRestore();
+  void flushReadingPositionSave();
+}
+
+async function renderPdfJsLinks(
   container: HTMLElement,
   viewport: { convertToViewportRectangle: (rect: number[]) => number[] },
-  annotations: Array<Record<string, unknown>>,
+  annotations: PdfAnnotationRecord[],
+  session: PdfRenderSession,
+  currentPageNumber: number,
 ) {
   for (const annotation of annotations) {
     if (annotation.subtype !== "Link" || !Array.isArray(annotation.rect)) {
@@ -500,19 +535,20 @@ function renderPdfJsLinks(
     sectionEl.style.height = `${height}px`;
 
     const linkEl = document.createElement("a");
+    const target = await resolvePdfLinkTarget(annotation, currentPageNumber, session.pdfDocument);
 
-    const maybeUrl =
-      typeof annotation.url === "string"
-        ? annotation.url
-        : typeof annotation.unsafeUrl === "string"
-          ? annotation.unsafeUrl
-          : null;
-
-    if (maybeUrl) {
-      linkEl.href = maybeUrl;
+    if (target?.type === "external") {
+      linkEl.href = target.url;
       linkEl.target = "_blank";
       linkEl.rel = "noreferrer noopener";
-      linkEl.title = maybeUrl;
+      linkEl.title = target.url;
+    } else if (target?.type === "internal") {
+      linkEl.href = `#page=${target.pageNumber}`;
+      linkEl.title = `Go to page ${target.pageNumber}`;
+      linkEl.addEventListener("click", (event) => {
+        event.preventDefault();
+        jumpToPdfJsPage(target.pageNumber);
+      });
     } else {
       linkEl.href = "#";
       linkEl.addEventListener("click", (event) => {
@@ -610,7 +646,13 @@ async function renderPdfRenderPlan(session: PdfRenderSession, plan: PdfRenderPla
     await textLayer.render();
 
     const annotations = await page.getAnnotations();
-    renderPdfJsLinks(linkLayerEl, viewport, annotations as Array<Record<string, unknown>>);
+    await renderPdfJsLinks(
+      linkLayerEl,
+      viewport,
+      annotations as PdfAnnotationRecord[],
+      session,
+      pageNumber,
+    );
     pageEl.dataset.rendered = "true";
 
     if (session.restoreTargetPage === pageNumber) {

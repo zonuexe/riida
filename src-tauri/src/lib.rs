@@ -687,6 +687,15 @@ fn modified_unix_seconds(metadata: &fs::Metadata) -> u64 {
         .unwrap_or(0)
 }
 
+fn current_scan_token() -> Result<u64, String> {
+    std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_nanos()
+        .try_into()
+        .map_err(|_| "failed to convert scan token".to_string())
+}
+
 fn normalize_book_tags(tags: Vec<String>) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut normalized = Vec::new();
@@ -953,10 +962,7 @@ fn scan_and_index(
     config: &AppConfig,
     excluded_patterns: &CompiledExcludePatterns,
 ) -> Result<(), String> {
-    let now = std::time::SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| error.to_string())?
-        .as_secs();
+    let scan_token = current_scan_token()?;
 
     for root in &config.library_roots {
         for entry in WalkDir::new(root)
@@ -993,14 +999,14 @@ fn scan_and_index(
                       modified_at = excluded.modified_at,
                       indexed_at = excluded.indexed_at
                     ",
-                    params![file_path, file_name, file_size, modified_at, now],
+                    params![file_path, file_name, file_size, modified_at, scan_token],
                 )
                 .map_err(|error| error.to_string())?;
         }
     }
 
     connection
-        .execute("DELETE FROM books WHERE indexed_at < ?1", params![now])
+        .execute("DELETE FROM books WHERE indexed_at != ?1", params![scan_token])
         .map_err(|error| error.to_string())?;
 
     Ok(())
@@ -2147,6 +2153,64 @@ mod tests {
         assert!(should_rescan(&regular_dir_event, &compiled));
 
         let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn scan_and_index_removes_books_that_become_excluded_after_config_changes() {
+        let connection = Connection::open_in_memory().expect("in-memory db should open");
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE books (
+                  id INTEGER PRIMARY KEY,
+                  file_path TEXT NOT NULL UNIQUE,
+                  file_name TEXT NOT NULL,
+                  file_size INTEGER NOT NULL,
+                  modified_at INTEGER NOT NULL,
+                  indexed_at INTEGER NOT NULL
+                );
+                CREATE TABLE book_tags (
+                  file_path TEXT NOT NULL,
+                  tag TEXT NOT NULL,
+                  PRIMARY KEY (file_path, tag)
+                );
+                ",
+            )
+            .expect("books schema should be created");
+
+        let temp_root = unique_temp_dir("scan-index-config-change");
+        let kindlepw_dir = temp_root.join("KindlePW");
+        fs::create_dir_all(&kindlepw_dir).expect("kindlepw dir should be created");
+        fs::write(kindlepw_dir.join("Guide.pdf"), "pdf").expect("pdf fixture should be written");
+
+        let initial_config = AppConfig {
+            library_roots: vec![temp_root.to_string_lossy().into_owned()],
+            excluded_patterns: Vec::new(),
+            pdf_renderer: DEFAULT_PDF_RENDERER.to_string(),
+        };
+        let initial_patterns =
+            compile_exclude_patterns(&initial_config).expect("initial patterns should compile");
+        scan_and_index(&connection, &initial_config, &initial_patterns)
+            .expect("initial scan should succeed");
+        let initial_snapshot =
+            load_snapshot(&connection, &initial_config).expect("initial snapshot should load");
+        assert_eq!(initial_snapshot.indexed_count, 1);
+
+        let updated_config = AppConfig {
+            library_roots: vec![temp_root.to_string_lossy().into_owned()],
+            excluded_patterns: vec!["**/kindlepw/**".to_string(), "kindlepw*".to_string()],
+            pdf_renderer: DEFAULT_PDF_RENDERER.to_string(),
+        };
+        let updated_patterns =
+            compile_exclude_patterns(&updated_config).expect("updated patterns should compile");
+        scan_and_index(&connection, &updated_config, &updated_patterns)
+            .expect("updated scan should succeed");
+        let updated_snapshot =
+            load_snapshot(&connection, &updated_config).expect("updated snapshot should load");
+        assert_eq!(updated_snapshot.indexed_count, 0);
+        assert!(updated_snapshot.books.is_empty());
+
+        let _ = fs::remove_dir_all(temp_root);
     }
 
     prop_compose! {

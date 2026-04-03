@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-03
+
+### Fixed
+
+- Books that newly match `excluded_patterns` are now removed correctly on config-triggered rescans, so stale search results do not remain visible.
+- Choosing a tag autocomplete suggestion now adds the selected hierarchical tag instead of the raw text currently typed into the editor.
+
 ## [0.1.0] - 2026-04-03
 
 ### Added
@@ -99,7 +106,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/zonuexe/riida/releases/tag/v0.1.1
 [0.1.0]: https://github.com/zonuexe/riida/releases/tag/v0.1.0
 [0.0.7]: https://github.com/zonuexe/riida/releases/tag/v0.0.7
 [0.0.6]: https://github.com/zonuexe/riida/releases/tag/v0.0.6

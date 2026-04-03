@@ -1006,7 +1006,10 @@ fn scan_and_index(
     }
 
     connection
-        .execute("DELETE FROM books WHERE indexed_at != ?1", params![scan_token])
+        .execute(
+            "DELETE FROM books WHERE indexed_at != ?1",
+            params![scan_token],
+        )
         .map_err(|error| error.to_string())?;
 
     Ok(())

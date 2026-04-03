@@ -24,6 +24,7 @@ import {
   parseCachedReadingPosition,
   readingPositionStorageKey,
 } from "./reading-position-utils";
+import { parseRequestedPageNumber } from "./page-jump-utils";
 import { resolvePdfLinkTarget, type PdfAnnotationRecord } from "./pdf-link-utils";
 import {
   clampNoteWindowPosition,
@@ -165,6 +166,10 @@ type NoteInteractionState = {
   startHeight: number;
 };
 
+type ViewerPageJumpState = {
+  input: string;
+};
+
 type PdfRenderPlan = {
   groupIndex: number;
   visualOrder: number[];
@@ -256,6 +261,9 @@ let cachedThirdPartyJsText = "Loading JavaScript notices...";
 let isTagEditorComposing = false;
 let pdfJsRuntimePromise: Promise<PdfJsRuntime> | null = null;
 let noteEditorModulePromise: Promise<typeof import("./note-editor")> | null = null;
+const viewerPageJumpState: ViewerPageJumpState = {
+  input: "",
+};
 const tagEditorState: TagEditorState = {
   isOpen: false,
   filePath: null,
@@ -479,18 +487,49 @@ function findPdfRenderGroupIndexForPage(session: PdfRenderSession, pageNumber: n
   return session.plans.findIndex((plan) => plan.pageSlots.has(pageNumber));
 }
 
-function jumpToPdfJsPage(pageNumber: number) {
-  const currentBook = viewerState.currentBook;
-  const session = activePdfRenderSession;
+function currentViewerPageNumber() {
+  if (!viewerState.currentBook) {
+    return null;
+  }
 
-  if (!currentBook || !session) {
+  return activeReadingPosition?.pageNumber ?? 1;
+}
+
+function syncViewerPageJumpUi() {
+  const pageJumpEl = document.querySelector<HTMLElement>("#viewer-page-jump");
+  const formEl = document.querySelector<HTMLFormElement>("#viewer-page-jump-form");
+  const inputEl = document.querySelector<HTMLInputElement>("#viewer-page-jump-input");
+  const currentPageNumber = currentViewerPageNumber();
+
+  if (!pageJumpEl || !formEl || !inputEl) {
     return;
   }
 
-  const boundedPageNumber = Math.min(
-    Math.max(Math.trunc(pageNumber), 1),
-    session.pdfDocument.numPages,
-  );
+  const shouldShow = Boolean(viewerState.currentBook);
+  pageJumpEl.hidden = !shouldShow;
+  formEl.hidden = !shouldShow;
+
+  if (!shouldShow || currentPageNumber === null) {
+    return;
+  }
+
+  if (document.activeElement !== inputEl) {
+    viewerPageJumpState.input = String(currentPageNumber);
+    inputEl.value = viewerPageJumpState.input;
+  } else if (inputEl.value !== viewerPageJumpState.input) {
+    inputEl.value = viewerPageJumpState.input;
+  }
+}
+
+function navigateViewerToPage(pageNumber: number) {
+  const currentBook = viewerState.currentBook;
+
+  if (!currentBook) {
+    return;
+  }
+
+  const maxPageNumber = activePdfRenderSession?.pdfDocument.numPages ?? Number.POSITIVE_INFINITY;
+  const boundedPageNumber = Math.min(Math.max(Math.trunc(pageNumber), 1), maxPageNumber);
   activeReadingPosition = {
     filePath: currentBook.filePath,
     pageNumber: boundedPageNumber,
@@ -498,10 +537,23 @@ function jumpToPdfJsPage(pageNumber: number) {
     updatedAt: activeReadingPosition?.updatedAt ?? null,
   };
   cacheReadingPosition(activeReadingPosition);
-  session.restoreTargetPage = boundedPageNumber;
-  const groupIndex = findPdfRenderGroupIndexForPage(session, boundedPageNumber);
-  schedulePdfRenderWindowUpdate(session, groupIndex >= 0 ? groupIndex : undefined);
-  scheduleReadingPositionRestore();
+  syncViewerPageJumpUi();
+
+  if (lastSnapshot?.pdfRenderer === "pdfjs" && activePdfRenderSession) {
+    activePdfRenderSession.restoreTargetPage = boundedPageNumber;
+    const groupIndex = findPdfRenderGroupIndexForPage(activePdfRenderSession, boundedPageNumber);
+    schedulePdfRenderWindowUpdate(activePdfRenderSession, groupIndex >= 0 ? groupIndex : undefined);
+    scheduleReadingPositionRestore();
+  } else {
+    const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
+    if (frame) {
+      const sourceUrl = convertFileSrc(currentBook.filePath);
+      frame.src = `${sourceUrl}#page=${boundedPageNumber}`;
+      frame.dataset.filePath = currentBook.filePath;
+      frame.hidden = false;
+    }
+  }
+
   void flushReadingPositionSave();
 }
 
@@ -547,7 +599,7 @@ async function renderPdfJsLinks(
       linkEl.title = `Go to page ${target.pageNumber}`;
       linkEl.addEventListener("click", (event) => {
         event.preventDefault();
-        jumpToPdfJsPage(target.pageNumber);
+        navigateViewerToPage(target.pageNumber);
       });
     } else {
       linkEl.href = "#";
@@ -1821,6 +1873,7 @@ function scheduleReadingPositionSave() {
   }
 
   cacheReadingPosition(activeReadingPosition);
+  syncViewerPageJumpUi();
 
   if (readingPositionSaveTimer !== null) {
     window.clearTimeout(readingPositionSaveTimer);
@@ -1836,6 +1889,7 @@ async function loadReadingPositionForCurrentBook() {
 
   if (!currentBook) {
     activeReadingPosition = null;
+    syncViewerPageJumpUi();
     return;
   }
 
@@ -1846,8 +1900,10 @@ async function loadReadingPositionForCurrentBook() {
         filePath: currentBook.filePath,
       }));
     cacheReadingPosition(activeReadingPosition);
+    syncViewerPageJumpUi();
   } catch (error) {
     activeReadingPosition = loadCachedReadingPosition(currentBook.filePath);
+    syncViewerPageJumpUi();
     console.error("Failed to load reading position:", error);
   }
 }
@@ -2453,9 +2509,11 @@ function renderMain(snapshot: LibrarySnapshot) {
     "is-active",
     viewerState.currentBook === null &&
       viewerState.activeDirectory === null &&
-      viewerState.activeTag === null,
+      viewerState.activeTag === null &&
+      viewerState.searchQuery === "",
   );
   syncViewerSettingsUi();
+  syncViewerPageJumpUi();
 
   if (searchInput && searchInput.value !== viewerState.searchQuery) {
     searchInput.value = viewerState.searchQuery;
@@ -2541,6 +2599,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   const viewerTagsOpenEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
   const viewerSettingsToggleEl =
     document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
+  const viewerPageJumpFormEl = document.querySelector<HTMLFormElement>("#viewer-page-jump-form");
+  const viewerPageJumpInputEl = document.querySelector<HTMLInputElement>("#viewer-page-jump-input");
   const viewerSettingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
   const viewerSettingsScopeGlobalEl = document.querySelector<HTMLButtonElement>(
     "#viewer-settings-scope-global",
@@ -2587,6 +2647,44 @@ window.addEventListener("DOMContentLoaded", async () => {
     navigateForward();
   });
 
+  viewerPageJumpInputEl?.addEventListener("input", () => {
+    viewerPageJumpState.input = viewerPageJumpInputEl.value;
+  });
+
+  viewerPageJumpInputEl?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      const currentPageNumber = currentViewerPageNumber();
+      viewerPageJumpState.input = currentPageNumber === null ? "" : String(currentPageNumber);
+      syncViewerPageJumpUi();
+      viewerPageJumpInputEl.blur();
+    }
+  });
+
+  viewerPageJumpInputEl?.addEventListener("focus", () => {
+    viewerPageJumpInputEl.select();
+  });
+
+  viewerPageJumpInputEl?.addEventListener("blur", () => {
+    const currentPageNumber = currentViewerPageNumber();
+    viewerPageJumpState.input = currentPageNumber === null ? "" : String(currentPageNumber);
+    syncViewerPageJumpUi();
+  });
+
+  viewerPageJumpFormEl?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const pageNumber = parseRequestedPageNumber(viewerPageJumpState.input);
+    if (pageNumber === null) {
+      const currentPageNumber = currentViewerPageNumber();
+      viewerPageJumpState.input = currentPageNumber === null ? "" : String(currentPageNumber);
+      syncViewerPageJumpUi();
+      return;
+    }
+
+    navigateViewerToPage(pageNumber);
+    viewerPageJumpInputEl?.blur();
+  });
+
   viewerStageEl?.addEventListener("scroll", () => {
     if (lastSnapshot?.pdfRenderer !== "pdfjs" || !viewerState.currentBook) {
       return;
@@ -2610,7 +2708,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         activeDirectory: null,
         activeTag: null,
         activeTagDirectOnly: false,
-        searchQuery: viewerState.searchQuery,
+        searchQuery: "",
       },
       "push",
     );

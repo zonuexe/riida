@@ -2,7 +2,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getName, getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
-import { confirm, open } from "@tauri-apps/plugin-dialog";
+import { confirm, message, open } from "@tauri-apps/plugin-dialog";
 import "./vendor/fontawesome/css/fontawesome.min.css";
 import "./vendor/fontawesome/css/brands.min.css";
 import "./vendor/fontawesome/css/regular.min.css";
@@ -1472,6 +1472,17 @@ async function saveBookMetadataChanges() {
 
   const filePath =
     bookMetadataEditorState.filePath ?? `kindle:${draft.asin.trim() || crypto.randomUUID()}`;
+
+  if (!bookMetadataEditorState.filePath && draft.asin.trim()) {
+    const duplicate = viewerState.books.find((b) => b.filePath === filePath);
+    if (duplicate) {
+      await message(`ASIN ${draft.asin.trim()} is already registered: "${duplicate.fileName}"`, {
+        title: "Duplicate ASIN",
+        kind: "error",
+      });
+      return;
+    }
+  }
 
   try {
     const payload = await invoke<BookMetadataPayload>("save_book_metadata", {

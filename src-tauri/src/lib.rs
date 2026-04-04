@@ -2324,10 +2324,8 @@ mod tests {
         let root = project_root();
 
         assert!(root.exists());
-        assert_eq!(
-            root.file_name().and_then(|name| name.to_str()),
-            Some("riida")
-        );
+        assert!(root.join("package.json").exists());
+        assert!(root.join("src-tauri").is_dir());
     }
 
     #[test]

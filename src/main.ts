@@ -3073,6 +3073,11 @@ function renderMain(snapshot: LibrarySnapshot) {
     tagDirectOnlyEl.checked = viewerState.activeTagDirectOnly;
   }
 
+  const libraryAddKindleEl = document.querySelector<HTMLButtonElement>("#library-add-kindle");
+  if (libraryAddKindleEl) {
+    libraryAddKindleEl.hidden = viewerState.activeExternalSource !== "kindle";
+  }
+
   if (viewerOverlayControlsEl) {
     viewerOverlayControlsEl.hidden = !viewerState.currentBook;
   }

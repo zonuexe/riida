@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-03
+
+### Added
+
+- PDF books in the library can now have editable metadata (title, authors, description, publisher, release date, language, optional links and identifiers, and cover image URL), stored locally and shown in the book list.
+- Amazon Kindle books can be kept in the library with their own metadata; you can edit the same fields as for PDFs, import updates from JSON, and remove a Kindle entry together with its notes, tags, and related data.
+- The metadata editor supports applying a JSON patch (with an in-app example), and you can clear saved PDF metadata or delete a Kindle book after confirming in a dialog.
+
+### Changed
+
+- Rust release checks now satisfy the Clippy `manual_is_multiple_of` lint (no change to release-date validation behavior).
+
 ## [0.1.1] - 2026-04-03
 
 ### Fixed
@@ -106,7 +118,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/zonuexe/riida/releases/tag/v0.1.2
 [0.1.1]: https://github.com/zonuexe/riida/releases/tag/v0.1.1
 [0.1.0]: https://github.com/zonuexe/riida/releases/tag/v0.1.0
 [0.0.7]: https://github.com/zonuexe/riida/releases/tag/v0.0.7

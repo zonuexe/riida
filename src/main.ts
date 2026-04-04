@@ -8,6 +8,11 @@ import "./vendor/fontawesome/css/solid.min.css";
 import type { NoteEditorHandle } from "./note-editor";
 import { addLibraryRoot, buildAppConfigDraft } from "./app-config-utils";
 import {
+  joinMetadataAuthors,
+  normalizeMetadataAuthorsText,
+  validateBookMetadataDraft,
+} from "./book-metadata-utils";
+import {
   deriveDirectories,
   deriveTags,
   filterVisibleBooks,
@@ -59,6 +64,19 @@ type NoteDocument = {
   filePath: string;
   format: string;
   content: string;
+  updatedAt: number | null;
+};
+
+type BookMetadataPayload = {
+  filePath: string;
+  title: string;
+  authors: string[];
+  description: string;
+  publisher: string;
+  releaseDate: string;
+  language: string;
+  url: string;
+  asin: string;
   updatedAt: number | null;
 };
 
@@ -153,6 +171,22 @@ type TagEditorState = {
   tags: string[];
   input: string;
   statusMessage: string;
+};
+
+type BookMetadataEditorState = {
+  isOpen: boolean;
+  filePath: string | null;
+  bookTitle: string;
+  title: string;
+  authorsText: string;
+  description: string;
+  publisher: string;
+  releaseDate: string;
+  language: string;
+  url: string;
+  asin: string;
+  statusMessage: string;
+  loadToken: number;
 };
 
 type NoteInteractionState = {
@@ -271,6 +305,21 @@ const tagEditorState: TagEditorState = {
   tags: [],
   input: "",
   statusMessage: "",
+};
+const bookMetadataEditorState: BookMetadataEditorState = {
+  isOpen: false,
+  filePath: null,
+  bookTitle: "",
+  title: "",
+  authorsText: "",
+  description: "",
+  publisher: "",
+  releaseDate: "",
+  language: "",
+  url: "",
+  asin: "",
+  statusMessage: "",
+  loadToken: 0,
 };
 const PDF_RENDER_RADIUS = 2;
 const PDF_KEEP_RADIUS = 3;
@@ -947,6 +996,22 @@ function setTagEditorStatus(message: string, tone: "neutral" | "success" | "erro
   }
 }
 
+function setBookMetadataStatus(message: string, tone: "neutral" | "success" | "error" = "neutral") {
+  const statusEl = document.querySelector<HTMLElement>("#book-metadata-status");
+  if (!statusEl) {
+    return;
+  }
+
+  bookMetadataEditorState.statusMessage = message;
+  statusEl.hidden = message.length === 0;
+  statusEl.textContent = message;
+  if (tone === "neutral") {
+    delete statusEl.dataset.tone;
+  } else {
+    statusEl.dataset.tone = tone;
+  }
+}
+
 function syncTagEditorUi() {
   const modalEl = document.querySelector<HTMLElement>("#tag-editor-modal");
   const bookEl = document.querySelector<HTMLElement>("#tag-editor-book");
@@ -1028,6 +1093,52 @@ function syncTagEditorUi() {
   }
 }
 
+function syncBookMetadataEditorUi() {
+  const modalEl = document.querySelector<HTMLElement>("#book-metadata-modal");
+  const bookEl = document.querySelector<HTMLElement>("#book-metadata-book");
+  const titleEl = document.querySelector<HTMLInputElement>("#book-metadata-title");
+  const authorsEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-authors");
+  const descriptionEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-description");
+  const publisherEl = document.querySelector<HTMLInputElement>("#book-metadata-publisher");
+  const releaseDateEl = document.querySelector<HTMLInputElement>("#book-metadata-release-date");
+  const languageEl = document.querySelector<HTMLInputElement>("#book-metadata-language");
+  const urlEl = document.querySelector<HTMLInputElement>("#book-metadata-url");
+  const asinEl = document.querySelector<HTMLInputElement>("#book-metadata-asin");
+
+  if (modalEl) {
+    modalEl.hidden = !bookMetadataEditorState.isOpen;
+  }
+
+  if (bookEl) {
+    bookEl.textContent = bookMetadataEditorState.bookTitle;
+  }
+
+  if (titleEl) {
+    titleEl.value = bookMetadataEditorState.title;
+  }
+  if (authorsEl) {
+    authorsEl.value = bookMetadataEditorState.authorsText;
+  }
+  if (descriptionEl) {
+    descriptionEl.value = bookMetadataEditorState.description;
+  }
+  if (publisherEl) {
+    publisherEl.value = bookMetadataEditorState.publisher;
+  }
+  if (releaseDateEl) {
+    releaseDateEl.value = bookMetadataEditorState.releaseDate;
+  }
+  if (languageEl) {
+    languageEl.value = bookMetadataEditorState.language;
+  }
+  if (urlEl) {
+    urlEl.value = bookMetadataEditorState.url;
+  }
+  if (asinEl) {
+    asinEl.value = bookMetadataEditorState.asin;
+  }
+}
+
 function updateBookTagsInState(filePath: string, tags: string[]) {
   const apply = (book: BookSummary) =>
     book.filePath === filePath ? { ...book, tags: [...tags] } : book;
@@ -1044,6 +1155,19 @@ function updateBookTagsInState(filePath: string, tags: string[]) {
   }
 }
 
+function populateBookMetadataEditor(book: BookSummary, metadata: BookMetadataPayload) {
+  bookMetadataEditorState.filePath = metadata.filePath;
+  bookMetadataEditorState.bookTitle = book.fileName;
+  bookMetadataEditorState.title = metadata.title;
+  bookMetadataEditorState.authorsText = joinMetadataAuthors(metadata.authors);
+  bookMetadataEditorState.description = metadata.description;
+  bookMetadataEditorState.publisher = metadata.publisher;
+  bookMetadataEditorState.releaseDate = metadata.releaseDate;
+  bookMetadataEditorState.language = metadata.language;
+  bookMetadataEditorState.url = metadata.url;
+  bookMetadataEditorState.asin = metadata.asin;
+}
+
 function openTagEditor(book: BookSummary) {
   tagEditorState.isOpen = true;
   tagEditorState.filePath = book.filePath;
@@ -1054,11 +1178,55 @@ function openTagEditor(book: BookSummary) {
   syncTagEditorUi();
 }
 
+async function openBookMetadataEditor(book: BookSummary) {
+  const loadToken = bookMetadataEditorState.loadToken + 1;
+  bookMetadataEditorState.loadToken = loadToken;
+  bookMetadataEditorState.isOpen = true;
+  bookMetadataEditorState.filePath = book.filePath;
+  bookMetadataEditorState.bookTitle = book.fileName;
+  bookMetadataEditorState.title = "";
+  bookMetadataEditorState.authorsText = "";
+  bookMetadataEditorState.description = "";
+  bookMetadataEditorState.publisher = "";
+  bookMetadataEditorState.releaseDate = "";
+  bookMetadataEditorState.language = "";
+  bookMetadataEditorState.url = "";
+  bookMetadataEditorState.asin = "";
+  setBookMetadataStatus("Loading metadata...");
+  syncBookMetadataEditorUi();
+
+  try {
+    const payload = await invoke<BookMetadataPayload>("load_book_metadata", {
+      filePath: book.filePath,
+    });
+    if (bookMetadataEditorState.loadToken !== loadToken) {
+      return;
+    }
+
+    populateBookMetadataEditor(book, payload);
+    setBookMetadataStatus("");
+    syncBookMetadataEditorUi();
+  } catch (error) {
+    if (bookMetadataEditorState.loadToken !== loadToken) {
+      return;
+    }
+    setBookMetadataStatus(`Failed to load metadata: ${String(error)}`, "error");
+  }
+}
+
 function closeTagEditor() {
   tagEditorState.isOpen = false;
   tagEditorState.input = "";
   setTagEditorStatus("");
   syncTagEditorUi();
+}
+
+function closeBookMetadataEditor() {
+  bookMetadataEditorState.isOpen = false;
+  bookMetadataEditorState.filePath = null;
+  bookMetadataEditorState.loadToken += 1;
+  setBookMetadataStatus("");
+  syncBookMetadataEditorUi();
 }
 
 function addTagFromEditorInput() {
@@ -1081,6 +1249,28 @@ function addTagFromEditorInput() {
     inputEl.value = "";
   }
   syncTagEditorUi();
+}
+
+function buildBookMetadataDraftFromForm() {
+  const titleEl = document.querySelector<HTMLInputElement>("#book-metadata-title");
+  const authorsEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-authors");
+  const descriptionEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-description");
+  const publisherEl = document.querySelector<HTMLInputElement>("#book-metadata-publisher");
+  const releaseDateEl = document.querySelector<HTMLInputElement>("#book-metadata-release-date");
+  const languageEl = document.querySelector<HTMLInputElement>("#book-metadata-language");
+  const urlEl = document.querySelector<HTMLInputElement>("#book-metadata-url");
+  const asinEl = document.querySelector<HTMLInputElement>("#book-metadata-asin");
+
+  return {
+    title: titleEl?.value ?? bookMetadataEditorState.title,
+    authorsText: authorsEl?.value ?? bookMetadataEditorState.authorsText,
+    description: descriptionEl?.value ?? bookMetadataEditorState.description,
+    publisher: publisherEl?.value ?? bookMetadataEditorState.publisher,
+    releaseDate: releaseDateEl?.value ?? bookMetadataEditorState.releaseDate,
+    language: languageEl?.value ?? bookMetadataEditorState.language,
+    url: urlEl?.value ?? bookMetadataEditorState.url,
+    asin: asinEl?.value ?? bookMetadataEditorState.asin,
+  };
 }
 
 async function saveTagEditorChanges() {
@@ -1106,6 +1296,48 @@ async function saveTagEditorChanges() {
     renderApp();
   } catch (error) {
     setTagEditorStatus(`Failed to save tags: ${String(error)}`, "error");
+  }
+}
+
+async function saveBookMetadataChanges() {
+  if (!bookMetadataEditorState.filePath) {
+    return;
+  }
+
+  const draft = buildBookMetadataDraftFromForm();
+  const validation = validateBookMetadataDraft(draft);
+  if (!validation.ok) {
+    setBookMetadataStatus(validation.message, "error");
+    return;
+  }
+
+  try {
+    const payload = await invoke<BookMetadataPayload>("save_book_metadata", {
+      input: {
+        filePath: bookMetadataEditorState.filePath,
+        title: draft.title,
+        authors: normalizeMetadataAuthorsText(draft.authorsText),
+        description: draft.description,
+        publisher: draft.publisher,
+        releaseDate: draft.releaseDate,
+        language: draft.language,
+        url: draft.url,
+        asin: draft.asin,
+      },
+    });
+    const sourceBook =
+      viewerState.currentBook?.filePath === payload.filePath
+        ? viewerState.currentBook
+        : {
+            fileName: bookMetadataEditorState.bookTitle,
+            filePath: payload.filePath,
+            fileSize: 0,
+            tags: [],
+          };
+    populateBookMetadataEditor(sourceBook, payload);
+    closeBookMetadataEditor();
+  } catch (error) {
+    setBookMetadataStatus(`Failed to save metadata: ${String(error)}`, "error");
   }
 }
 
@@ -1212,6 +1444,7 @@ function syncViewerSettingsUi() {
   const settingsToggleEl = document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
   const settingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
   const tagsOpenEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
+  const metadataOpenEl = document.querySelector<HTMLButtonElement>("#viewer-metadata-open");
   const scopeGlobalEl = document.querySelector<HTMLButtonElement>("#viewer-settings-scope-global");
   const scopeFileEl = document.querySelector<HTMLButtonElement>("#viewer-settings-scope-file");
   const pageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
@@ -1231,6 +1464,12 @@ function syncViewerSettingsUi() {
 
   if (tagsOpenEl) {
     tagsOpenEl.hidden = !isPdfJs || !viewerSettings.isSettingsOpen;
+  }
+
+  if (metadataOpenEl) {
+    metadataOpenEl.hidden =
+      !viewerState.currentBook ||
+      (lastSnapshot?.pdfRenderer === "pdfjs" && !viewerSettings.isSettingsOpen);
   }
 
   if (settingsPanelEl) {
@@ -2383,6 +2622,8 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
 
     const tagsEl = document.createElement("div");
     tagsEl.className = "book-tag-list";
+    const actionsEl = document.createElement("div");
+    actionsEl.className = "book-action-list";
     if (book.tags.length === 0) {
       tagsEl.hidden = true;
     } else {
@@ -2417,10 +2658,21 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
       openTagEditor(book);
     });
 
+    const editMetadataEl = document.createElement("button");
+    editMetadataEl.type = "button";
+    editMetadataEl.className = "book-tags-edit";
+    editMetadataEl.textContent = "Edit metadata";
+    editMetadataEl.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void openBookMetadataEditor(book);
+    });
+
     bodyEl.appendChild(titleEl);
     bodyEl.appendChild(pathEl);
     tagsRowEl.appendChild(tagsEl);
-    tagsRowEl.appendChild(editTagsEl);
+    actionsEl.appendChild(editMetadataEl);
+    actionsEl.appendChild(editTagsEl);
+    tagsRowEl.appendChild(actionsEl);
     bodyEl.appendChild(tagsRowEl);
     bodyEl.appendChild(metaEl);
     itemEl.appendChild(thumbEl);
@@ -2572,6 +2824,7 @@ function renderApp() {
   renderSidebar(lastSnapshot);
   renderMain(lastSnapshot);
   syncTagEditorUi();
+  syncBookMetadataEditorUi();
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -2597,6 +2850,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const noteToggleEl = document.querySelector<HTMLButtonElement>("#note-toggle");
   const noteCloseEl = document.querySelector<HTMLButtonElement>("#note-close");
   const viewerTagsOpenEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
+  const viewerMetadataOpenEl = document.querySelector<HTMLButtonElement>("#viewer-metadata-open");
   const viewerSettingsToggleEl =
     document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
   const viewerPageJumpFormEl = document.querySelector<HTMLFormElement>("#viewer-page-jump-form");
@@ -2625,6 +2879,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   const tagEditorSaveEl = document.querySelector<HTMLButtonElement>("#tag-editor-save");
   const tagEditorAddEl = document.querySelector<HTMLButtonElement>("#tag-editor-add");
   const tagEditorInputEl = document.querySelector<HTMLInputElement>("#tag-editor-input");
+  const bookMetadataBackdropEl = document.querySelector<HTMLElement>("#book-metadata-backdrop");
+  const bookMetadataCloseEl = document.querySelector<HTMLButtonElement>("#book-metadata-close");
+  const bookMetadataCancelEl = document.querySelector<HTMLButtonElement>("#book-metadata-cancel");
+  const bookMetadataSaveEl = document.querySelector<HTMLButtonElement>("#book-metadata-save");
 
   searchInput?.addEventListener("input", () => {
     void navigateToState(
@@ -2814,12 +3072,24 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  viewerMetadataOpenEl?.addEventListener("click", () => {
+    if (viewerState.currentBook) {
+      void openBookMetadataEditor(viewerState.currentBook);
+    }
+  });
+
   tagEditorCloseEl?.addEventListener("click", closeTagEditor);
   tagEditorCancelEl?.addEventListener("click", closeTagEditor);
   tagEditorBackdropEl?.addEventListener("click", closeTagEditor);
   tagEditorAddEl?.addEventListener("click", addTagFromEditorInput);
   tagEditorSaveEl?.addEventListener("click", () => {
     void saveTagEditorChanges();
+  });
+  bookMetadataCloseEl?.addEventListener("click", closeBookMetadataEditor);
+  bookMetadataCancelEl?.addEventListener("click", closeBookMetadataEditor);
+  bookMetadataBackdropEl?.addEventListener("click", closeBookMetadataEditor);
+  bookMetadataSaveEl?.addEventListener("click", () => {
+    void saveBookMetadataChanges();
   });
   tagEditorInputEl?.addEventListener("input", () => {
     tagEditorState.input = tagEditorInputEl.value;

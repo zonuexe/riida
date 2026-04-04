@@ -121,6 +121,35 @@ struct ReadingPosition {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct BookMetadataPayload {
+    file_path: String,
+    title: String,
+    authors: Vec<String>,
+    description: String,
+    publisher: String,
+    release_date: String,
+    language: String,
+    url: String,
+    asin: String,
+    updated_at: Option<u64>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BookMetadataInput {
+    file_path: String,
+    title: String,
+    authors: Vec<String>,
+    description: String,
+    publisher: String,
+    release_date: String,
+    language: String,
+    url: String,
+    asin: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct BookTagsPayload {
     file_path: String,
     tags: Vec<String>,
@@ -633,6 +662,18 @@ fn open_database() -> Result<Connection, String> {
               tag TEXT NOT NULL,
               PRIMARY KEY (file_path, tag)
             );
+            CREATE TABLE IF NOT EXISTS book_metadata (
+              file_path TEXT PRIMARY KEY,
+              title TEXT NOT NULL,
+              authors_json TEXT NOT NULL,
+              description TEXT NOT NULL,
+              publisher TEXT NOT NULL,
+              release_date TEXT NOT NULL,
+              language TEXT NOT NULL,
+              url TEXT NOT NULL,
+              asin TEXT NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
             ",
         )
         .map_err(|error| error.to_string())?;
@@ -713,6 +754,94 @@ fn normalize_book_tags(tags: Vec<String>) -> Vec<String> {
     }
 
     normalized
+}
+
+fn normalize_book_metadata_authors(authors: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::new();
+
+    for author in authors {
+        let trimmed = author.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let owned = trimmed.to_string();
+        if seen.insert(owned.clone()) {
+            normalized.push(owned);
+        }
+    }
+
+    normalized
+}
+
+fn is_leap_year(year: u32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+fn is_valid_release_date(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+
+    let mut parts = trimmed.split('-');
+    let Some(year) = parts.next() else {
+        return false;
+    };
+    let Some(month) = parts.next() else {
+        return false;
+    };
+    let Some(day) = parts.next() else {
+        return false;
+    };
+    if parts.next().is_some() || year.len() != 4 || month.len() != 2 || day.len() != 2 {
+        return false;
+    }
+
+    let Ok(year) = year.parse::<u32>() else {
+        return false;
+    };
+    let Ok(month) = month.parse::<u32>() else {
+        return false;
+    };
+    let Ok(day) = day.parse::<u32>() else {
+        return false;
+    };
+
+    if month == 0 || month > 12 || day == 0 {
+        return false;
+    }
+
+    let max_day = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => return false,
+    };
+
+    day <= max_day
+}
+
+fn normalize_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPayload, String> {
+    let release_date = input.release_date.trim().to_string();
+    if !is_valid_release_date(&release_date) {
+        return Err("Release date must use YYYY-MM-DD.".to_string());
+    }
+
+    Ok(BookMetadataPayload {
+        file_path: input.file_path,
+        title: input.title.trim().to_string(),
+        authors: normalize_book_metadata_authors(input.authors),
+        description: input.description.trim().to_string(),
+        publisher: input.publisher.trim().to_string(),
+        release_date,
+        language: input.language.trim().to_string(),
+        url: input.url.trim().to_string(),
+        asin: input.asin.trim().to_string(),
+        updated_at: None,
+    })
 }
 
 fn default_viewer_preferences() -> ViewerPreferences {
@@ -1445,6 +1574,120 @@ fn save_book_tags(file_path: String, tags: Vec<String>) -> Result<BookTagsPayloa
 }
 
 #[tauri::command]
+fn load_book_metadata(file_path: String) -> Result<BookMetadataPayload, String> {
+    let connection = open_database()?;
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT
+              title,
+              authors_json,
+              description,
+              publisher,
+              release_date,
+              language,
+              url,
+              asin,
+              updated_at
+            FROM book_metadata
+            WHERE file_path = ?1
+            ",
+        )
+        .map_err(|error| error.to_string())?;
+
+    let metadata = statement.query_row(params![&file_path], |row| {
+        let authors_json: String = row.get(1)?;
+        let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
+        Ok(BookMetadataPayload {
+            file_path: file_path.clone(),
+            title: row.get(0)?,
+            authors,
+            description: row.get(2)?,
+            publisher: row.get(3)?,
+            release_date: row.get(4)?,
+            language: row.get(5)?,
+            url: row.get(6)?,
+            asin: row.get(7)?,
+            updated_at: Some(row.get(8)?),
+        })
+    });
+
+    match metadata {
+        Ok(metadata) => Ok(metadata),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(BookMetadataPayload {
+            file_path,
+            title: String::new(),
+            authors: Vec::new(),
+            description: String::new(),
+            publisher: String::new(),
+            release_date: String::new(),
+            language: String::new(),
+            url: String::new(),
+            asin: String::new(),
+            updated_at: None,
+        }),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+#[tauri::command]
+fn save_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPayload, String> {
+    let connection = open_database()?;
+    let mut payload = normalize_book_metadata(input)?;
+    let updated_at = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs();
+    let authors_json =
+        serde_json::to_string(&payload.authors).map_err(|error| error.to_string())?;
+
+    connection
+        .execute(
+            "
+            INSERT INTO book_metadata (
+              file_path,
+              title,
+              authors_json,
+              description,
+              publisher,
+              release_date,
+              language,
+              url,
+              asin,
+              updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            ON CONFLICT(file_path) DO UPDATE SET
+              title = excluded.title,
+              authors_json = excluded.authors_json,
+              description = excluded.description,
+              publisher = excluded.publisher,
+              release_date = excluded.release_date,
+              language = excluded.language,
+              url = excluded.url,
+              asin = excluded.asin,
+              updated_at = excluded.updated_at
+            ",
+            params![
+                &payload.file_path,
+                &payload.title,
+                &authors_json,
+                &payload.description,
+                &payload.publisher,
+                &payload.release_date,
+                &payload.language,
+                &payload.url,
+                &payload.asin,
+                updated_at
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+
+    payload.updated_at = Some(updated_at);
+    Ok(payload)
+}
+
+#[tauri::command]
 fn load_reading_position(file_path: String) -> Result<Option<ReadingPosition>, String> {
     let connection = open_database()?;
     let mut statement = connection
@@ -1588,6 +1831,8 @@ pub fn run() {
             load_note,
             save_note,
             save_book_tags,
+            load_book_metadata,
+            save_book_metadata,
             load_reading_position,
             save_reading_position,
             load_viewer_preferences,
@@ -2353,5 +2598,32 @@ mod tests {
         ]);
 
         assert_eq!(normalized, vec!["rust", "pdf", "PDF"]);
+    }
+
+    #[test]
+    fn normalize_book_metadata_authors_discards_empty_values_and_deduplicates() {
+        let normalized = normalize_book_metadata_authors(vec![
+            " Alice ".to_string(),
+            "".to_string(),
+            "Bob".to_string(),
+            "Alice".to_string(),
+        ]);
+
+        assert_eq!(normalized, vec!["Alice", "Bob"]);
+    }
+
+    #[test]
+    fn release_date_validation_accepts_empty_and_valid_dates() {
+        assert!(is_valid_release_date(""));
+        assert!(is_valid_release_date("2026-04-04"));
+        assert!(is_valid_release_date("2024-02-29"));
+    }
+
+    #[test]
+    fn release_date_validation_rejects_invalid_dates() {
+        assert!(!is_valid_release_date("2026/04/04"));
+        assert!(!is_valid_release_date("2026-02-29"));
+        assert!(!is_valid_release_date("2026-13-01"));
+        assert!(!is_valid_release_date("2026-04-31"));
     }
 }

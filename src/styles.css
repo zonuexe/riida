@@ -1254,6 +1254,14 @@ h1 {
   gap: 8px;
 }
 
+.book-action-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+}
+
 .book-tag-list {
   display: flex;
   flex-wrap: wrap;
@@ -1333,6 +1341,16 @@ h1 {
   max-width: 560px;
 }
 
+.metadata-editor-dialog {
+  max-width: 720px;
+}
+
+.metadata-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .tag-editor-list {
   display: flex;
   flex-wrap: wrap;
@@ -1361,6 +1379,12 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .metadata-editor-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .tag-editor-suggestion {

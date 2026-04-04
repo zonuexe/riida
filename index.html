@@ -468,6 +468,26 @@
             <span>URL</span>
             <input id="book-metadata-url" type="url" maxlength="500" />
           </label>
+          <section class="metadata-import-block">
+            <div class="metadata-import-header">
+              <h3>Import JSON</h3>
+              <button id="book-metadata-import-apply" class="app-settings-secondary" type="button">
+                Apply JSON
+              </button>
+            </div>
+            <p class="metadata-import-help">
+              Missing keys keep the current value. <code>null</code> clears that field.
+            </p>
+            <pre id="book-metadata-import-example" class="metadata-import-example"></pre>
+            <label class="app-settings-field">
+              <span>JSON patch</span>
+              <textarea
+                id="book-metadata-import"
+                rows="8"
+                placeholder='{&#10;  "title": "...",&#10;  "authors": ["..."]&#10;}'
+              ></textarea>
+            </label>
+          </section>
           <p id="book-metadata-status" class="app-settings-status" hidden></p>
         </div>
         <div class="app-settings-actions">

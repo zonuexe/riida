@@ -8,8 +8,11 @@ import "./vendor/fontawesome/css/solid.min.css";
 import type { NoteEditorHandle } from "./note-editor";
 import { addLibraryRoot, buildAppConfigDraft } from "./app-config-utils";
 import {
+  applyBookMetadataImport,
+  BOOK_METADATA_IMPORT_EXAMPLE,
   joinMetadataAuthors,
   normalizeMetadataAuthorsText,
+  parseBookMetadataImport,
   validateBookMetadataDraft,
 } from "./book-metadata-utils";
 import {
@@ -185,6 +188,7 @@ type BookMetadataEditorState = {
   language: string;
   url: string;
   asin: string;
+  importText: string;
   statusMessage: string;
   loadToken: number;
 };
@@ -318,6 +322,7 @@ const bookMetadataEditorState: BookMetadataEditorState = {
   language: "",
   url: "",
   asin: "",
+  importText: "",
   statusMessage: "",
   loadToken: 0,
 };
@@ -1104,6 +1109,8 @@ function syncBookMetadataEditorUi() {
   const languageEl = document.querySelector<HTMLInputElement>("#book-metadata-language");
   const urlEl = document.querySelector<HTMLInputElement>("#book-metadata-url");
   const asinEl = document.querySelector<HTMLInputElement>("#book-metadata-asin");
+  const importEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-import");
+  const exampleEl = document.querySelector<HTMLElement>("#book-metadata-import-example");
 
   if (modalEl) {
     modalEl.hidden = !bookMetadataEditorState.isOpen;
@@ -1136,6 +1143,12 @@ function syncBookMetadataEditorUi() {
   }
   if (asinEl) {
     asinEl.value = bookMetadataEditorState.asin;
+  }
+  if (importEl) {
+    importEl.value = bookMetadataEditorState.importText;
+  }
+  if (exampleEl) {
+    exampleEl.textContent = BOOK_METADATA_IMPORT_EXAMPLE;
   }
 }
 
@@ -1192,6 +1205,7 @@ async function openBookMetadataEditor(book: BookSummary) {
   bookMetadataEditorState.language = "";
   bookMetadataEditorState.url = "";
   bookMetadataEditorState.asin = "";
+  bookMetadataEditorState.importText = "";
   setBookMetadataStatus("Loading metadata...");
   syncBookMetadataEditorUi();
 
@@ -1224,6 +1238,7 @@ function closeTagEditor() {
 function closeBookMetadataEditor() {
   bookMetadataEditorState.isOpen = false;
   bookMetadataEditorState.filePath = null;
+  bookMetadataEditorState.importText = "";
   bookMetadataEditorState.loadToken += 1;
   setBookMetadataStatus("");
   syncBookMetadataEditorUi();
@@ -1271,6 +1286,48 @@ function buildBookMetadataDraftFromForm() {
     url: urlEl?.value ?? bookMetadataEditorState.url,
     asin: asinEl?.value ?? bookMetadataEditorState.asin,
   };
+}
+
+function applyBookMetadataDraftToState(draft: {
+  title: string;
+  authorsText: string;
+  description: string;
+  publisher: string;
+  releaseDate: string;
+  language: string;
+  url: string;
+  asin: string;
+}) {
+  bookMetadataEditorState.title = draft.title;
+  bookMetadataEditorState.authorsText = draft.authorsText;
+  bookMetadataEditorState.description = draft.description;
+  bookMetadataEditorState.publisher = draft.publisher;
+  bookMetadataEditorState.releaseDate = draft.releaseDate;
+  bookMetadataEditorState.language = draft.language;
+  bookMetadataEditorState.url = draft.url;
+  bookMetadataEditorState.asin = draft.asin;
+}
+
+function importBookMetadataFromJson() {
+  const importEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-import");
+  const importText = importEl?.value ?? bookMetadataEditorState.importText;
+  const parsed = parseBookMetadataImport(importText);
+  if (!parsed.ok) {
+    setBookMetadataStatus(parsed.message, "error");
+    return;
+  }
+
+  const nextDraft = applyBookMetadataImport(buildBookMetadataDraftFromForm(), parsed.patch);
+  const validation = validateBookMetadataDraft(nextDraft);
+  if (!validation.ok) {
+    setBookMetadataStatus(validation.message, "error");
+    return;
+  }
+
+  bookMetadataEditorState.importText = importText;
+  applyBookMetadataDraftToState(nextDraft);
+  setBookMetadataStatus("Imported metadata from JSON.", "success");
+  syncBookMetadataEditorUi();
 }
 
 async function saveTagEditorChanges() {
@@ -2883,6 +2940,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   const bookMetadataCloseEl = document.querySelector<HTMLButtonElement>("#book-metadata-close");
   const bookMetadataCancelEl = document.querySelector<HTMLButtonElement>("#book-metadata-cancel");
   const bookMetadataSaveEl = document.querySelector<HTMLButtonElement>("#book-metadata-save");
+  const bookMetadataImportEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-import");
+  const bookMetadataImportApplyEl = document.querySelector<HTMLButtonElement>(
+    "#book-metadata-import-apply",
+  );
 
   searchInput?.addEventListener("input", () => {
     void navigateToState(
@@ -3090,6 +3151,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   bookMetadataBackdropEl?.addEventListener("click", closeBookMetadataEditor);
   bookMetadataSaveEl?.addEventListener("click", () => {
     void saveBookMetadataChanges();
+  });
+  bookMetadataImportApplyEl?.addEventListener("click", importBookMetadataFromJson);
+  bookMetadataImportEl?.addEventListener("input", () => {
+    bookMetadataEditorState.importText = bookMetadataImportEl.value;
   });
   tagEditorInputEl?.addEventListener("input", () => {
     tagEditorState.input = tagEditorInputEl.value;

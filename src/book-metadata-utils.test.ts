@@ -1,8 +1,11 @@
 import { describe, expect, test } from "vitest";
 import {
+  applyBookMetadataImport,
+  BOOK_METADATA_IMPORT_EXAMPLE,
   isValidMetadataReleaseDate,
   joinMetadataAuthors,
   normalizeMetadataAuthorsText,
+  parseBookMetadataImport,
   validateBookMetadataDraft,
 } from "./book-metadata-utils";
 
@@ -57,5 +60,73 @@ describe("validateBookMetadataDraft", () => {
       ok: false,
       message: "Release date must use YYYY-MM-DD.",
     });
+  });
+});
+
+describe("parseBookMetadataImport", () => {
+  test("accepts the example object", () => {
+    const result = parseBookMetadataImport(BOOK_METADATA_IMPORT_EXAMPLE);
+    expect(result.ok).toBe(true);
+  });
+
+  test("rejects invalid JSON and invalid field types", () => {
+    expect(parseBookMetadataImport("{").ok).toBe(false);
+    expect(parseBookMetadataImport(JSON.stringify({ authors: "Alice" }))).toEqual({
+      ok: false,
+      message: '"authors" must be an array of strings or null.',
+    });
+  });
+});
+
+describe("applyBookMetadataImport", () => {
+  test("keeps missing keys unchanged and clears null values", () => {
+    expect(
+      applyBookMetadataImport(
+        {
+          title: "Old title",
+          authorsText: "Alice\nBob",
+          description: "Old description",
+          publisher: "Old publisher",
+          releaseDate: "2026-04-04",
+          language: "ja",
+          url: "https://example.com/old",
+          asin: "OLDASIN",
+        },
+        {
+          title: "New title",
+          authors: null,
+          publisher: "New publisher",
+        },
+      ),
+    ).toEqual({
+      title: "New title",
+      authorsText: "",
+      description: "Old description",
+      publisher: "New publisher",
+      releaseDate: "2026-04-04",
+      language: "ja",
+      url: "https://example.com/old",
+      asin: "OLDASIN",
+    });
+  });
+
+  test("normalizes imported authors", () => {
+    expect(
+      applyBookMetadataImport(
+        {
+          title: "",
+          authorsText: "",
+          description: "",
+          publisher: "",
+          releaseDate: "",
+          language: "",
+          url: "",
+          asin: "",
+        },
+        {
+          authors: [" Alice ", "Bob", "Alice"],
+        },
+      ).authorsText,
+    ).toBe("Alice\nBob");
   });
 });

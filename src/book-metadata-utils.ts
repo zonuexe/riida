@@ -9,6 +9,30 @@ export type BookMetadataDraft = {
   asin: string;
 };
 
+export type BookMetadataImportPatch = {
+  title?: string | null;
+  authors?: string[] | null;
+  description?: string | null;
+  publisher?: string | null;
+  releaseDate?: string | null;
+  language?: string | null;
+  url?: string | null;
+  asin?: string | null;
+};
+
+type NullableStringImportKey = Exclude<keyof BookMetadataImportPatch, "authors">;
+
+export const BOOK_METADATA_IMPORT_EXAMPLE = `{
+  "title": "型システムのしくみ",
+  "authors": ["山田 太郎", "Jane Smith"],
+  "description": "型とプログラミング言語の基礎を解説する入門書です。",
+  "publisher": "技術評論社",
+  "releaseDate": "2026-04-04",
+  "language": "ja",
+  "url": "https://example.com/books/type-systems",
+  "asin": "B012345678"
+}`;
+
 export function normalizeMetadataAuthorsText(value: string): string[] {
   const seen = new Set<string>();
   const authors: string[] = [];
@@ -69,4 +93,88 @@ export function validateBookMetadataDraft(
   }
 
   return { ok: true };
+}
+
+export function parseBookMetadataImport(
+  value: string,
+): { ok: true; patch: BookMetadataImportPatch } | { ok: false; message: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return {
+      ok: false,
+      message: "Metadata JSON must be valid JSON.",
+    };
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return {
+      ok: false,
+      message: "Metadata JSON must be an object.",
+    };
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const patch: BookMetadataImportPatch = {};
+
+  const assignNullableString = (key: NullableStringImportKey) => {
+    if (!(key in record)) {
+      return;
+    }
+    const value = record[key];
+    if (value !== null && typeof value !== "string") {
+      throw new Error(`"${key}" must be a string or null.`);
+    }
+    patch[key] = value as string | null;
+  };
+
+  try {
+    assignNullableString("title");
+    assignNullableString("description");
+    assignNullableString("publisher");
+    assignNullableString("releaseDate");
+    assignNullableString("language");
+    assignNullableString("url");
+    assignNullableString("asin");
+
+    if ("authors" in record) {
+      const authors = record.authors;
+      if (authors === null) {
+        patch.authors = null;
+      } else if (Array.isArray(authors) && authors.every((author) => typeof author === "string")) {
+        patch.authors = authors;
+      } else {
+        throw new Error('"authors" must be an array of strings or null.');
+      }
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "Metadata JSON is invalid.",
+    };
+  }
+
+  return { ok: true, patch };
+}
+
+export function applyBookMetadataImport(
+  draft: BookMetadataDraft,
+  patch: BookMetadataImportPatch,
+): BookMetadataDraft {
+  return {
+    title: patch.title === undefined ? draft.title : (patch.title ?? ""),
+    authorsText:
+      patch.authors === undefined
+        ? draft.authorsText
+        : patch.authors === null
+          ? ""
+          : joinMetadataAuthors(normalizeMetadataAuthorsText(patch.authors.join("\n"))),
+    description: patch.description === undefined ? draft.description : (patch.description ?? ""),
+    publisher: patch.publisher === undefined ? draft.publisher : (patch.publisher ?? ""),
+    releaseDate: patch.releaseDate === undefined ? draft.releaseDate : (patch.releaseDate ?? ""),
+    language: patch.language === undefined ? draft.language : (patch.language ?? ""),
+    url: patch.url === undefined ? draft.url : (patch.url ?? ""),
+    asin: patch.asin === undefined ? draft.asin : (patch.asin ?? ""),
+  };
 }

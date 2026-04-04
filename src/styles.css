@@ -1351,6 +1351,45 @@ h1 {
   gap: 16px;
 }
 
+.metadata-import-block {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(96, 70, 33, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 250, 240, 0.5);
+}
+
+.metadata-import-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.metadata-import-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.metadata-import-help {
+  margin: 0;
+  color: rgba(31, 27, 22, 0.62);
+  font-size: 0.9rem;
+}
+
+.metadata-import-example {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  border-radius: 14px;
+  background: rgba(96, 70, 33, 0.06);
+  color: rgba(31, 27, 22, 0.82);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 .tag-editor-list {
   display: flex;
   flex-wrap: wrap;

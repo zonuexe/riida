@@ -381,6 +381,17 @@ h1 {
   cursor: pointer;
 }
 
+.app-settings-danger {
+  min-width: 100px;
+  border: 1px solid rgba(161, 62, 43, 0.2);
+  border-radius: 999px;
+  padding: 10px 18px;
+  background: rgba(161, 62, 43, 0.08);
+  color: #a13e2b;
+  font: inherit;
+  cursor: pointer;
+}
+
 .app-settings-inline {
   justify-self: start;
   min-width: 0;
@@ -1389,6 +1400,23 @@ h1 {
   font-size: 0.82rem;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.metadata-import-details {
+  display: grid;
+  gap: 10px;
+}
+
+.metadata-import-details summary {
+  cursor: pointer;
+  color: rgba(125, 78, 33, 0.88);
+  font-size: 0.92rem;
+}
+
+.metadata-editor-danger-zone {
+  display: flex;
+  justify-content: start;
+  padding-top: 6px;
 }
 
 .tag-editor-list {

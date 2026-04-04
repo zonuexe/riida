@@ -485,7 +485,10 @@
             <p class="metadata-import-help">
               Missing keys keep the current value. <code>null</code> clears that field.
             </p>
-            <pre id="book-metadata-import-example" class="metadata-import-example"></pre>
+            <details class="metadata-import-details">
+              <summary>Show JSON example</summary>
+              <pre id="book-metadata-import-example" class="metadata-import-example"></pre>
+            </details>
             <label class="app-settings-field">
               <span>JSON patch</span>
               <textarea
@@ -496,6 +499,12 @@
             </label>
           </section>
           <p id="book-metadata-status" class="app-settings-status" hidden></p>
+          <div class="metadata-editor-danger-zone">
+            <button id="book-metadata-delete" class="app-settings-danger" type="button" hidden>
+              <i class="fa-regular fa-trash-can" aria-hidden="true"></i>
+              <span>Delete</span>
+            </button>
+          </div>
         </div>
         <div class="app-settings-actions">
           <button id="book-metadata-cancel" class="app-settings-secondary" type="button">

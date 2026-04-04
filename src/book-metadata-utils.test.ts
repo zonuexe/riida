@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   applyBookMetadataImport,
   BOOK_METADATA_IMPORT_EXAMPLE,
+  isBookMetadataDraftEmpty,
   isValidMetadataReleaseDate,
   joinMetadataAuthors,
   normalizeMetadataAuthorsText,
@@ -61,6 +62,40 @@ describe("validateBookMetadataDraft", () => {
       ok: false,
       message: "Release date must use YYYY-MM-DD.",
     });
+  });
+});
+
+describe("isBookMetadataDraftEmpty", () => {
+  test("treats blank metadata as empty", () => {
+    expect(
+      isBookMetadataDraftEmpty({
+        title: "",
+        authorsText: " \n ",
+        description: "",
+        publisher: "",
+        releaseDate: "",
+        language: "",
+        url: "",
+        asin: "",
+        coverUrl: "",
+      }),
+    ).toBe(true);
+  });
+
+  test("detects non-empty metadata fields", () => {
+    expect(
+      isBookMetadataDraftEmpty({
+        title: "",
+        authorsText: "",
+        description: "",
+        publisher: "",
+        releaseDate: "",
+        language: "",
+        url: "",
+        asin: "B012345678",
+        coverUrl: "",
+      }),
+    ).toBe(false);
   });
 });
 

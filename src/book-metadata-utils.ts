@@ -98,6 +98,20 @@ export function validateBookMetadataDraft(
   return { ok: true };
 }
 
+export function isBookMetadataDraftEmpty(draft: BookMetadataDraft): boolean {
+  return (
+    draft.title.trim() === "" &&
+    normalizeMetadataAuthorsText(draft.authorsText).length === 0 &&
+    draft.description.trim() === "" &&
+    draft.publisher.trim() === "" &&
+    draft.releaseDate.trim() === "" &&
+    draft.language.trim() === "" &&
+    draft.url.trim() === "" &&
+    draft.asin.trim() === "" &&
+    draft.coverUrl.trim() === ""
+  );
+}
+
 export function parseBookMetadataImport(
   value: string,
 ): { ok: true; patch: BookMetadataImportPatch } | { ok: false; message: string } {

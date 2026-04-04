@@ -2,15 +2,17 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getName, getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
-import { open } from "@tauri-apps/plugin-dialog";
+import { confirm, open } from "@tauri-apps/plugin-dialog";
 import "./vendor/fontawesome/css/fontawesome.min.css";
 import "./vendor/fontawesome/css/brands.min.css";
+import "./vendor/fontawesome/css/regular.min.css";
 import "./vendor/fontawesome/css/solid.min.css";
 import type { NoteEditorHandle } from "./note-editor";
 import { addLibraryRoot, buildAppConfigDraft } from "./app-config-utils";
 import {
   applyBookMetadataImport,
   BOOK_METADATA_IMPORT_EXAMPLE,
+  isBookMetadataDraftEmpty,
   joinMetadataAuthors,
   normalizeMetadataAuthorsText,
   parseBookMetadataImport,
@@ -1137,6 +1139,7 @@ function syncBookMetadataEditorUi() {
   const coverUrlEl = document.querySelector<HTMLInputElement>("#book-metadata-cover-url");
   const importEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-import");
   const exampleEl = document.querySelector<HTMLElement>("#book-metadata-import-example");
+  const deleteEl = document.querySelector<HTMLButtonElement>("#book-metadata-delete");
 
   if (modalEl) {
     modalEl.hidden = !bookMetadataEditorState.isOpen;
@@ -1175,6 +1178,13 @@ function syncBookMetadataEditorUi() {
   syncControlValue(importEl, bookMetadataEditorState.importText);
   if (exampleEl) {
     exampleEl.textContent = BOOK_METADATA_IMPORT_EXAMPLE;
+  }
+  if (deleteEl) {
+    const canDelete =
+      bookMetadataEditorState.filePath !== null || bookMetadataEditorState.sourceType === "pdf";
+    deleteEl.hidden = !canDelete;
+    deleteEl.textContent =
+      bookMetadataEditorState.sourceType === "kindle" ? "Delete Kindle book" : "Clear metadata";
   }
 }
 
@@ -1385,6 +1395,33 @@ function importBookMetadataFromJson() {
   syncBookMetadataEditorUi();
 }
 
+function buildBookMetadataDraftForSave():
+  | { ok: true; draft: ReturnType<typeof buildBookMetadataDraftFromForm> }
+  | { ok: false; message: string } {
+  const baseDraft = buildBookMetadataDraftFromForm();
+  const importText = bookMetadataEditorState.importText.trim();
+  let draft = baseDraft;
+
+  if (isBookMetadataDraftEmpty(baseDraft) && importText) {
+    const parsed = parseBookMetadataImport(importText);
+    if (!parsed.ok) {
+      return { ok: false, message: parsed.message };
+    }
+    draft = applyBookMetadataImport(baseDraft, parsed.patch);
+    applyBookMetadataDraftToState(draft);
+    syncBookMetadataEditorUi();
+  }
+
+  if (isBookMetadataDraftEmpty(draft)) {
+    return {
+      ok: false,
+      message: "Enter at least one metadata field, or paste JSON to import before saving.",
+    };
+  }
+
+  return { ok: true, draft };
+}
+
 async function refreshSnapshot() {
   const snapshot = await invoke<LibrarySnapshot>("library_snapshot");
   lastSnapshot = snapshot;
@@ -1420,7 +1457,13 @@ async function saveTagEditorChanges() {
 }
 
 async function saveBookMetadataChanges() {
-  const draft = buildBookMetadataDraftFromForm();
+  const saveInput = buildBookMetadataDraftForSave();
+  if (!saveInput.ok) {
+    setBookMetadataStatus(saveInput.message, "error");
+    return;
+  }
+
+  const draft = saveInput.draft;
   const validation = validateBookMetadataDraft(draft);
   if (!validation.ok) {
     setBookMetadataStatus(validation.message, "error");
@@ -1465,6 +1508,51 @@ async function saveBookMetadataChanges() {
     closeBookMetadataEditor();
   } catch (error) {
     setBookMetadataStatus(`Failed to save metadata: ${String(error)}`, "error");
+  }
+}
+
+async function deleteBookMetadataChanges() {
+  const filePath = bookMetadataEditorState.filePath;
+  if (!filePath) {
+    setBookMetadataStatus("Save the book once before deleting it.", "error");
+    return;
+  }
+
+  const confirmed = await confirm(
+    bookMetadataEditorState.sourceType === "kindle"
+      ? "Delete this Kindle book from the library?"
+      : "Clear the saved metadata for this PDF?",
+    {
+      title:
+        bookMetadataEditorState.sourceType === "kindle" ? "Delete Kindle book" : "Clear metadata",
+      kind: "warning",
+      okLabel: "Delete",
+      cancelLabel: "Cancel",
+    },
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await invoke("delete_book_metadata", { filePath });
+
+    if (viewerState.currentBook?.filePath === filePath) {
+      if (bookMetadataEditorState.sourceType === "kindle") {
+        viewerState.currentBook = null;
+      } else {
+        viewerState.currentBook = {
+          ...viewerState.currentBook,
+          coverUrl: null,
+          authors: [],
+        };
+      }
+    }
+
+    await refreshSnapshot();
+    closeBookMetadataEditor();
+  } catch (error) {
+    setBookMetadataStatus(`Failed to delete metadata: ${String(error)}`, "error");
   }
 }
 
@@ -3081,6 +3169,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const bookMetadataCloseEl = document.querySelector<HTMLButtonElement>("#book-metadata-close");
   const bookMetadataCancelEl = document.querySelector<HTMLButtonElement>("#book-metadata-cancel");
   const bookMetadataSaveEl = document.querySelector<HTMLButtonElement>("#book-metadata-save");
+  const bookMetadataDeleteEl = document.querySelector<HTMLButtonElement>("#book-metadata-delete");
   const bookMetadataImportEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-import");
   const bookMetadataImportApplyEl = document.querySelector<HTMLButtonElement>(
     "#book-metadata-import-apply",
@@ -3318,6 +3407,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   bookMetadataBackdropEl?.addEventListener("click", closeBookMetadataEditor);
   bookMetadataSaveEl?.addEventListener("click", () => {
     void saveBookMetadataChanges();
+  });
+  bookMetadataDeleteEl?.addEventListener("click", () => {
+    void deleteBookMetadataChanges();
   });
   bookMetadataImportApplyEl?.addEventListener("click", importBookMetadataFromJson);
   bookMetadataImportEl?.addEventListener("input", () => {

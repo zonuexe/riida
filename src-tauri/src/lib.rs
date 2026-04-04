@@ -1861,6 +1861,53 @@ fn save_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPayload, S
 }
 
 #[tauri::command]
+fn delete_book_metadata(file_path: String) -> Result<(), String> {
+    let connection = open_database()?;
+
+    if file_path.starts_with("kindle:") {
+        connection
+            .execute(
+                "DELETE FROM external_books WHERE file_path = ?1",
+                params![&file_path],
+            )
+            .map_err(|error| error.to_string())?;
+        connection
+            .execute(
+                "DELETE FROM book_tags WHERE file_path = ?1",
+                params![&file_path],
+            )
+            .map_err(|error| error.to_string())?;
+        connection
+            .execute(
+                "DELETE FROM notes WHERE file_path = ?1",
+                params![&file_path],
+            )
+            .map_err(|error| error.to_string())?;
+        connection
+            .execute(
+                "DELETE FROM reading_positions WHERE file_path = ?1",
+                params![&file_path],
+            )
+            .map_err(|error| error.to_string())?;
+        connection
+            .execute(
+                "DELETE FROM viewer_preferences WHERE file_path = ?1 OR scope_key = ?1",
+                params![&file_path],
+            )
+            .map_err(|error| error.to_string())?;
+    } else {
+        connection
+            .execute(
+                "DELETE FROM book_metadata WHERE file_path = ?1",
+                params![&file_path],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 fn load_reading_position(file_path: String) -> Result<Option<ReadingPosition>, String> {
     let connection = open_database()?;
     let mut statement = connection
@@ -2006,6 +2053,7 @@ pub fn run() {
             save_book_tags,
             load_book_metadata,
             save_book_metadata,
+            delete_book_metadata,
             load_reading_position,
             save_reading_position,
             load_viewer_preferences,

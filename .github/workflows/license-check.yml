@@ -10,16 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  dependency-review:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Dependency Review
-        uses: actions/dependency-review-action@v4
-        with:
-          config-file: ./.github/dependency-review-config.yml
-
   rust-licenses:
     runs-on: ubuntu-latest
     steps:

@@ -19,6 +19,7 @@ type SearchableBook = {
   tags?: string[];
   locationLabel?: string | null;
   authors?: string[];
+  sourceType?: string;
 };
 
 export type TagNode = {
@@ -128,10 +129,15 @@ export function filterVisibleBooks<T extends SearchableBook>(
   books: T[],
   activeDirectory: string | null,
   activeTag: string | null,
+  activeExternalSource: string | null,
   activeTagDirectOnly: boolean,
   searchQuery: string,
 ) {
   return books.filter((book) => {
+    if (activeExternalSource && book.sourceType !== activeExternalSource) {
+      return false;
+    }
+
     if (activeDirectory) {
       const directory = activeDirectory.replace(/\/+$/, "");
       const normalizedPath = book.filePath.replace(/\/+$/, "");

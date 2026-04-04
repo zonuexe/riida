@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
 import "./vendor/fontawesome/css/fontawesome.min.css";
+import "./vendor/fontawesome/css/brands.min.css";
 import "./vendor/fontawesome/css/solid.min.css";
 import type { NoteEditorHandle } from "./note-editor";
 import { addLibraryRoot, buildAppConfigDraft } from "./app-config-utils";
@@ -101,6 +102,7 @@ type ViewerState = {
   currentBook: BookSummary | null;
   activeDirectory: string | null;
   activeTag: string | null;
+  activeExternalSource: string | null;
   activeTagDirectOnly: boolean;
   searchQuery: string;
   expandedDirectories: Set<string>;
@@ -150,6 +152,7 @@ type NavigationState = {
   bookFilePath: string | null;
   activeDirectory: string | null;
   activeTag: string | null;
+  activeExternalSource: string | null;
   activeTagDirectOnly: boolean;
   searchQuery: string;
 };
@@ -251,6 +254,7 @@ const viewerState: ViewerState = {
   currentBook: null,
   activeDirectory: null,
   activeTag: null,
+  activeExternalSource: null,
   activeTagDirectOnly: false,
   searchQuery: "",
   expandedDirectories: new Set<string>(),
@@ -1142,36 +1146,33 @@ function syncBookMetadataEditorUi() {
     bookEl.textContent = bookMetadataEditorState.bookTitle;
   }
 
-  if (titleEl) {
-    titleEl.value = bookMetadataEditorState.title;
-  }
-  if (authorsEl) {
-    authorsEl.value = bookMetadataEditorState.authorsText;
-  }
-  if (descriptionEl) {
-    descriptionEl.value = bookMetadataEditorState.description;
-  }
-  if (publisherEl) {
-    publisherEl.value = bookMetadataEditorState.publisher;
-  }
-  if (releaseDateEl) {
-    releaseDateEl.value = bookMetadataEditorState.releaseDate;
-  }
-  if (languageEl) {
-    languageEl.value = bookMetadataEditorState.language;
-  }
-  if (urlEl) {
-    urlEl.value = bookMetadataEditorState.url;
-  }
-  if (asinEl) {
-    asinEl.value = bookMetadataEditorState.asin;
-  }
-  if (coverUrlEl) {
-    coverUrlEl.value = bookMetadataEditorState.coverUrl;
-  }
-  if (importEl) {
-    importEl.value = bookMetadataEditorState.importText;
-  }
+  const syncControlValue = (
+    element: HTMLInputElement | HTMLTextAreaElement | null,
+    value: string,
+  ) => {
+    if (!element) {
+      return;
+    }
+
+    if (document.activeElement === element) {
+      return;
+    }
+
+    if (element.value !== value) {
+      element.value = value;
+    }
+  };
+
+  syncControlValue(titleEl, bookMetadataEditorState.title);
+  syncControlValue(authorsEl, bookMetadataEditorState.authorsText);
+  syncControlValue(descriptionEl, bookMetadataEditorState.description);
+  syncControlValue(publisherEl, bookMetadataEditorState.publisher);
+  syncControlValue(releaseDateEl, bookMetadataEditorState.releaseDate);
+  syncControlValue(languageEl, bookMetadataEditorState.language);
+  syncControlValue(urlEl, bookMetadataEditorState.url);
+  syncControlValue(asinEl, bookMetadataEditorState.asin);
+  syncControlValue(coverUrlEl, bookMetadataEditorState.coverUrl);
+  syncControlValue(importEl, bookMetadataEditorState.importText);
   if (exampleEl) {
     exampleEl.textContent = BOOK_METADATA_IMPORT_EXAMPLE;
   }
@@ -1938,15 +1939,21 @@ function visibleBooks(snapshot: LibrarySnapshot) {
     snapshot.books,
     viewerState.activeDirectory,
     viewerState.activeTag,
+    viewerState.activeExternalSource,
     viewerState.activeTagDirectOnly,
     viewerState.searchQuery,
   );
 }
 
 function describeEmptyLibraryState(snapshot: LibrarySnapshot, books: BookSummary[]) {
-  if (viewerState.searchQuery || viewerState.activeDirectory || viewerState.activeTag) {
+  if (
+    viewerState.searchQuery ||
+    viewerState.activeDirectory ||
+    viewerState.activeTag ||
+    viewerState.activeExternalSource
+  ) {
     return {
-      message: "No matching PDFs.",
+      message: "No matching books.",
       detail: null as string | null,
     };
   }
@@ -1997,6 +2004,7 @@ function currentNavigationState(): NavigationState {
     bookFilePath: viewerState.currentBook?.filePath ?? null,
     activeDirectory: viewerState.activeDirectory,
     activeTag: viewerState.activeTag,
+    activeExternalSource: viewerState.activeExternalSource,
     activeTagDirectOnly: viewerState.activeTagDirectOnly,
     searchQuery: viewerState.searchQuery,
   };
@@ -2085,6 +2093,7 @@ async function applyNavigationState(state: NavigationState) {
   viewerState.searchQuery = state.searchQuery;
   viewerState.activeDirectory = state.activeDirectory;
   viewerState.activeTag = state.activeTag;
+  viewerState.activeExternalSource = state.activeExternalSource;
   viewerState.activeTagDirectOnly = state.activeTagDirectOnly;
 
   const nextBook = state.bookFilePath
@@ -2584,6 +2593,7 @@ function renderSidebar(snapshot: LibrarySnapshot) {
           bookFilePath: null,
           activeDirectory: node.path,
           activeTag: null,
+          activeExternalSource: null,
           activeTagDirectOnly: false,
           searchQuery: viewerState.searchQuery,
         },
@@ -2676,6 +2686,7 @@ function renderSidebar(snapshot: LibrarySnapshot) {
           bookFilePath: null,
           activeDirectory: null,
           activeTag: tag.id,
+          activeExternalSource: null,
           activeTagDirectOnly: false,
           searchQuery: viewerState.searchQuery,
         },
@@ -2686,6 +2697,51 @@ function renderSidebar(snapshot: LibrarySnapshot) {
     row.appendChild(button);
 
     navEl.appendChild(row);
+  }
+
+  const externalBooks = snapshot.books.filter((book) => book.sourceType !== "pdf");
+  if (externalBooks.length > 0) {
+    const externalHeader = document.createElement("p");
+    externalHeader.className = "nav-section-title";
+    externalHeader.innerHTML =
+      '<i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i><span>EXTERNAL</span>';
+    navEl.appendChild(externalHeader);
+
+    const kindleCount = externalBooks.filter((book) => book.sourceType === "kindle").length;
+    if (kindleCount > 0) {
+      const row = document.createElement("div");
+      row.className = "nav-tree-row";
+      row.style.setProperty("--depth", "0");
+
+      const spacer = document.createElement("span");
+      spacer.className = "nav-toggle-spacer";
+      spacer.setAttribute("aria-hidden", "true");
+      row.appendChild(spacer);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "nav-link nav-tree-link";
+      button.classList.toggle("is-active", viewerState.activeExternalSource === "kindle");
+      button.innerHTML =
+        '<span><i class="fa-brands fa-amazon" aria-hidden="true"></i> Kindle</span><small>' +
+        String(kindleCount) +
+        "</small>";
+      button.addEventListener("click", () => {
+        void navigateToState(
+          {
+            bookFilePath: null,
+            activeDirectory: null,
+            activeTag: null,
+            activeExternalSource: "kindle",
+            activeTagDirectOnly: false,
+            searchQuery: viewerState.searchQuery,
+          },
+          "push",
+        );
+      });
+      row.appendChild(button);
+      navEl.appendChild(row);
+    }
   }
 }
 
@@ -2765,6 +2821,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
               bookFilePath: null,
               activeDirectory: null,
               activeTag: tag,
+              activeExternalSource: null,
               activeTagDirectOnly: false,
               searchQuery: viewerState.searchQuery,
             },
@@ -2815,6 +2872,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
           bookFilePath: book.filePath,
           activeDirectory: viewerState.activeDirectory,
           activeTag: viewerState.activeTag,
+          activeExternalSource: viewerState.activeExternalSource,
           activeTagDirectOnly: viewerState.activeTagDirectOnly,
           searchQuery: viewerState.searchQuery,
         },
@@ -2833,6 +2891,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
             bookFilePath: book.filePath,
             activeDirectory: viewerState.activeDirectory,
             activeTag: viewerState.activeTag,
+            activeExternalSource: viewerState.activeExternalSource,
             activeTagDirectOnly: viewerState.activeTagDirectOnly,
             searchQuery: viewerState.searchQuery,
           },
@@ -2879,9 +2938,11 @@ function renderMain(snapshot: LibrarySnapshot) {
       ? viewerState.activeTagDirectOnly
         ? books.length
         : (selectedTagNode?.count ?? books.length)
-      : viewerState.activeDirectory
-        ? (selectedDirectoryNode?.count ?? books.length)
-        : snapshot.indexedCount;
+      : viewerState.activeExternalSource
+        ? books.length
+        : viewerState.activeDirectory
+          ? (selectedDirectoryNode?.count ?? books.length)
+          : snapshot.indexedCount;
 
   appShellEl?.classList.toggle("sidebar-collapsed", viewerState.sidebarCollapsed);
   if (sidebarToggleEl) {
@@ -2897,6 +2958,7 @@ function renderMain(snapshot: LibrarySnapshot) {
     viewerState.currentBook === null &&
       viewerState.activeDirectory === null &&
       viewerState.activeTag === null &&
+      viewerState.activeExternalSource === null &&
       viewerState.searchQuery === "",
   );
   syncViewerSettingsUi();
@@ -3023,6 +3085,25 @@ window.addEventListener("DOMContentLoaded", async () => {
   const bookMetadataImportApplyEl = document.querySelector<HTMLButtonElement>(
     "#book-metadata-import-apply",
   );
+  const bookMetadataTitleEl = document.querySelector<HTMLInputElement>("#book-metadata-title");
+  const bookMetadataAuthorsEl =
+    document.querySelector<HTMLTextAreaElement>("#book-metadata-authors");
+  const bookMetadataDescriptionEl = document.querySelector<HTMLTextAreaElement>(
+    "#book-metadata-description",
+  );
+  const bookMetadataPublisherEl = document.querySelector<HTMLInputElement>(
+    "#book-metadata-publisher",
+  );
+  const bookMetadataReleaseDateEl = document.querySelector<HTMLInputElement>(
+    "#book-metadata-release-date",
+  );
+  const bookMetadataLanguageEl =
+    document.querySelector<HTMLInputElement>("#book-metadata-language");
+  const bookMetadataUrlEl = document.querySelector<HTMLInputElement>("#book-metadata-url");
+  const bookMetadataAsinEl = document.querySelector<HTMLInputElement>("#book-metadata-asin");
+  const bookMetadataCoverUrlEl = document.querySelector<HTMLInputElement>(
+    "#book-metadata-cover-url",
+  );
 
   searchInput?.addEventListener("input", () => {
     void navigateToState(
@@ -3030,6 +3111,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         bookFilePath: null,
         activeDirectory: null,
         activeTag: null,
+        activeExternalSource: null,
         activeTagDirectOnly: false,
         searchQuery: searchInput.value.trim(),
       },
@@ -3105,6 +3187,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         bookFilePath: null,
         activeDirectory: null,
         activeTag: null,
+        activeExternalSource: null,
         activeTagDirectOnly: false,
         searchQuery: "",
       },
@@ -3122,6 +3205,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         bookFilePath: null,
         activeDirectory: null,
         activeTag: viewerState.activeTag,
+        activeExternalSource: viewerState.activeExternalSource,
         activeTagDirectOnly: tagDirectOnlyEl.checked,
         searchQuery: viewerState.searchQuery,
       },
@@ -3238,6 +3322,33 @@ window.addEventListener("DOMContentLoaded", async () => {
   bookMetadataImportApplyEl?.addEventListener("click", importBookMetadataFromJson);
   bookMetadataImportEl?.addEventListener("input", () => {
     bookMetadataEditorState.importText = bookMetadataImportEl.value;
+  });
+  bookMetadataTitleEl?.addEventListener("input", () => {
+    bookMetadataEditorState.title = bookMetadataTitleEl.value;
+  });
+  bookMetadataAuthorsEl?.addEventListener("input", () => {
+    bookMetadataEditorState.authorsText = bookMetadataAuthorsEl.value;
+  });
+  bookMetadataDescriptionEl?.addEventListener("input", () => {
+    bookMetadataEditorState.description = bookMetadataDescriptionEl.value;
+  });
+  bookMetadataPublisherEl?.addEventListener("input", () => {
+    bookMetadataEditorState.publisher = bookMetadataPublisherEl.value;
+  });
+  bookMetadataReleaseDateEl?.addEventListener("input", () => {
+    bookMetadataEditorState.releaseDate = bookMetadataReleaseDateEl.value;
+  });
+  bookMetadataLanguageEl?.addEventListener("input", () => {
+    bookMetadataEditorState.language = bookMetadataLanguageEl.value;
+  });
+  bookMetadataUrlEl?.addEventListener("input", () => {
+    bookMetadataEditorState.url = bookMetadataUrlEl.value;
+  });
+  bookMetadataAsinEl?.addEventListener("input", () => {
+    bookMetadataEditorState.asin = bookMetadataAsinEl.value;
+  });
+  bookMetadataCoverUrlEl?.addEventListener("input", () => {
+    bookMetadataEditorState.coverUrl = bookMetadataCoverUrlEl.value;
   });
   tagEditorInputEl?.addEventListener("input", () => {
     tagEditorState.input = tagEditorInputEl.value;
@@ -3536,6 +3647,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       bookFilePath: null,
       activeDirectory: null,
       activeTag: null,
+      activeExternalSource: null,
       activeTagDirectOnly: false,
       searchQuery: "",
     };
@@ -3568,6 +3680,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         bookFilePath: params.get("book"),
         activeDirectory: params.get("dir"),
         activeTag: params.get("tag"),
+        activeExternalSource: params.get("source"),
         activeTagDirectOnly: params.get("tagMode") === "direct",
         searchQuery: params.get("q") ?? "",
       };

@@ -41,16 +41,19 @@ describe("filterVisibleBooks", () => {
       fileName: "WEB+DB-PRESS-Vol.131.pdf",
       filePath: "/Books/Tech/WEB+DB-PRESS-Vol.131.pdf",
       tags: ["magazine", "tech"],
+      sourceType: "pdf",
     },
     {
       fileName: "Rust Book.pdf",
       filePath: "/Books/Tech/Rust Book.pdf",
       tags: ["tech"],
+      sourceType: "pdf",
     },
     {
       fileName: "Novel.pdf",
       filePath: "/Books/Fiction/Novel.pdf",
       tags: ["fiction"],
+      sourceType: "pdf",
     },
     {
       fileName: "bit 1995年09月号",
@@ -58,41 +61,47 @@ describe("filterVisibleBooks", () => {
       tags: ["magazine"],
       locationLabel: "Kindle library",
       authors: ["石田晴久", "竹内郁雄"],
+      sourceType: "kindle",
     },
     {
       fileName: "Nested.pdf",
       filePath: "/Books/Tech/Rust/Nested.pdf",
       tags: ["tech"],
+      sourceType: "pdf",
     },
   ];
 
   it("matches normalized search text against file name and path", () => {
-    const results = filterVisibleBooks(books, null, null, false, "WEB+DB PRESS");
+    const results = filterVisibleBooks(books, null, null, null, false, "WEB+DB PRESS");
 
     expect(results).toEqual([books[0]]);
   });
 
   it("applies directory filtering before search matching", () => {
-    const results = filterVisibleBooks(books, "/Books/Tech", null, false, "rust");
+    const results = filterVisibleBooks(books, "/Books/Tech", null, null, false, "rust");
 
     expect(results).toEqual([books[1]]);
   });
 
   it("only lists books placed directly inside the active directory", () => {
-    const results = filterVisibleBooks(books, "/Books/Tech", null, false, "");
+    const results = filterVisibleBooks(books, "/Books/Tech", null, null, false, "");
 
     expect(results).toEqual([books[0], books[1]]);
   });
 
   it("filters by active tag", () => {
-    const results = filterVisibleBooks(books, null, "tech", false, "");
+    const results = filterVisibleBooks(books, null, "tech", null, false, "");
 
     expect(results).toEqual([books[0], books[1], books[4]]);
   });
 
   it("matches search text against optional location labels and authors", () => {
-    expect(filterVisibleBooks(books, null, null, false, "Kindle")).toEqual([books[3]]);
-    expect(filterVisibleBooks(books, null, null, false, "竹内")).toEqual([books[3]]);
+    expect(filterVisibleBooks(books, null, null, null, false, "Kindle")).toEqual([books[3]]);
+    expect(filterVisibleBooks(books, null, null, null, false, "竹内")).toEqual([books[3]]);
+  });
+
+  it("filters by external source", () => {
+    expect(filterVisibleBooks(books, null, null, "kindle", false, "")).toEqual([books[3]]);
   });
 
   it("can restrict parent tags to directly tagged files only", () => {
@@ -101,12 +110,12 @@ describe("filterVisibleBooks", () => {
       { fileName: "Two.pdf", filePath: "/Books/Two.pdf", tags: ["language"] },
     ];
 
-    expect(filterVisibleBooks(booksWithHierarchicalTags, null, "language", false, "")).toEqual(
-      booksWithHierarchicalTags,
+    expect(
+      filterVisibleBooks(booksWithHierarchicalTags, null, "language", null, false, ""),
+    ).toEqual(booksWithHierarchicalTags);
+    expect(filterVisibleBooks(booksWithHierarchicalTags, null, "language", null, true, "")).toEqual(
+      [booksWithHierarchicalTags[1]],
     );
-    expect(filterVisibleBooks(booksWithHierarchicalTags, null, "language", true, "")).toEqual([
-      booksWithHierarchicalTags[1],
-    ]);
   });
 });
 

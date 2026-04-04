@@ -3315,6 +3315,17 @@ async function saveBookMetadataChanges() {
     }
   }
 
+  if (!bookMetadataEditorState.filePath && draft.asin.trim()) {
+    const duplicate = viewerState.books.find((b) => b.filePath === filePath);
+    if (duplicate) {
+      await message(`ASIN ${draft.asin.trim()} is already registered: "${duplicate.fileName}"`, {
+        title: "Duplicate ASIN",
+        kind: "error",
+      });
+      return;
+    }
+  }
+
   try {
     const payload = await invoke<BookMetadataPayload>("save_book_metadata", {
       input: {

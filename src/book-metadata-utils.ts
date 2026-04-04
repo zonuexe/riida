@@ -7,6 +7,7 @@ export type BookMetadataDraft = {
   language: string;
   url: string;
   asin: string;
+  coverUrl: string;
 };
 
 export type BookMetadataImportPatch = {
@@ -18,6 +19,7 @@ export type BookMetadataImportPatch = {
   language?: string | null;
   url?: string | null;
   asin?: string | null;
+  coverUrl?: string | null;
 };
 
 type NullableStringImportKey = Exclude<keyof BookMetadataImportPatch, "authors">;
@@ -30,7 +32,8 @@ export const BOOK_METADATA_IMPORT_EXAMPLE = `{
   "releaseDate": "2026-04-04",
   "language": "ja",
   "url": "https://example.com/books/type-systems",
-  "asin": "B012345678"
+  "asin": "B012345678",
+  "coverUrl": "https://m.media-amazon.com/images/I/example.jpg"
 }`;
 
 export function normalizeMetadataAuthorsText(value: string): string[] {
@@ -137,6 +140,7 @@ export function parseBookMetadataImport(
     assignNullableString("language");
     assignNullableString("url");
     assignNullableString("asin");
+    assignNullableString("coverUrl");
 
     if ("authors" in record) {
       const authors = record.authors;
@@ -176,5 +180,6 @@ export function applyBookMetadataImport(
     language: patch.language === undefined ? draft.language : (patch.language ?? ""),
     url: patch.url === undefined ? draft.url : (patch.url ?? ""),
     asin: patch.asin === undefined ? draft.asin : (patch.asin ?? ""),
+    coverUrl: patch.coverUrl === undefined ? draft.coverUrl : (patch.coverUrl ?? ""),
   };
 }

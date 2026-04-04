@@ -55,6 +55,7 @@ describe("validateBookMetadataDraft", () => {
         language: "",
         url: "",
         asin: "",
+        coverUrl: "",
       }),
     ).toEqual({
       ok: false,
@@ -91,6 +92,7 @@ describe("applyBookMetadataImport", () => {
           language: "ja",
           url: "https://example.com/old",
           asin: "OLDASIN",
+          coverUrl: "https://example.com/old.jpg",
         },
         {
           title: "New title",
@@ -107,6 +109,7 @@ describe("applyBookMetadataImport", () => {
       language: "ja",
       url: "https://example.com/old",
       asin: "OLDASIN",
+      coverUrl: "https://example.com/old.jpg",
     });
   });
 
@@ -122,6 +125,7 @@ describe("applyBookMetadataImport", () => {
           language: "",
           url: "",
           asin: "",
+          coverUrl: "",
         },
         {
           authors: [" Alice ", "Bob", "Alice"],

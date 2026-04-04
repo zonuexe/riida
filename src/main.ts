@@ -51,6 +51,11 @@ type BookSummary = {
   filePath: string;
   fileSize: number;
   tags: string[];
+  authors: string[];
+  sourceType: "pdf" | "kindle";
+  coverUrl: string | null;
+  locationLabel: string | null;
+  isOpenable: boolean;
 };
 
 type LibrarySnapshot = {
@@ -80,6 +85,7 @@ type BookMetadataPayload = {
   language: string;
   url: string;
   asin: string;
+  coverUrl: string;
   updatedAt: number | null;
 };
 
@@ -180,6 +186,7 @@ type BookMetadataEditorState = {
   isOpen: boolean;
   filePath: string | null;
   bookTitle: string;
+  sourceType: "pdf" | "kindle";
   title: string;
   authorsText: string;
   description: string;
@@ -188,6 +195,7 @@ type BookMetadataEditorState = {
   language: string;
   url: string;
   asin: string;
+  coverUrl: string;
   importText: string;
   statusMessage: string;
   loadToken: number;
@@ -314,6 +322,7 @@ const bookMetadataEditorState: BookMetadataEditorState = {
   isOpen: false,
   filePath: null,
   bookTitle: "",
+  sourceType: "pdf",
   title: "",
   authorsText: "",
   description: "",
@@ -322,6 +331,7 @@ const bookMetadataEditorState: BookMetadataEditorState = {
   language: "",
   url: "",
   asin: "",
+  coverUrl: "",
   importText: "",
   statusMessage: "",
   loadToken: 0,
@@ -433,6 +443,17 @@ function applyThumbnail(filePath: string, thumbnailPath: string) {
 }
 
 async function loadThumbnail(book: BookSummary, imageEl: HTMLImageElement) {
+  if (book.coverUrl) {
+    imageEl.src = book.coverUrl;
+    imageEl.dataset.loaded = "true";
+    return;
+  }
+
+  if (book.sourceType !== "pdf") {
+    imageEl.dataset.loaded = "true";
+    return;
+  }
+
   if (thumbnailUrls.has(book.filePath)) {
     imageEl.src = thumbnailUrls.get(book.filePath) ?? "";
     imageEl.dataset.loaded = "true";
@@ -1109,6 +1130,7 @@ function syncBookMetadataEditorUi() {
   const languageEl = document.querySelector<HTMLInputElement>("#book-metadata-language");
   const urlEl = document.querySelector<HTMLInputElement>("#book-metadata-url");
   const asinEl = document.querySelector<HTMLInputElement>("#book-metadata-asin");
+  const coverUrlEl = document.querySelector<HTMLInputElement>("#book-metadata-cover-url");
   const importEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-import");
   const exampleEl = document.querySelector<HTMLElement>("#book-metadata-import-example");
 
@@ -1144,6 +1166,9 @@ function syncBookMetadataEditorUi() {
   if (asinEl) {
     asinEl.value = bookMetadataEditorState.asin;
   }
+  if (coverUrlEl) {
+    coverUrlEl.value = bookMetadataEditorState.coverUrl;
+  }
   if (importEl) {
     importEl.value = bookMetadataEditorState.importText;
   }
@@ -1170,7 +1195,8 @@ function updateBookTagsInState(filePath: string, tags: string[]) {
 
 function populateBookMetadataEditor(book: BookSummary, metadata: BookMetadataPayload) {
   bookMetadataEditorState.filePath = metadata.filePath;
-  bookMetadataEditorState.bookTitle = book.fileName;
+  bookMetadataEditorState.bookTitle = metadata.title || book.fileName;
+  bookMetadataEditorState.sourceType = book.sourceType;
   bookMetadataEditorState.title = metadata.title;
   bookMetadataEditorState.authorsText = joinMetadataAuthors(metadata.authors);
   bookMetadataEditorState.description = metadata.description;
@@ -1179,6 +1205,27 @@ function populateBookMetadataEditor(book: BookSummary, metadata: BookMetadataPay
   bookMetadataEditorState.language = metadata.language;
   bookMetadataEditorState.url = metadata.url;
   bookMetadataEditorState.asin = metadata.asin;
+  bookMetadataEditorState.coverUrl = metadata.coverUrl;
+}
+
+function openNewKindleBookEditor() {
+  bookMetadataEditorState.loadToken += 1;
+  bookMetadataEditorState.isOpen = true;
+  bookMetadataEditorState.filePath = null;
+  bookMetadataEditorState.bookTitle = "New Kindle book";
+  bookMetadataEditorState.sourceType = "kindle";
+  bookMetadataEditorState.title = "";
+  bookMetadataEditorState.authorsText = "";
+  bookMetadataEditorState.description = "";
+  bookMetadataEditorState.publisher = "";
+  bookMetadataEditorState.releaseDate = "";
+  bookMetadataEditorState.language = "";
+  bookMetadataEditorState.url = "";
+  bookMetadataEditorState.asin = "";
+  bookMetadataEditorState.coverUrl = "";
+  bookMetadataEditorState.importText = "";
+  setBookMetadataStatus("");
+  syncBookMetadataEditorUi();
 }
 
 function openTagEditor(book: BookSummary) {
@@ -1197,6 +1244,7 @@ async function openBookMetadataEditor(book: BookSummary) {
   bookMetadataEditorState.isOpen = true;
   bookMetadataEditorState.filePath = book.filePath;
   bookMetadataEditorState.bookTitle = book.fileName;
+  bookMetadataEditorState.sourceType = book.sourceType;
   bookMetadataEditorState.title = "";
   bookMetadataEditorState.authorsText = "";
   bookMetadataEditorState.description = "";
@@ -1205,6 +1253,7 @@ async function openBookMetadataEditor(book: BookSummary) {
   bookMetadataEditorState.language = "";
   bookMetadataEditorState.url = "";
   bookMetadataEditorState.asin = "";
+  bookMetadataEditorState.coverUrl = "";
   bookMetadataEditorState.importText = "";
   setBookMetadataStatus("Loading metadata...");
   syncBookMetadataEditorUi();
@@ -1238,6 +1287,7 @@ function closeTagEditor() {
 function closeBookMetadataEditor() {
   bookMetadataEditorState.isOpen = false;
   bookMetadataEditorState.filePath = null;
+  bookMetadataEditorState.sourceType = "pdf";
   bookMetadataEditorState.importText = "";
   bookMetadataEditorState.loadToken += 1;
   setBookMetadataStatus("");
@@ -1275,6 +1325,7 @@ function buildBookMetadataDraftFromForm() {
   const languageEl = document.querySelector<HTMLInputElement>("#book-metadata-language");
   const urlEl = document.querySelector<HTMLInputElement>("#book-metadata-url");
   const asinEl = document.querySelector<HTMLInputElement>("#book-metadata-asin");
+  const coverUrlEl = document.querySelector<HTMLInputElement>("#book-metadata-cover-url");
 
   return {
     title: titleEl?.value ?? bookMetadataEditorState.title,
@@ -1285,6 +1336,7 @@ function buildBookMetadataDraftFromForm() {
     language: languageEl?.value ?? bookMetadataEditorState.language,
     url: urlEl?.value ?? bookMetadataEditorState.url,
     asin: asinEl?.value ?? bookMetadataEditorState.asin,
+    coverUrl: coverUrlEl?.value ?? bookMetadataEditorState.coverUrl,
   };
 }
 
@@ -1297,6 +1349,7 @@ function applyBookMetadataDraftToState(draft: {
   language: string;
   url: string;
   asin: string;
+  coverUrl: string;
 }) {
   bookMetadataEditorState.title = draft.title;
   bookMetadataEditorState.authorsText = draft.authorsText;
@@ -1306,6 +1359,7 @@ function applyBookMetadataDraftToState(draft: {
   bookMetadataEditorState.language = draft.language;
   bookMetadataEditorState.url = draft.url;
   bookMetadataEditorState.asin = draft.asin;
+  bookMetadataEditorState.coverUrl = draft.coverUrl;
 }
 
 function importBookMetadataFromJson() {
@@ -1328,6 +1382,14 @@ function importBookMetadataFromJson() {
   applyBookMetadataDraftToState(nextDraft);
   setBookMetadataStatus("Imported metadata from JSON.", "success");
   syncBookMetadataEditorUi();
+}
+
+async function refreshSnapshot() {
+  const snapshot = await invoke<LibrarySnapshot>("library_snapshot");
+  lastSnapshot = snapshot;
+  viewerState.books = snapshot.books;
+  viewerState.libraryErrorMessage = null;
+  renderApp();
 }
 
 async function saveTagEditorChanges() {
@@ -1357,10 +1419,6 @@ async function saveTagEditorChanges() {
 }
 
 async function saveBookMetadataChanges() {
-  if (!bookMetadataEditorState.filePath) {
-    return;
-  }
-
   const draft = buildBookMetadataDraftFromForm();
   const validation = validateBookMetadataDraft(draft);
   if (!validation.ok) {
@@ -1368,10 +1426,13 @@ async function saveBookMetadataChanges() {
     return;
   }
 
+  const filePath =
+    bookMetadataEditorState.filePath ?? `kindle:${draft.asin.trim() || crypto.randomUUID()}`;
+
   try {
     const payload = await invoke<BookMetadataPayload>("save_book_metadata", {
       input: {
-        filePath: bookMetadataEditorState.filePath,
+        filePath,
         title: draft.title,
         authors: normalizeMetadataAuthorsText(draft.authorsText),
         description: draft.description,
@@ -1380,6 +1441,7 @@ async function saveBookMetadataChanges() {
         language: draft.language,
         url: draft.url,
         asin: draft.asin,
+        coverUrl: draft.coverUrl,
       },
     });
     const sourceBook =
@@ -1390,8 +1452,15 @@ async function saveBookMetadataChanges() {
             filePath: payload.filePath,
             fileSize: 0,
             tags: [],
+            authors: payload.authors,
+            sourceType: bookMetadataEditorState.sourceType,
+            coverUrl: payload.coverUrl || null,
+            locationLabel:
+              bookMetadataEditorState.sourceType === "kindle" ? "Kindle library" : null,
+            isOpenable: bookMetadataEditorState.sourceType === "pdf",
           };
     populateBookMetadataEditor(sourceBook, payload);
+    await refreshSnapshot();
     closeBookMetadataEditor();
   } catch (error) {
     setBookMetadataStatus(`Failed to save metadata: ${String(error)}`, "error");
@@ -2668,11 +2737,11 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     titleEl.textContent = book.fileName;
 
     const pathEl = document.createElement("span");
-    pathEl.textContent = formatBookLocation(book.filePath, cachedHomeDir);
+    pathEl.textContent = book.locationLabel ?? formatBookLocation(book.filePath, cachedHomeDir);
 
     const metaEl = document.createElement("small");
     metaEl.className = "book-meta";
-    metaEl.textContent = formatFileSize(book.fileSize);
+    metaEl.textContent = book.sourceType === "pdf" ? formatFileSize(book.fileSize) : "Kindle book";
 
     const tagsRowEl = document.createElement("div");
     tagsRowEl.className = "book-tags-row";
@@ -2736,6 +2805,11 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     itemEl.appendChild(bodyEl);
 
     itemEl.addEventListener("click", () => {
+      if (!book.isOpenable) {
+        void openBookMetadataEditor(book);
+        return;
+      }
+
       void navigateToState(
         {
           bookFilePath: book.filePath,
@@ -2750,6 +2824,10 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     itemEl.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
+        if (!book.isOpenable) {
+          void openBookMetadataEditor(book);
+          return;
+        }
         void navigateToState(
           {
             bookFilePath: book.filePath,
@@ -2904,6 +2982,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const appSettingsAddRootEl = document.querySelector<HTMLButtonElement>(
     "#config-library-roots-add",
   );
+  const libraryAddKindleEl = document.querySelector<HTMLButtonElement>("#library-add-kindle");
   const noteToggleEl = document.querySelector<HTMLButtonElement>("#note-toggle");
   const noteCloseEl = document.querySelector<HTMLButtonElement>("#note-close");
   const viewerTagsOpenEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
@@ -3031,6 +3110,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       },
       "push",
     );
+  });
+
+  libraryAddKindleEl?.addEventListener("click", () => {
+    openNewKindleBookEditor();
   });
 
   tagDirectOnlyEl?.addEventListener("change", () => {

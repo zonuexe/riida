@@ -36,6 +36,11 @@ struct BookSummary {
     file_path: String,
     file_size: u64,
     tags: Vec<String>,
+    authors: Vec<String>,
+    source_type: String,
+    cover_url: Option<String>,
+    location_label: Option<String>,
+    is_openable: bool,
 }
 
 #[derive(Serialize)]
@@ -131,6 +136,7 @@ struct BookMetadataPayload {
     language: String,
     url: String,
     asin: String,
+    cover_url: String,
     updated_at: Option<u64>,
 }
 
@@ -146,6 +152,7 @@ struct BookMetadataInput {
     language: String,
     url: String,
     asin: String,
+    cover_url: String,
 }
 
 #[derive(Serialize)]
@@ -672,11 +679,31 @@ fn open_database() -> Result<Connection, String> {
               language TEXT NOT NULL,
               url TEXT NOT NULL,
               asin TEXT NOT NULL,
+              cover_url TEXT NOT NULL DEFAULT '',
+              updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS external_books (
+              file_path TEXT PRIMARY KEY,
+              source_type TEXT NOT NULL,
+              title TEXT NOT NULL,
+              authors_json TEXT NOT NULL,
+              description TEXT NOT NULL,
+              publisher TEXT NOT NULL,
+              release_date TEXT NOT NULL,
+              language TEXT NOT NULL,
+              url TEXT NOT NULL,
+              asin TEXT NOT NULL,
+              cover_url TEXT NOT NULL,
               updated_at INTEGER NOT NULL
             );
             ",
         )
         .map_err(|error| error.to_string())?;
+
+    let _ = connection.execute(
+        "ALTER TABLE book_metadata ADD COLUMN cover_url TEXT NOT NULL DEFAULT ''",
+        [],
+    );
 
     Ok(connection)
 }
@@ -840,6 +867,7 @@ fn normalize_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPaylo
         language: input.language.trim().to_string(),
         url: input.url.trim().to_string(),
         asin: input.asin.trim().to_string(),
+        cover_url: input.cover_url.trim().to_string(),
         updated_at: None,
     })
 }
@@ -1151,23 +1179,6 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
         .cloned()
         .partition(|root| Path::new(root).exists());
 
-    let indexed_count: usize = connection
-        .query_row("SELECT COUNT(*) FROM books", [], |row| row.get(0))
-        .map_err(|error| error.to_string())?;
-
-    let mut statement = connection
-        .prepare(
-            "
-            SELECT
-              file_name,
-              file_path,
-              file_size
-            FROM books
-            ORDER BY books.modified_at DESC, books.file_name ASC
-            ",
-        )
-        .map_err(|error| error.to_string())?;
-
     let mut tags_statement = connection
         .prepare(
             "
@@ -1190,19 +1201,123 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
         tags_by_file_path.entry(file_path).or_default().push(tag);
     }
 
-    let books = statement
+    let mut books = Vec::new();
+
+    let mut pdf_statement = connection
+        .prepare(
+            "
+            SELECT
+              books.file_name,
+              books.file_path,
+              books.file_size,
+              COALESCE(book_metadata.authors_json, '[]'),
+              COALESCE(book_metadata.cover_url, ''),
+              books.modified_at
+            FROM books
+            LEFT JOIN book_metadata ON book_metadata.file_path = books.file_path
+            ORDER BY books.modified_at DESC, books.file_name ASC
+            ",
+        )
+        .map_err(|error| error.to_string())?;
+
+    let pdf_rows = pdf_statement
         .query_map([], |row| {
-            let file_path = row.get::<_, String>(1)?;
-            Ok(BookSummary {
-                file_name: row.get(0)?,
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, u64>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, u64>(5)?,
+            ))
+        })
+        .map_err(|error| error.to_string())?;
+
+    for row in pdf_rows {
+        let (file_name, file_path, file_size, authors_json, cover_url, sort_key) =
+            row.map_err(|error| error.to_string())?;
+        let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
+        books.push((
+            sort_key,
+            BookSummary {
+                file_name,
                 tags: tags_by_file_path.remove(&file_path).unwrap_or_default(),
                 file_path,
-                file_size: row.get(2)?,
-            })
-        })
-        .map_err(|error| error.to_string())?
-        .collect::<Result<Vec<_>, _>>()
+                file_size,
+                authors,
+                source_type: "pdf".to_string(),
+                cover_url: if cover_url.is_empty() {
+                    None
+                } else {
+                    Some(cover_url)
+                },
+                location_label: None,
+                is_openable: true,
+            },
+        ));
+    }
+
+    let mut external_statement = connection
+        .prepare(
+            "
+            SELECT
+              file_path,
+              source_type,
+              title,
+              authors_json,
+              cover_url,
+              updated_at
+            FROM external_books
+            ORDER BY updated_at DESC, title COLLATE NOCASE ASC
+            ",
+        )
         .map_err(|error| error.to_string())?;
+
+    let external_rows = external_statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, u64>(5)?,
+            ))
+        })
+        .map_err(|error| error.to_string())?;
+
+    for row in external_rows {
+        let (file_path, source_type, title, authors_json, cover_url, sort_key) =
+            row.map_err(|error| error.to_string())?;
+        let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
+        books.push((
+            sort_key,
+            BookSummary {
+                file_name: title,
+                tags: tags_by_file_path.remove(&file_path).unwrap_or_default(),
+                file_path,
+                file_size: 0,
+                authors,
+                source_type,
+                cover_url: if cover_url.is_empty() {
+                    None
+                } else {
+                    Some(cover_url)
+                },
+                location_label: Some("Kindle library".to_string()),
+                is_openable: false,
+            },
+        ));
+    }
+
+    books.sort_by(|(left_key, left_book), (right_key, right_book)| {
+        right_key
+            .cmp(left_key)
+            .then_with(|| left_book.file_name.cmp(&right_book.file_name))
+    });
+
+    let indexed_count = books.len();
+    let books = books.into_iter().map(|(_, book)| book).collect();
 
     Ok(LibrarySnapshot {
         library_roots: config.library_roots.clone(),
@@ -1576,23 +1691,29 @@ fn save_book_tags(file_path: String, tags: Vec<String>) -> Result<BookTagsPayloa
 #[tauri::command]
 fn load_book_metadata(file_path: String) -> Result<BookMetadataPayload, String> {
     let connection = open_database()?;
+    let (table_name, file_path_filter) = if file_path.starts_with("kindle:") {
+        ("external_books", "source_type = 'kindle' AND ")
+    } else {
+        ("book_metadata", "")
+    };
     let mut statement = connection
-        .prepare(
+        .prepare(&format!(
             "
-            SELECT
-              title,
-              authors_json,
-              description,
-              publisher,
-              release_date,
-              language,
-              url,
-              asin,
-              updated_at
-            FROM book_metadata
-            WHERE file_path = ?1
-            ",
-        )
+                SELECT
+                  title,
+                  authors_json,
+                  description,
+                  publisher,
+                  release_date,
+                  language,
+                  url,
+                  asin,
+                  cover_url,
+                  updated_at
+                FROM {table_name}
+                WHERE {file_path_filter}file_path = ?1
+                "
+        ))
         .map_err(|error| error.to_string())?;
 
     let metadata = statement.query_row(params![&file_path], |row| {
@@ -1608,7 +1729,8 @@ fn load_book_metadata(file_path: String) -> Result<BookMetadataPayload, String> 
             language: row.get(5)?,
             url: row.get(6)?,
             asin: row.get(7)?,
-            updated_at: Some(row.get(8)?),
+            cover_url: row.get(8)?,
+            updated_at: Some(row.get(9)?),
         })
     });
 
@@ -1624,6 +1746,7 @@ fn load_book_metadata(file_path: String) -> Result<BookMetadataPayload, String> 
             language: String::new(),
             url: String::new(),
             asin: String::new(),
+            cover_url: String::new(),
             updated_at: None,
         }),
         Err(error) => Err(error.to_string()),
@@ -1640,48 +1763,98 @@ fn save_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPayload, S
         .as_secs();
     let authors_json =
         serde_json::to_string(&payload.authors).map_err(|error| error.to_string())?;
-
-    connection
-        .execute(
-            "
-            INSERT INTO book_metadata (
-              file_path,
-              title,
-              authors_json,
-              description,
-              publisher,
-              release_date,
-              language,
-              url,
-              asin,
-              updated_at
+    if payload.file_path.starts_with("kindle:") {
+        connection
+            .execute(
+                "
+                INSERT INTO external_books (
+                  file_path,
+                  source_type,
+                  title,
+                  authors_json,
+                  description,
+                  publisher,
+                  release_date,
+                  language,
+                  url,
+                  asin,
+                  cover_url,
+                  updated_at
+                )
+                VALUES (?1, 'kindle', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                ON CONFLICT(file_path) DO UPDATE SET
+                  title = excluded.title,
+                  authors_json = excluded.authors_json,
+                  description = excluded.description,
+                  publisher = excluded.publisher,
+                  release_date = excluded.release_date,
+                  language = excluded.language,
+                  url = excluded.url,
+                  asin = excluded.asin,
+                  cover_url = excluded.cover_url,
+                  updated_at = excluded.updated_at
+                ",
+                params![
+                    &payload.file_path,
+                    &payload.title,
+                    &authors_json,
+                    &payload.description,
+                    &payload.publisher,
+                    &payload.release_date,
+                    &payload.language,
+                    &payload.url,
+                    &payload.asin,
+                    &payload.cover_url,
+                    updated_at
+                ],
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-            ON CONFLICT(file_path) DO UPDATE SET
-              title = excluded.title,
-              authors_json = excluded.authors_json,
-              description = excluded.description,
-              publisher = excluded.publisher,
-              release_date = excluded.release_date,
-              language = excluded.language,
-              url = excluded.url,
-              asin = excluded.asin,
-              updated_at = excluded.updated_at
-            ",
-            params![
-                &payload.file_path,
-                &payload.title,
-                &authors_json,
-                &payload.description,
-                &payload.publisher,
-                &payload.release_date,
-                &payload.language,
-                &payload.url,
-                &payload.asin,
-                updated_at
-            ],
-        )
-        .map_err(|error| error.to_string())?;
+            .map_err(|error| error.to_string())?;
+    } else {
+        connection
+            .execute(
+                "
+                INSERT INTO book_metadata (
+                  file_path,
+                  title,
+                  authors_json,
+                  description,
+                  publisher,
+                  release_date,
+                  language,
+                  url,
+                  asin,
+                  cover_url,
+                  updated_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                ON CONFLICT(file_path) DO UPDATE SET
+                  title = excluded.title,
+                  authors_json = excluded.authors_json,
+                  description = excluded.description,
+                  publisher = excluded.publisher,
+                  release_date = excluded.release_date,
+                  language = excluded.language,
+                  url = excluded.url,
+                  asin = excluded.asin,
+                  cover_url = excluded.cover_url,
+                  updated_at = excluded.updated_at
+                ",
+                params![
+                    &payload.file_path,
+                    &payload.title,
+                    &authors_json,
+                    &payload.description,
+                    &payload.publisher,
+                    &payload.release_date,
+                    &payload.language,
+                    &payload.url,
+                    &payload.asin,
+                    &payload.cover_url,
+                    updated_at
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+    }
 
     payload.updated_at = Some(updated_at);
     Ok(payload)
@@ -2422,6 +2595,33 @@ mod tests {
                   tag TEXT NOT NULL,
                   PRIMARY KEY (file_path, tag)
                 );
+                CREATE TABLE book_metadata (
+                  file_path TEXT PRIMARY KEY,
+                  title TEXT NOT NULL,
+                  authors_json TEXT NOT NULL,
+                  description TEXT NOT NULL,
+                  publisher TEXT NOT NULL,
+                  release_date TEXT NOT NULL,
+                  language TEXT NOT NULL,
+                  url TEXT NOT NULL,
+                  asin TEXT NOT NULL,
+                  cover_url TEXT NOT NULL DEFAULT '',
+                  updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE external_books (
+                  file_path TEXT PRIMARY KEY,
+                  source_type TEXT NOT NULL,
+                  title TEXT NOT NULL,
+                  authors_json TEXT NOT NULL,
+                  description TEXT NOT NULL,
+                  publisher TEXT NOT NULL,
+                  release_date TEXT NOT NULL,
+                  language TEXT NOT NULL,
+                  url TEXT NOT NULL,
+                  asin TEXT NOT NULL,
+                  cover_url TEXT NOT NULL,
+                  updated_at INTEGER NOT NULL
+                );
                 ",
             )
             .expect("books schema should be created");
@@ -2625,5 +2825,107 @@ mod tests {
         assert!(!is_valid_release_date("2026-02-29"));
         assert!(!is_valid_release_date("2026-13-01"));
         assert!(!is_valid_release_date("2026-04-31"));
+    }
+
+    #[test]
+    fn load_snapshot_includes_external_kindle_books() {
+        let connection = Connection::open_in_memory().expect("in-memory db should open");
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE books (
+                  id INTEGER PRIMARY KEY,
+                  file_path TEXT NOT NULL UNIQUE,
+                  file_name TEXT NOT NULL,
+                  file_size INTEGER NOT NULL,
+                  modified_at INTEGER NOT NULL,
+                  indexed_at INTEGER NOT NULL
+                );
+                CREATE TABLE book_tags (
+                  file_path TEXT NOT NULL,
+                  tag TEXT NOT NULL,
+                  PRIMARY KEY (file_path, tag)
+                );
+                CREATE TABLE book_metadata (
+                  file_path TEXT PRIMARY KEY,
+                  title TEXT NOT NULL,
+                  authors_json TEXT NOT NULL,
+                  description TEXT NOT NULL,
+                  publisher TEXT NOT NULL,
+                  release_date TEXT NOT NULL,
+                  language TEXT NOT NULL,
+                  url TEXT NOT NULL,
+                  asin TEXT NOT NULL,
+                  cover_url TEXT NOT NULL DEFAULT '',
+                  updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE external_books (
+                  file_path TEXT PRIMARY KEY,
+                  source_type TEXT NOT NULL,
+                  title TEXT NOT NULL,
+                  authors_json TEXT NOT NULL,
+                  description TEXT NOT NULL,
+                  publisher TEXT NOT NULL,
+                  release_date TEXT NOT NULL,
+                  language TEXT NOT NULL,
+                  url TEXT NOT NULL,
+                  asin TEXT NOT NULL,
+                  cover_url TEXT NOT NULL,
+                  updated_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .expect("schema should be created");
+
+        connection
+            .execute(
+                "
+                INSERT INTO external_books (
+                  file_path,
+                  source_type,
+                  title,
+                  authors_json,
+                  description,
+                  publisher,
+                  release_date,
+                  language,
+                  url,
+                  asin,
+                  cover_url,
+                  updated_at
+                )
+                VALUES (?1, 'kindle', ?2, ?3, '', '', '', 'ja', '', 'B09MLLNP2B', ?4, 10)
+                ",
+                params![
+                    "kindle:B09MLLNP2B",
+                    "bit 1995年09月号",
+                    "[\"石田晴久\",\"竹内郁雄\"]",
+                    "https://example.com/cover.jpg"
+                ],
+            )
+            .expect("external book should be inserted");
+        connection
+            .execute(
+                "INSERT INTO book_tags (file_path, tag) VALUES (?1, ?2)",
+                params!["kindle:B09MLLNP2B", "magazine"],
+            )
+            .expect("tag should be inserted");
+
+        let snapshot = load_snapshot(&connection, &test_config(&[])).expect("snapshot should load");
+        assert_eq!(snapshot.indexed_count, 1);
+        assert_eq!(snapshot.books.len(), 1);
+        assert_eq!(snapshot.books[0].file_path, "kindle:B09MLLNP2B");
+        assert_eq!(snapshot.books[0].source_type, "kindle");
+        assert_eq!(
+            snapshot.books[0].cover_url,
+            Some("https://example.com/cover.jpg".to_string())
+        );
+        assert_eq!(snapshot.books[0].authors, vec!["石田晴久", "竹内郁雄"]);
+        assert_eq!(snapshot.books[0].tags, vec!["magazine"]);
+        assert_eq!(
+            snapshot.books[0].location_label,
+            Some("Kindle library".to_string())
+        );
+        assert!(!snapshot.books[0].is_openable);
     }
 }

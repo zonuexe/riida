@@ -17,6 +17,8 @@ type SearchableBook = {
   fileName: string;
   filePath: string;
   tags?: string[];
+  locationLabel?: string | null;
+  authors?: string[];
 };
 
 export type TagNode = {
@@ -159,8 +161,15 @@ export function filterVisibleBooks<T extends SearchableBook>(
     const query = normalizeSearchText(searchQuery);
     const normalizedName = normalizeSearchText(book.fileName);
     const normalizedPath = normalizeSearchText(book.filePath);
+    const normalizedLocation = normalizeSearchText(book.locationLabel ?? "");
+    const normalizedAuthors = normalizeSearchText((book.authors ?? []).join(" "));
 
-    return normalizedName.includes(query) || normalizedPath.includes(query);
+    return (
+      normalizedName.includes(query) ||
+      normalizedPath.includes(query) ||
+      normalizedLocation.includes(query) ||
+      normalizedAuthors.includes(query)
+    );
   });
 }
 

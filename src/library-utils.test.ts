@@ -53,6 +53,13 @@ describe("filterVisibleBooks", () => {
       tags: ["fiction"],
     },
     {
+      fileName: "bit 1995年09月号",
+      filePath: "kindle:B09MLLNP2B",
+      tags: ["magazine"],
+      locationLabel: "Kindle library",
+      authors: ["石田晴久", "竹内郁雄"],
+    },
+    {
       fileName: "Nested.pdf",
       filePath: "/Books/Tech/Rust/Nested.pdf",
       tags: ["tech"],
@@ -80,7 +87,12 @@ describe("filterVisibleBooks", () => {
   it("filters by active tag", () => {
     const results = filterVisibleBooks(books, null, "tech", false, "");
 
-    expect(results).toEqual([books[0], books[1], books[3]]);
+    expect(results).toEqual([books[0], books[1], books[4]]);
+  });
+
+  it("matches search text against optional location labels and authors", () => {
+    expect(filterVisibleBooks(books, null, null, false, "Kindle")).toEqual([books[3]]);
+    expect(filterVisibleBooks(books, null, null, false, "竹内")).toEqual([books[3]]);
   });
 
   it("can restrict parent tags to directly tagged files only", () => {

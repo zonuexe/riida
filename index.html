@@ -82,6 +82,9 @@
           <section class="panel">
             <div class="library-header">
               <h2>Library</h2>
+              <button id="library-add-kindle" class="app-settings-secondary" type="button">
+                Add Kindle book
+              </button>
               <label id="tag-direct-filter" class="tag-direct-filter" hidden>
                 <input id="tag-direct-only" type="checkbox" />
                 <span>Show only directly tagged files</span>
@@ -467,6 +470,10 @@
           <label class="app-settings-field">
             <span>URL</span>
             <input id="book-metadata-url" type="url" maxlength="500" />
+          </label>
+          <label class="app-settings-field">
+            <span>Cover URL</span>
+            <input id="book-metadata-cover-url" type="url" maxlength="500" />
           </label>
           <section class="metadata-import-block">
             <div class="metadata-import-header">

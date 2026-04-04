@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-04-05
+
+### Fixed
+
+- Cover images for Kindle books now display correctly in the library; they were previously blocked by the Content Security Policy.
+- Registering a Kindle book whose ASIN is already in the library now shows an error dialog instead of silently overwriting the existing entry.
+
 ## [0.1.2] - 2026-04-03
 
 ### Added
@@ -118,7 +125,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/zonuexe/riida/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/zonuexe/riida/releases/tag/v0.1.2
 [0.1.1]: https://github.com/zonuexe/riida/releases/tag/v0.1.1
 [0.1.0]: https://github.com/zonuexe/riida/releases/tag/v0.1.0

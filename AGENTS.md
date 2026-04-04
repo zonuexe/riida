@@ -52,6 +52,8 @@ Public distribution still requires proper Apple signing and notarization.
 
 The current app focus is local PDF library management with embedded reading, notes, thumbnails, and viewer preferences.
 
+The library now also supports external, non-file-backed books such as Kindle purchases.
+
 ## Config, Data, Cache
 
 The app separates storage into:
@@ -128,6 +130,7 @@ When changing navigation logic, verify:
 - PDF -> list -> PDF transitions
 - forward navigation after going back
 - search result restoration
+- external source restoration such as `source=kindle`
 
 The frontend now has focused Vitest coverage for:
 
@@ -152,15 +155,62 @@ Text-entry flows must account for IME composition.
 Re-check these behaviors manually when changing text-entry UI such as:
 
 - tag editing
+- metadata editing and JSON import
 - search fields with keyboard shortcuts
 - future inline editors or rename flows
+
+## Book Metadata Notes
+
+Books can store editable metadata for:
+
+- title
+- authors
+- description
+- publisher
+- release date
+- language
+- URL
+- ASIN
+- cover URL
+
+Metadata editing exists for both local PDF books and external books.
+
+Current behaviors:
+
+- authors are edited as one author per line
+- release dates must use `YYYY-MM-DD`
+- JSON import is a patch format where missing keys keep values unchanged and `null` clears that field
+- if the visible form is empty but JSON patch text is present, `Save and close` applies the JSON patch before saving
+- completely empty metadata must not be saved
+
+Deletion semantics differ by source:
+
+- local PDF books: the delete action clears saved metadata only
+- Kindle books: the delete action removes the external book entry itself
+
+Keep these semantics in mind when changing the metadata modal or backend commands.
+
+## External Library Notes
+
+Kindle purchases are currently modeled as external books with synthetic `file_path` values such as
+`kindle:<asin-or-uuid>`.
+
+Current frontend behaviors:
+
+- the sidebar shows an `EXTERNAL` section
+- Kindle books are reachable from `Kindle` under that section
+- external sources participate in app-level navigation state via `source=...`
+- Kindle books appear in the main list, can be searched, tagged, and edited
+- Kindle books are not openable in the PDF viewer; activating them opens metadata editing instead
 
 ## SQLite Notes
 
 The backend currently stores at least:
 
 - indexed books
+- external books
 - book tags
+- book metadata
 - notes
 - viewer preferences
 - reading positions
@@ -172,6 +222,7 @@ If schema semantics change, consider migration behavior early.
 ## Vendored Frontend Assets
 
 - Font Awesome 7.2.0 is vendored under [src/vendor/fontawesome](src/vendor/fontawesome).
+- The current vendored subset includes `solid`, `brands`, and `regular` styles plus only the required webfonts.
 - Keep only the minimum required files when updating vendored assets.
 - Preserve the upstream license file alongside the vendored copy.
 

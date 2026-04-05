@@ -4,6 +4,8 @@
 
 This file records implementation details and operational context that are useful during development but do not belong in the user-facing README.
 
+For a higher-level architecture and responsibility map, see [DESIGN.md](DESIGN.md).
+
 ## Release And Licensing
 
 Release builds must satisfy the project's software licensing requirements.

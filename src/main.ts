@@ -3178,7 +3178,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
 
     const metaEl = document.createElement("small");
     metaEl.className = "book-meta";
-    metaEl.textContent = book.sourceType === "pdf" ? formatFileSize(book.fileSize) : "Kindle book";
+    metaEl.textContent = book.sourceType === "pdf" ? formatFileSize(book.fileSize) : "";
 
     const tagsRowEl = document.createElement("div");
     tagsRowEl.className = "book-tags-row";

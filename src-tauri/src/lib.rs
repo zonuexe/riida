@@ -60,6 +60,7 @@ struct AppConfig {
     library_roots: Vec<String>,
     excluded_patterns: Vec<String>,
     pdf_renderer: String,
+    enabled_external_sources: Vec<String>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -71,6 +72,8 @@ struct AppConfigFile {
     #[serde(default)]
     excluded_file_suffixes: Option<Vec<String>>,
     pdf_renderer: Option<String>,
+    #[serde(default)]
+    enabled_external_sources: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -79,6 +82,7 @@ struct AppConfigInput {
     library_roots: Vec<String>,
     excluded_patterns: Vec<String>,
     pdf_renderer: String,
+    enabled_external_sources: Vec<String>,
 }
 
 struct ConfigState {
@@ -197,6 +201,7 @@ struct AppConfigPayload {
     library_roots: Vec<String>,
     excluded_patterns: Vec<String>,
     pdf_renderer: String,
+    enabled_external_sources: Vec<String>,
 }
 
 fn collapse_home_path(path: &str) -> String {
@@ -406,6 +411,7 @@ fn default_config() -> AppConfig {
             .map(|value| value.to_string())
             .collect(),
         pdf_renderer: DEFAULT_PDF_RENDERER.to_string(),
+        enabled_external_sources: vec!["kindle".to_string()],
     }
 }
 
@@ -532,6 +538,9 @@ fn load_config_file(config_path: &Path) -> Result<AppConfig, String> {
         pdf_renderer: normalize_pdf_renderer(
             file_config.pdf_renderer.unwrap_or(defaults.pdf_renderer),
         ),
+        enabled_external_sources: file_config
+            .enabled_external_sources
+            .unwrap_or(defaults.enabled_external_sources),
     })
 }
 
@@ -560,6 +569,7 @@ fn app_config_to_payload(config: &AppConfig) -> AppConfigPayload {
             .collect(),
         excluded_patterns: config.excluded_patterns.clone(),
         pdf_renderer: config.pdf_renderer.clone(),
+        enabled_external_sources: config.enabled_external_sources.clone(),
     }
 }
 
@@ -581,6 +591,9 @@ fn normalize_config_input(config: AppConfigFile) -> AppConfig {
             &defaults.excluded_patterns,
         ),
         pdf_renderer: normalize_pdf_renderer(config.pdf_renderer.unwrap_or(defaults.pdf_renderer)),
+        enabled_external_sources: config
+            .enabled_external_sources
+            .unwrap_or(defaults.enabled_external_sources),
     }
 }
 
@@ -591,6 +604,7 @@ fn normalize_gui_config_input(config: AppConfigInput) -> AppConfig {
         excluded_dir_names: None,
         excluded_file_suffixes: None,
         pdf_renderer: Some(config.pdf_renderer),
+        enabled_external_sources: Some(config.enabled_external_sources),
     })
 }
 
@@ -615,6 +629,7 @@ fn save_config_input_file(input: &AppConfigInput) -> Result<(), String> {
         excluded_dir_names: None,
         excluded_file_suffixes: None,
         pdf_renderer: Some(normalize_pdf_renderer(input.pdf_renderer.clone())),
+        enabled_external_sources: Some(input.enabled_external_sources.clone()),
     };
     let serialized = toml::to_string_pretty(&payload).map_err(|error| error.to_string())?;
     fs::write(config_file(), serialized).map_err(|error| error.to_string())
@@ -1578,6 +1593,7 @@ fn save_app_config(
             .collect(),
         excluded_patterns: next_config.excluded_patterns.clone(),
         pdf_renderer: next_config.pdf_renderer.clone(),
+        enabled_external_sources: next_config.enabled_external_sources.clone(),
     })?;
 
     {
@@ -2119,6 +2135,7 @@ mod tests {
             library_roots: Vec::new(),
             excluded_patterns: patterns.iter().map(|value| value.to_string()).collect(),
             pdf_renderer: DEFAULT_PDF_RENDERER.to_string(),
+            enabled_external_sources: vec![],
         }
     }
 
@@ -2267,6 +2284,7 @@ mod tests {
             excluded_dir_names: None,
             excluded_file_suffixes: None,
             pdf_renderer: Some("PDFJS".to_string()),
+            enabled_external_sources: None,
         });
 
         assert_eq!(config.library_roots, vec![format!("{home}/Books")]);
@@ -2283,6 +2301,7 @@ mod tests {
             library_roots: vec!["~/Library".to_string()],
             excluded_patterns: vec!["*.BAK".to_string(), "prefix_*".to_string()],
             pdf_renderer: "native".to_string(),
+            enabled_external_sources: vec![],
         });
 
         assert_eq!(
@@ -2302,6 +2321,7 @@ mod tests {
             ],
             excluded_patterns: vec!["**/backup/**".to_string()],
             pdf_renderer: "pdfjs".to_string(),
+            enabled_external_sources: vec!["kindle".to_string()],
         });
 
         assert_eq!(
@@ -2681,6 +2701,7 @@ mod tests {
             library_roots: vec![temp_root.to_string_lossy().into_owned()],
             excluded_patterns: Vec::new(),
             pdf_renderer: DEFAULT_PDF_RENDERER.to_string(),
+            enabled_external_sources: vec![],
         };
         let initial_patterns =
             compile_exclude_patterns(&initial_config).expect("initial patterns should compile");
@@ -2694,6 +2715,7 @@ mod tests {
             library_roots: vec![temp_root.to_string_lossy().into_owned()],
             excluded_patterns: vec!["**/kindlepw/**".to_string(), "kindlepw*".to_string()],
             pdf_renderer: DEFAULT_PDF_RENDERER.to_string(),
+            enabled_external_sources: vec![],
         };
         let updated_patterns =
             compile_exclude_patterns(&updated_config).expect("updated patterns should compile");
@@ -2823,6 +2845,7 @@ mod tests {
                 library_roots,
                 excluded_patterns,
                 pdf_renderer,
+                enabled_external_sources: vec![],
             });
 
             for pattern in &normalized.excluded_patterns {

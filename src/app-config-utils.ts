@@ -4,6 +4,7 @@ export type AppConfigDraft = {
   libraryRoots: string[];
   excludedPatterns: string[];
   pdfRenderer: PdfRenderer;
+  enabledExternalSources: string[];
 };
 
 export function parseExcludedPatternsInput(value: string) {
@@ -21,10 +22,12 @@ export function buildAppConfigDraft(
   libraryRoots: string[],
   excludedPatternsInput: string,
   pdfRenderer: string | null | undefined,
+  enabledExternalSources: string[],
 ): AppConfigDraft {
   return {
     libraryRoots: [...libraryRoots],
     excludedPatterns: parseExcludedPatternsInput(excludedPatternsInput),
     pdfRenderer: pdfRenderer === "pdfjs" ? "pdfjs" : "native",
+    enabledExternalSources: [...enabledExternalSources],
   };
 }

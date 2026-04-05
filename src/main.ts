@@ -121,6 +121,7 @@ type AppConfigPayload = {
   libraryRoots: string[];
   excludedPatterns: string[];
   pdfRenderer: "native" | "pdfjs";
+  enabledExternalSources: string[];
 };
 
 type ViewerSettings = {
@@ -990,6 +991,7 @@ function syncAppSettingsUi() {
   );
   const pdfRendererEl = document.querySelector<HTMLSelectElement>("#config-pdf-renderer");
   const configPathEl = document.querySelector<HTMLElement>("#app-settings-config-path");
+  const kindleEnabledEl = document.querySelector<HTMLInputElement>("#config-kindle-enabled");
 
   if (modalEl) {
     modalEl.hidden = !viewerState.isAppSettingsOpen;
@@ -1004,6 +1006,9 @@ function syncAppSettingsUi() {
     }
     if (configPathEl) {
       configPathEl.innerHTML = `Config file: <code>${lastAppConfig.configPath}</code>`;
+    }
+    if (kindleEnabledEl) {
+      kindleEnabledEl.checked = lastAppConfig.enabledExternalSources.includes("kindle");
     }
   } else if (configPathEl) {
     configPathEl.textContent = "";
@@ -1638,6 +1643,7 @@ async function saveAppSettingsFromForm() {
     "#config-excluded-patterns",
   );
   const pdfRendererEl = document.querySelector<HTMLSelectElement>("#config-pdf-renderer");
+  const kindleEnabledEl = document.querySelector<HTMLInputElement>("#config-kindle-enabled");
 
   const libraryRoots = [...(lastAppConfig?.libraryRoots ?? [])];
 
@@ -1646,10 +1652,17 @@ async function saveAppSettingsFromForm() {
     return;
   }
 
+  const enabledExternalSources = kindleEnabledEl?.checked ? ["kindle"] : [];
+
   try {
     const payload = await invoke<AppConfigPayload>("save_app_config", {
       input: {
-        ...buildAppConfigDraft(libraryRoots, excludedPatternsEl?.value ?? "", pdfRendererEl?.value),
+        ...buildAppConfigDraft(
+          libraryRoots,
+          excludedPatternsEl?.value ?? "",
+          pdfRendererEl?.value,
+          enabledExternalSources,
+        ),
       },
     });
 
@@ -2798,49 +2811,49 @@ function renderSidebar(snapshot: LibrarySnapshot) {
     navEl.appendChild(row);
   }
 
+  const enabledExternalSources = lastAppConfig?.enabledExternalSources ?? [];
+  const kindleEnabled = enabledExternalSources.includes("kindle");
   const externalBooks = snapshot.books.filter((book) => book.sourceType !== "pdf");
-  if (externalBooks.length > 0) {
+  const kindleCount = externalBooks.filter((book) => book.sourceType === "kindle").length;
+  if (kindleEnabled && kindleCount > 0) {
     const externalHeader = document.createElement("p");
     externalHeader.className = "nav-section-title";
     externalHeader.innerHTML =
       '<i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i><span>EXTERNAL</span>';
     navEl.appendChild(externalHeader);
 
-    const kindleCount = externalBooks.filter((book) => book.sourceType === "kindle").length;
-    if (kindleCount > 0) {
-      const row = document.createElement("div");
-      row.className = "nav-tree-row";
-      row.style.setProperty("--depth", "0");
+    const row = document.createElement("div");
+    row.className = "nav-tree-row";
+    row.style.setProperty("--depth", "0");
 
-      const spacer = document.createElement("span");
-      spacer.className = "nav-toggle-spacer";
-      spacer.setAttribute("aria-hidden", "true");
-      row.appendChild(spacer);
+    const spacer = document.createElement("span");
+    spacer.className = "nav-toggle-spacer";
+    spacer.setAttribute("aria-hidden", "true");
+    row.appendChild(spacer);
 
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "nav-link nav-tree-link";
-      button.classList.toggle("is-active", viewerState.activeExternalSource === "kindle");
-      button.innerHTML =
-        '<span><i class="fa-brands fa-amazon" aria-hidden="true"></i> Kindle</span><small>' +
-        String(kindleCount) +
-        "</small>";
-      button.addEventListener("click", () => {
-        void navigateToState(
-          {
-            bookFilePath: null,
-            activeDirectory: null,
-            activeTag: null,
-            activeExternalSource: "kindle",
-            activeTagDirectOnly: false,
-            searchQuery: viewerState.searchQuery,
-          },
-          "push",
-        );
-      });
-      row.appendChild(button);
-      navEl.appendChild(row);
-    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "nav-link nav-tree-link";
+    button.classList.toggle("is-active", viewerState.activeExternalSource === "kindle");
+    button.innerHTML =
+      '<span><i class="fa-brands fa-amazon" aria-hidden="true"></i> Kindle</span><small>' +
+      String(kindleCount) +
+      "</small>";
+    button.addEventListener("click", () => {
+      void navigateToState(
+        {
+          bookFilePath: null,
+          activeDirectory: null,
+          activeTag: null,
+          activeExternalSource: "kindle",
+          activeTagDirectOnly: false,
+          searchQuery: viewerState.searchQuery,
+        },
+        "push",
+      );
+    });
+    row.appendChild(button);
+    navEl.appendChild(row);
   }
 }
 
@@ -3375,6 +3388,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         libraryRoots: currentRoots,
         excludedPatterns: lastAppConfig?.excludedPatterns ?? [],
         pdfRenderer: lastAppConfig?.pdfRenderer ?? "native",
+        enabledExternalSources: lastAppConfig?.enabledExternalSources ?? ["kindle"],
       };
       syncAppSettingsUi();
     } catch (error) {

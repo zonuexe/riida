@@ -29,18 +29,22 @@ describe("addLibraryRoot", () => {
 
 describe("buildAppConfigDraft", () => {
   test("builds a normalized draft from form values", () => {
-    expect(buildAppConfigDraft(["~/Books"], " *.bak.pdf \n prefix_*\n", "pdfjs")).toEqual({
+    expect(
+      buildAppConfigDraft(["~/Books"], " *.bak.pdf \n prefix_*\n", "pdfjs", ["kindle"]),
+    ).toEqual({
       libraryRoots: ["~/Books"],
       excludedPatterns: ["*.bak.pdf", "prefix_*"],
       pdfRenderer: "pdfjs",
+      enabledExternalSources: ["kindle"],
     });
   });
 
   test("falls back to native renderer for unknown values", () => {
-    expect(buildAppConfigDraft([], "", "unexpected")).toEqual({
+    expect(buildAppConfigDraft([], "", "unexpected", [])).toEqual({
       libraryRoots: [],
       excludedPatterns: [],
       pdfRenderer: "native",
+      enabledExternalSources: [],
     });
   });
 });

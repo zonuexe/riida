@@ -326,7 +326,7 @@ h1 {
   color: rgba(31, 27, 22, 0.8);
 }
 
-.app-settings-field input,
+.app-settings-field input:not([type="checkbox"]),
 .app-settings-field textarea,
 .app-settings-field select {
   width: 100%;
@@ -337,6 +337,17 @@ h1 {
   padding: 12px 14px;
   font: inherit;
   color: inherit;
+}
+
+.app-settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.app-settings-checkbox span {
+  font-weight: normal;
 }
 
 .app-settings-field textarea {

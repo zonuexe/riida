@@ -41,6 +41,8 @@ struct BookSummary {
     cover_url: Option<String>,
     location_label: Option<String>,
     is_openable: bool,
+    asin: Option<String>,
+    url: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1227,7 +1229,9 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
               books.file_size,
               COALESCE(book_metadata.authors_json, '[]'),
               COALESCE(book_metadata.cover_url, ''),
-              books.modified_at
+              books.modified_at,
+              COALESCE(book_metadata.asin, ''),
+              COALESCE(book_metadata.url, '')
             FROM books
             LEFT JOIN book_metadata ON book_metadata.file_path = books.file_path
             ORDER BY books.modified_at DESC, books.file_name ASC
@@ -1244,12 +1248,14 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 row.get::<_, String>(3)?,
                 row.get::<_, String>(4)?,
                 row.get::<_, u64>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
             ))
         })
         .map_err(|error| error.to_string())?;
 
     for row in pdf_rows {
-        let (file_name, file_path, file_size, authors_json, cover_url, sort_key) =
+        let (file_name, file_path, file_size, authors_json, cover_url, sort_key, asin, url) =
             row.map_err(|error| error.to_string())?;
         let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
         books.push((
@@ -1268,6 +1274,8 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 },
                 location_label: None,
                 is_openable: true,
+                asin: if asin.is_empty() { None } else { Some(asin) },
+                url: if url.is_empty() { None } else { Some(url) },
             },
         ));
     }
@@ -1281,7 +1289,9 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
               title,
               authors_json,
               cover_url,
-              updated_at
+              updated_at,
+              asin,
+              url
             FROM external_books
             ORDER BY updated_at DESC, title COLLATE NOCASE ASC
             ",
@@ -1297,12 +1307,14 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 row.get::<_, String>(3)?,
                 row.get::<_, String>(4)?,
                 row.get::<_, u64>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
             ))
         })
         .map_err(|error| error.to_string())?;
 
     for row in external_rows {
-        let (file_path, source_type, title, authors_json, cover_url, sort_key) =
+        let (file_path, source_type, title, authors_json, cover_url, sort_key, asin, url) =
             row.map_err(|error| error.to_string())?;
         let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
         books.push((
@@ -1321,6 +1333,8 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 },
                 location_label: Some("Kindle library".to_string()),
                 is_openable: false,
+                asin: if asin.is_empty() { None } else { Some(asin) },
+                url: if url.is_empty() { None } else { Some(url) },
             },
         ));
     }

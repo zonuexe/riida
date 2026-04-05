@@ -3,6 +3,7 @@ import { getName, getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { confirm, message, open } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import "./vendor/fontawesome/css/fontawesome.min.css";
 import "./vendor/fontawesome/css/brands.min.css";
 import "./vendor/fontawesome/css/regular.min.css";
@@ -59,6 +60,8 @@ type BookSummary = {
   coverUrl: string | null;
   locationLabel: string | null;
   isOpenable: boolean;
+  asin: string | null;
+  url: string | null;
 };
 
 type LibrarySnapshot = {
@@ -1518,6 +1521,8 @@ async function saveBookMetadataChanges() {
             locationLabel:
               bookMetadataEditorState.sourceType === "kindle" ? "Kindle library" : null,
             isOpenable: bookMetadataEditorState.sourceType === "pdf",
+            asin: payload.asin || null,
+            url: payload.url || null,
           };
     populateBookMetadataEditor(sourceBook, payload);
     await refreshSnapshot();
@@ -2970,6 +2975,40 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     tagsRowEl.appendChild(actionsEl);
     bodyEl.appendChild(tagsRowEl);
     bodyEl.appendChild(metaEl);
+
+    if (book.asin || book.url) {
+      const linksEl = document.createElement("div");
+      linksEl.className = "book-links";
+      if (book.asin) {
+        const amazonEl = document.createElement("button");
+        amazonEl.type = "button";
+        amazonEl.className = "book-link";
+        amazonEl.innerHTML = `<i class="fa-brands fa-amazon" aria-hidden="true"></i><span>Amazon</span>`;
+        amazonEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          void openUrl(`https://www.amazon.co.jp/dp/${book.asin}`);
+        });
+        linksEl.appendChild(amazonEl);
+      }
+      if (book.url) {
+        let label: string;
+        try {
+          label = new URL(book.url).hostname;
+        } catch {
+          label = book.url;
+        }
+        const urlEl = document.createElement("button");
+        urlEl.type = "button";
+        urlEl.className = "book-link";
+        urlEl.innerHTML = `<i class="fa-solid fa-globe" aria-hidden="true"></i><span>${label}</span>`;
+        urlEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          void openUrl(book.url!);
+        });
+        linksEl.appendChild(urlEl);
+      }
+      bodyEl.appendChild(linksEl);
+    }
     itemEl.appendChild(thumbEl);
     itemEl.appendChild(bodyEl);
 

@@ -1350,6 +1350,29 @@ h1 {
   font-size: 0.8rem;
 }
 
+.book-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.book-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.book-link:hover {
+  text-decoration: underline;
+}
+
 .book-item:hover strong,
 .book-item:focus strong {
   color: var(--accent);

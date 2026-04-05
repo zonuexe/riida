@@ -50,13 +50,19 @@ import {
   switchViewerSettingsScopeInState,
 } from "./viewer-settings-utils";
 
+type CustomSource = {
+  id: string;
+  name: string;
+  icon: string;
+};
+
 type BookSummary = {
   fileName: string;
   filePath: string;
   fileSize: number;
   tags: string[];
   authors: string[];
-  sourceType: "pdf" | "kindle";
+  sourceType: string;
   coverUrl: string | null;
   locationLabel: string | null;
   isOpenable: boolean;
@@ -72,6 +78,7 @@ type LibrarySnapshot = {
   books: BookSummary[];
   excludedPatterns: string[];
   pdfRenderer: "native" | "pdfjs";
+  customSources: CustomSource[];
 };
 
 type NoteDocument = {
@@ -195,7 +202,7 @@ type BookMetadataEditorState = {
   isOpen: boolean;
   filePath: string | null;
   bookTitle: string;
-  sourceType: "pdf" | "kindle";
+  sourceType: string;
   title: string;
   authorsText: string;
   description: string;
@@ -346,6 +353,55 @@ const bookMetadataEditorState: BookMetadataEditorState = {
   statusMessage: "",
   loadToken: 0,
 };
+
+type CustomSourceEditorState = {
+  isOpen: boolean;
+  id: string | null;
+  name: string;
+  icon: string;
+  statusMessage: string;
+};
+
+const customSourceEditorState: CustomSourceEditorState = {
+  isOpen: false,
+  id: null,
+  name: "",
+  icon: "fa-solid fa-book",
+  statusMessage: "",
+};
+
+const CUSTOM_SOURCE_ICONS: Array<{ cls: string; label: string }> = [
+  { cls: "fa-regular fa-building", label: "Building" },
+  { cls: "fa-solid fa-building", label: "Building (solid)" },
+  { cls: "fa-solid fa-house", label: "House" },
+  { cls: "fa-regular fa-house", label: "House (regular)" },
+  { cls: "fa-solid fa-book", label: "Book" },
+  { cls: "fa-solid fa-school", label: "School" },
+  { cls: "fa-solid fa-suitcase", label: "Suitcase" },
+  { cls: "fa-solid fa-shop", label: "Shop" },
+  { cls: "fa-solid fa-mobile-screen", label: "Mobile" },
+  { cls: "fa-solid fa-tablet-screen-button", label: "Tablet" },
+  { cls: "fa-solid fa-computer", label: "Computer" },
+  { cls: "fa-solid fa-floppy-disk", label: "Floppy disk" },
+  { cls: "fa-solid fa-house-laptop", label: "House + laptop" },
+  { cls: "fa-solid fa-laptop", label: "Laptop" },
+  { cls: "fa-solid fa-laptop-file", label: "Laptop + file" },
+  { cls: "fa-solid fa-bus", label: "Bus" },
+  { cls: "fa-solid fa-train", label: "Train" },
+  { cls: "fa-solid fa-square-rss", label: "RSS" },
+  { cls: "fa-solid fa-bed", label: "Bed" },
+  { cls: "fa-solid fa-bag-shopping", label: "Shopping bag" },
+  ...Array.from({ length: 10 }, (_, i) => ({
+    cls: `fa-solid fa-${i}`,
+    label: String(i),
+  })),
+  ...Array.from({ length: 26 }, (_, i) => ({
+    cls: `fa-solid fa-${String.fromCharCode(97 + i)}`,
+    label: String.fromCharCode(65 + i),
+  })),
+  { cls: "fa-brands fa-pixiv", label: "Pixiv" },
+];
+
 const PDF_RENDER_RADIUS = 2;
 const PDF_KEEP_RADIUS = 3;
 let lastViewportSize = {
@@ -1018,6 +1074,140 @@ function syncAppSettingsUi() {
   }
 
   renderLibraryRootsList();
+  renderCustomSourcesList();
+}
+
+function renderCustomSourcesList() {
+  const listEl = document.querySelector<HTMLElement>("#config-custom-sources-list");
+  if (!listEl) {
+    return;
+  }
+  listEl.innerHTML = "";
+  const sources = lastSnapshot?.customSources ?? [];
+  if (sources.length === 0) {
+    const emptyEl = document.createElement("p");
+    emptyEl.className = "config-custom-sources-empty";
+    emptyEl.textContent = "No custom sources yet.";
+    listEl.appendChild(emptyEl);
+    return;
+  }
+  for (const source of sources) {
+    const rowEl = document.createElement("div");
+    rowEl.className = "config-custom-source-row";
+
+    const iconEl = document.createElement("i");
+    iconEl.className = `${source.icon} config-custom-source-icon`;
+    iconEl.setAttribute("aria-hidden", "true");
+
+    const nameEl = document.createElement("span");
+    nameEl.className = "config-custom-source-name";
+    nameEl.textContent = source.name;
+
+    const editEl = document.createElement("button");
+    editEl.type = "button";
+    editEl.className = "config-custom-source-action";
+    editEl.textContent = "Edit";
+    editEl.addEventListener("click", () => openCustomSourceEditor(source));
+
+    const deleteEl = document.createElement("button");
+    deleteEl.type = "button";
+    deleteEl.className = "config-custom-source-action config-custom-source-action--delete";
+    deleteEl.textContent = "Delete";
+    deleteEl.addEventListener("click", () => void deleteCustomSource(source));
+
+    rowEl.appendChild(iconEl);
+    rowEl.appendChild(nameEl);
+    rowEl.appendChild(editEl);
+    rowEl.appendChild(deleteEl);
+    listEl.appendChild(rowEl);
+  }
+}
+
+function syncCustomSourceEditorUi() {
+  const modalEl = document.querySelector<HTMLElement>("#custom-source-editor-modal");
+  const nameEl = document.querySelector<HTMLInputElement>("#custom-source-name");
+  const statusEl = document.querySelector<HTMLElement>("#custom-source-status");
+  if (modalEl) {
+    modalEl.hidden = !customSourceEditorState.isOpen;
+  }
+  if (nameEl && document.activeElement !== nameEl) {
+    nameEl.value = customSourceEditorState.name;
+  }
+  // Update icon picker selection
+  const pickerEl = document.querySelector<HTMLElement>("#custom-source-icon-picker");
+  if (pickerEl) {
+    for (const btn of pickerEl.querySelectorAll<HTMLButtonElement>("[data-icon]")) {
+      btn.classList.toggle("is-selected", btn.dataset.icon === customSourceEditorState.icon);
+    }
+  }
+  if (statusEl) {
+    statusEl.hidden = customSourceEditorState.statusMessage.length === 0;
+    statusEl.textContent = customSourceEditorState.statusMessage;
+  }
+}
+
+function openCustomSourceEditor(source?: CustomSource) {
+  customSourceEditorState.isOpen = true;
+  customSourceEditorState.id = source?.id ?? null;
+  customSourceEditorState.name = source?.name ?? "";
+  customSourceEditorState.icon = source?.icon ?? "fa-solid fa-book";
+  customSourceEditorState.statusMessage = "";
+  syncCustomSourceEditorUi();
+}
+
+function closeCustomSourceEditor() {
+  customSourceEditorState.isOpen = false;
+  syncCustomSourceEditorUi();
+}
+
+async function saveCustomSource() {
+  const nameEl = document.querySelector<HTMLInputElement>("#custom-source-name");
+  const name = nameEl?.value.trim() ?? customSourceEditorState.name.trim();
+  if (!name) {
+    customSourceEditorState.statusMessage = "Name is required.";
+    syncCustomSourceEditorUi();
+    return;
+  }
+  try {
+    await invoke<CustomSource>("save_custom_source", {
+      id: customSourceEditorState.id ?? null,
+      name,
+      icon: customSourceEditorState.icon,
+    });
+    const snapshot = await invoke<LibrarySnapshot>("library_snapshot");
+    lastSnapshot = snapshot;
+    viewerState.books = snapshot.books;
+    renderApp();
+    closeCustomSourceEditor();
+  } catch (error) {
+    customSourceEditorState.statusMessage = `Failed to save: ${String(error)}`;
+    syncCustomSourceEditorUi();
+  }
+}
+
+async function deleteCustomSource(source: CustomSource) {
+  const confirmed = await confirm(`Delete "${source.name}" and all its books?`, {
+    title: "Delete source",
+    kind: "warning",
+    okLabel: "Delete",
+    cancelLabel: "Cancel",
+  });
+  if (!confirmed) {
+    return;
+  }
+  try {
+    await invoke("delete_custom_source", { id: source.id });
+    const snapshot = await invoke<LibrarySnapshot>("library_snapshot");
+    lastSnapshot = snapshot;
+    viewerState.books = snapshot.books;
+    if (viewerState.activeExternalSource === source.id) {
+      viewerState.activeExternalSource = null;
+    }
+    renderApp();
+    syncAppSettingsUi();
+  } catch (error) {
+    await message(`Failed to delete: ${String(error)}`, { kind: "error" });
+  }
 }
 
 function setTagEditorStatus(message: string, tone: "neutral" | "success" | "error" = "neutral") {
@@ -1192,7 +1382,7 @@ function syncBookMetadataEditorUi() {
       bookMetadataEditorState.filePath !== null || bookMetadataEditorState.sourceType === "pdf";
     deleteEl.hidden = !canDelete;
     deleteEl.textContent =
-      bookMetadataEditorState.sourceType === "kindle" ? "Delete Kindle book" : "Clear metadata";
+      bookMetadataEditorState.sourceType === "pdf" ? "Clear metadata" : "Delete book";
   }
 }
 
@@ -1233,6 +1423,26 @@ function openNewKindleBookEditor() {
   bookMetadataEditorState.filePath = null;
   bookMetadataEditorState.bookTitle = "New Kindle book";
   bookMetadataEditorState.sourceType = "kindle";
+  bookMetadataEditorState.title = "";
+  bookMetadataEditorState.authorsText = "";
+  bookMetadataEditorState.description = "";
+  bookMetadataEditorState.publisher = "";
+  bookMetadataEditorState.releaseDate = "";
+  bookMetadataEditorState.language = "";
+  bookMetadataEditorState.url = "";
+  bookMetadataEditorState.asin = "";
+  bookMetadataEditorState.coverUrl = "";
+  bookMetadataEditorState.importText = "";
+  setBookMetadataStatus("");
+  syncBookMetadataEditorUi();
+}
+
+function openNewCustomBookEditor(source: CustomSource) {
+  bookMetadataEditorState.loadToken += 1;
+  bookMetadataEditorState.isOpen = true;
+  bookMetadataEditorState.filePath = null;
+  bookMetadataEditorState.bookTitle = `New book in ${source.name}`;
+  bookMetadataEditorState.sourceType = source.id;
   bookMetadataEditorState.title = "";
   bookMetadataEditorState.authorsText = "";
   bookMetadataEditorState.description = "";
@@ -1478,10 +1688,22 @@ async function saveBookMetadataChanges() {
     return;
   }
 
-  const filePath =
-    bookMetadataEditorState.filePath ?? `kindle:${draft.asin.trim() || crypto.randomUUID()}`;
+  const isCustom =
+    bookMetadataEditorState.sourceType !== "pdf" && bookMetadataEditorState.sourceType !== "kindle";
+  let filePath: string;
+  if (bookMetadataEditorState.filePath) {
+    filePath = bookMetadataEditorState.filePath;
+  } else if (bookMetadataEditorState.sourceType === "kindle") {
+    filePath = `kindle:${draft.asin.trim() || crypto.randomUUID()}`;
+  } else {
+    filePath = `custom:${crypto.randomUUID()}`;
+  }
 
-  if (!bookMetadataEditorState.filePath && draft.asin.trim()) {
+  if (
+    !bookMetadataEditorState.filePath &&
+    bookMetadataEditorState.sourceType === "kindle" &&
+    draft.asin.trim()
+  ) {
     const duplicate = viewerState.books.find((b) => b.filePath === filePath);
     if (duplicate) {
       await message(`ASIN ${draft.asin.trim()} is already registered: "${duplicate.fileName}"`, {
@@ -1496,6 +1718,7 @@ async function saveBookMetadataChanges() {
     const payload = await invoke<BookMetadataPayload>("save_book_metadata", {
       input: {
         filePath,
+        sourceType: isCustom ? bookMetadataEditorState.sourceType : null,
         title: draft.title,
         authors: normalizeMetadataAuthorsText(draft.authorsText),
         description: draft.description,
@@ -1507,6 +1730,9 @@ async function saveBookMetadataChanges() {
         coverUrl: draft.coverUrl,
       },
     });
+    const customSource = isCustom
+      ? lastSnapshot?.customSources.find((s) => s.id === bookMetadataEditorState.sourceType)
+      : null;
     const sourceBook =
       viewerState.currentBook?.filePath === payload.filePath
         ? viewerState.currentBook
@@ -1519,7 +1745,8 @@ async function saveBookMetadataChanges() {
             sourceType: bookMetadataEditorState.sourceType,
             coverUrl: payload.coverUrl || null,
             locationLabel:
-              bookMetadataEditorState.sourceType === "kindle" ? "Kindle library" : null,
+              customSource?.name ??
+              (bookMetadataEditorState.sourceType === "kindle" ? "Kindle library" : null),
             isOpenable: bookMetadataEditorState.sourceType === "pdf",
             asin: payload.asin || null,
             url: payload.url || null,
@@ -1539,13 +1766,13 @@ async function deleteBookMetadataChanges() {
     return;
   }
 
+  const isExternalBook = bookMetadataEditorState.sourceType !== "pdf";
   const confirmed = await confirm(
-    bookMetadataEditorState.sourceType === "kindle"
-      ? "Delete this Kindle book from the library?"
+    isExternalBook
+      ? "Delete this book from the library?"
       : "Clear the saved metadata for this PDF?",
     {
-      title:
-        bookMetadataEditorState.sourceType === "kindle" ? "Delete Kindle book" : "Clear metadata",
+      title: isExternalBook ? "Delete book" : "Clear metadata",
       kind: "warning",
       okLabel: "Delete",
       cancelLabel: "Cancel",
@@ -1559,7 +1786,7 @@ async function deleteBookMetadataChanges() {
     await invoke("delete_book_metadata", { filePath });
 
     if (viewerState.currentBook?.filePath === filePath) {
-      if (bookMetadataEditorState.sourceType === "kindle") {
+      if (isExternalBook) {
         viewerState.currentBook = null;
       } else {
         viewerState.currentBook = {
@@ -2820,45 +3047,82 @@ function renderSidebar(snapshot: LibrarySnapshot) {
   const kindleEnabled = enabledExternalSources.includes("kindle");
   const externalBooks = snapshot.books.filter((book) => book.sourceType !== "pdf");
   const kindleCount = externalBooks.filter((book) => book.sourceType === "kindle").length;
-  if (kindleEnabled && kindleCount > 0) {
+  const customSources = snapshot.customSources ?? [];
+  const hasExternalSection = (kindleEnabled && kindleCount > 0) || customSources.length > 0;
+
+  if (hasExternalSection) {
     const externalHeader = document.createElement("p");
     externalHeader.className = "nav-section-title";
     externalHeader.innerHTML =
       '<i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i><span>EXTERNAL</span>';
     navEl.appendChild(externalHeader);
 
-    const row = document.createElement("div");
-    row.className = "nav-tree-row";
-    row.style.setProperty("--depth", "0");
+    if (kindleEnabled && kindleCount > 0) {
+      const row = document.createElement("div");
+      row.className = "nav-tree-row";
+      row.style.setProperty("--depth", "0");
+      const spacer = document.createElement("span");
+      spacer.className = "nav-toggle-spacer";
+      spacer.setAttribute("aria-hidden", "true");
+      row.appendChild(spacer);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "nav-link nav-tree-link";
+      button.classList.toggle("is-active", viewerState.activeExternalSource === "kindle");
+      button.innerHTML =
+        '<span><i class="fa-brands fa-amazon" aria-hidden="true"></i> Kindle</span><small>' +
+        String(kindleCount) +
+        "</small>";
+      button.addEventListener("click", () => {
+        void navigateToState(
+          {
+            bookFilePath: null,
+            activeDirectory: null,
+            activeTag: null,
+            activeExternalSource: "kindle",
+            activeTagDirectOnly: false,
+            searchQuery: viewerState.searchQuery,
+          },
+          "push",
+        );
+      });
+      row.appendChild(button);
+      navEl.appendChild(row);
+    }
 
-    const spacer = document.createElement("span");
-    spacer.className = "nav-toggle-spacer";
-    spacer.setAttribute("aria-hidden", "true");
-    row.appendChild(spacer);
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "nav-link nav-tree-link";
-    button.classList.toggle("is-active", viewerState.activeExternalSource === "kindle");
-    button.innerHTML =
-      '<span><i class="fa-brands fa-amazon" aria-hidden="true"></i> Kindle</span><small>' +
-      String(kindleCount) +
-      "</small>";
-    button.addEventListener("click", () => {
-      void navigateToState(
-        {
-          bookFilePath: null,
-          activeDirectory: null,
-          activeTag: null,
-          activeExternalSource: "kindle",
-          activeTagDirectOnly: false,
-          searchQuery: viewerState.searchQuery,
-        },
-        "push",
-      );
-    });
-    row.appendChild(button);
-    navEl.appendChild(row);
+    for (const source of customSources) {
+      const count = externalBooks.filter((book) => book.sourceType === source.id).length;
+      const row = document.createElement("div");
+      row.className = "nav-tree-row";
+      row.style.setProperty("--depth", "0");
+      const spacer = document.createElement("span");
+      spacer.className = "nav-toggle-spacer";
+      spacer.setAttribute("aria-hidden", "true");
+      row.appendChild(spacer);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "nav-link nav-tree-link";
+      button.classList.toggle("is-active", viewerState.activeExternalSource === source.id);
+      button.innerHTML =
+        `<span><i class="${source.icon}" aria-hidden="true"></i> ${source.name}</span><small>` +
+        String(count) +
+        "</small>";
+      button.addEventListener("click", () => {
+        void navigateToState(
+          {
+            bookFilePath: null,
+            activeDirectory: null,
+            activeTag: null,
+            activeExternalSource: source.id,
+            activeTagDirectOnly: false,
+            searchQuery: viewerState.searchQuery,
+          },
+          "push",
+        );
+      });
+      row.appendChild(button);
+      navEl.appendChild(row);
+    }
   }
 }
 
@@ -3129,6 +3393,19 @@ function renderMain(snapshot: LibrarySnapshot) {
   if (libraryAddKindleEl) {
     libraryAddKindleEl.hidden = viewerState.activeExternalSource !== "kindle";
   }
+  const libraryAddCustomEl = document.querySelector<HTMLButtonElement>("#library-add-custom");
+  if (libraryAddCustomEl) {
+    const activeCustomSource =
+      viewerState.activeExternalSource && viewerState.activeExternalSource !== "kindle"
+        ? ((lastSnapshot?.customSources ?? []).find(
+            (s) => s.id === viewerState.activeExternalSource,
+          ) ?? null)
+        : null;
+    libraryAddCustomEl.hidden = !activeCustomSource;
+    if (activeCustomSource) {
+      libraryAddCustomEl.textContent = `Add book to ${activeCustomSource.name}`;
+    }
+  }
 
   if (viewerOverlayControlsEl) {
     viewerOverlayControlsEl.hidden = !viewerState.currentBook;
@@ -3355,6 +3632,50 @@ window.addEventListener("DOMContentLoaded", async () => {
   libraryAddKindleEl?.addEventListener("click", () => {
     openNewKindleBookEditor();
   });
+
+  const libraryAddCustomEl2 = document.querySelector<HTMLButtonElement>("#library-add-custom");
+  libraryAddCustomEl2?.addEventListener("click", () => {
+    const source =
+      viewerState.activeExternalSource && viewerState.activeExternalSource !== "kindle"
+        ? (lastSnapshot?.customSources ?? []).find((s) => s.id === viewerState.activeExternalSource)
+        : undefined;
+    if (source) {
+      openNewCustomBookEditor(source);
+    }
+  });
+
+  const configAddCustomSourceEl = document.querySelector<HTMLButtonElement>(
+    "#config-add-custom-source",
+  );
+  configAddCustomSourceEl?.addEventListener("click", () => openCustomSourceEditor());
+
+  const customSourceSaveEl = document.querySelector<HTMLButtonElement>("#custom-source-save");
+  customSourceSaveEl?.addEventListener("click", () => void saveCustomSource());
+
+  const customSourceCancelEl = document.querySelector<HTMLButtonElement>("#custom-source-cancel");
+  customSourceCancelEl?.addEventListener("click", () => closeCustomSourceEditor());
+
+  const customSourceNameEl = document.querySelector<HTMLInputElement>("#custom-source-name");
+  customSourceNameEl?.addEventListener("input", () => {
+    customSourceEditorState.name = customSourceNameEl.value;
+  });
+
+  const iconPickerEl = document.querySelector<HTMLElement>("#custom-source-icon-picker");
+  if (iconPickerEl && iconPickerEl.childElementCount === 0) {
+    for (const icon of CUSTOM_SOURCE_ICONS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "custom-source-icon-option";
+      btn.dataset.icon = icon.cls;
+      btn.title = icon.label;
+      btn.innerHTML = `<i class="${icon.cls}" aria-hidden="true"></i>`;
+      btn.addEventListener("click", () => {
+        customSourceEditorState.icon = icon.cls;
+        syncCustomSourceEditorUi();
+      });
+      iconPickerEl.appendChild(btn);
+    }
+  }
 
   tagDirectOnlyEl?.addEventListener("change", () => {
     void navigateToState(

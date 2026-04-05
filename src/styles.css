@@ -1391,6 +1391,107 @@ h1 {
   max-width: 720px;
 }
 
+.custom-source-editor-dialog {
+  max-width: 480px;
+}
+
+/* Settings: custom sources section */
+.app-settings-field--block {
+  display: grid;
+  gap: 8px;
+}
+
+.app-settings-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.app-settings-secondary--small {
+  min-width: unset;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+.config-custom-sources-empty {
+  margin: 0;
+  color: rgba(31, 27, 22, 0.48);
+  font-size: 0.88rem;
+}
+
+.config-custom-source-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(96, 70, 33, 0.08);
+}
+
+.config-custom-source-icon {
+  width: 1.2em;
+  text-align: center;
+  color: rgba(31, 27, 22, 0.6);
+}
+
+.config-custom-source-name {
+  flex: 1;
+  font-size: 0.95rem;
+}
+
+.config-custom-source-action {
+  border: 0;
+  background: transparent;
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.config-custom-source-action:hover {
+  text-decoration: underline;
+}
+
+.config-custom-source-action--delete {
+  color: #a13e2b;
+}
+
+/* Custom source icon picker */
+.custom-source-icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.custom-source-icon-option {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(96, 70, 33, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: rgba(31, 27, 22, 0.7);
+  transition:
+    background 0.1s,
+    border-color 0.1s;
+}
+
+.custom-source-icon-option:hover {
+  background: rgba(125, 78, 33, 0.08);
+  border-color: rgba(96, 70, 33, 0.3);
+}
+
+.custom-source-icon-option.is-selected {
+  background: rgba(125, 78, 33, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .metadata-editor-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

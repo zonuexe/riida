@@ -29,6 +29,33 @@ const DEFAULT_VIEWER_TREAT_FIRST_PAGE_AS_COVER: bool = true;
 
 static APP_PATHS: OnceLock<AppPaths> = OnceLock::new();
 
+fn uuid_v4() -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut h = DefaultHasher::new();
+    std::time::SystemTime::now().hash(&mut h);
+    std::thread::current().id().hash(&mut h);
+    let a = h.finish();
+    h.write_u64(a);
+    let b = h.finish();
+    format!(
+        "{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
+        (a >> 32) as u32,
+        (a >> 16) as u16,
+        a as u16 & 0x0fff,
+        (b >> 48) as u16 & 0x3fff | 0x8000,
+        b & 0x0000_ffff_ffff_ffff,
+    )
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CustomSource {
+    id: String,
+    name: String,
+    icon: String,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct BookSummary {
@@ -55,6 +82,7 @@ struct LibrarySnapshot {
     books: Vec<BookSummary>,
     excluded_patterns: Vec<String>,
     pdf_renderer: String,
+    custom_sources: Vec<CustomSource>,
 }
 
 #[derive(Clone)]
@@ -150,6 +178,7 @@ struct BookMetadataPayload {
 #[serde(rename_all = "camelCase")]
 struct BookMetadataInput {
     file_path: String,
+    source_type: Option<String>,
     title: String,
     authors: Vec<String>,
     description: String,
@@ -712,6 +741,12 @@ fn open_database() -> Result<Connection, String> {
               asin TEXT NOT NULL,
               cover_url TEXT NOT NULL,
               updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS custom_sources (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              icon TEXT NOT NULL,
+              created_at INTEGER NOT NULL
             );
             ",
         )
@@ -1313,10 +1348,34 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
         })
         .map_err(|error| error.to_string())?;
 
+    // Load custom sources to resolve location labels for custom books
+    let mut custom_sources_stmt = connection
+        .prepare("SELECT id, name, icon FROM custom_sources ORDER BY created_at ASC")
+        .map_err(|error| error.to_string())?;
+    let custom_sources: Vec<CustomSource> = custom_sources_stmt
+        .query_map([], |row| {
+            Ok(CustomSource {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                icon: row.get(2)?,
+            })
+        })
+        .map_err(|error| error.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+
     for row in external_rows {
         let (file_path, source_type, title, authors_json, cover_url, sort_key, asin, url) =
             row.map_err(|error| error.to_string())?;
         let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
+        let location_label = if source_type == "kindle" {
+            Some("Kindle library".to_string())
+        } else {
+            custom_sources
+                .iter()
+                .find(|s| s.id == source_type)
+                .map(|s| s.name.clone())
+        };
         books.push((
             sort_key,
             BookSummary {
@@ -1331,7 +1390,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 } else {
                     Some(cover_url)
                 },
-                location_label: Some("Kindle library".to_string()),
+                location_label,
                 is_openable: false,
                 asin: if asin.is_empty() { None } else { Some(asin) },
                 url: if url.is_empty() { None } else { Some(url) },
@@ -1356,6 +1415,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
         books,
         excluded_patterns: config.excluded_patterns.clone(),
         pdf_renderer: config.pdf_renderer.clone(),
+        custom_sources,
     })
 }
 
@@ -1721,11 +1781,12 @@ fn save_book_tags(file_path: String, tags: Vec<String>) -> Result<BookTagsPayloa
 #[tauri::command]
 fn load_book_metadata(file_path: String) -> Result<BookMetadataPayload, String> {
     let connection = open_database()?;
-    let (table_name, file_path_filter) = if file_path.starts_with("kindle:") {
-        ("external_books", "source_type = 'kindle' AND ")
-    } else {
-        ("book_metadata", "")
-    };
+    let (table_name, file_path_filter) =
+        if file_path.starts_with("kindle:") || file_path.starts_with("custom:") {
+            ("external_books", "")
+        } else {
+            ("book_metadata", "")
+        };
     let mut statement = connection
         .prepare(&format!(
             "
@@ -1786,6 +1847,7 @@ fn load_book_metadata(file_path: String) -> Result<BookMetadataPayload, String> 
 #[tauri::command]
 fn save_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPayload, String> {
     let connection = open_database()?;
+    let input_source_type = input.source_type.clone();
     let mut payload = normalize_book_metadata(input)?;
     let updated_at = std::time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1793,7 +1855,12 @@ fn save_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPayload, S
         .as_secs();
     let authors_json =
         serde_json::to_string(&payload.authors).map_err(|error| error.to_string())?;
-    if payload.file_path.starts_with("kindle:") {
+    if payload.file_path.starts_with("kindle:") || payload.file_path.starts_with("custom:") {
+        let source_type = if payload.file_path.starts_with("kindle:") {
+            "kindle".to_string()
+        } else {
+            input_source_type.ok_or("source_type required for custom books")?
+        };
         connection
             .execute(
                 "
@@ -1811,7 +1878,7 @@ fn save_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPayload, S
                   cover_url,
                   updated_at
                 )
-                VALUES (?1, 'kindle', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
                 ON CONFLICT(file_path) DO UPDATE SET
                   title = excluded.title,
                   authors_json = excluded.authors_json,
@@ -1826,6 +1893,7 @@ fn save_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPayload, S
                 ",
                 params![
                     &payload.file_path,
+                    &source_type,
                     &payload.title,
                     &authors_json,
                     &payload.description,
@@ -1894,7 +1962,7 @@ fn save_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPayload, S
 fn delete_book_metadata(file_path: String) -> Result<(), String> {
     let connection = open_database()?;
 
-    if file_path.starts_with("kindle:") {
+    if file_path.starts_with("kindle:") || file_path.starts_with("custom:") {
         connection
             .execute(
                 "DELETE FROM external_books WHERE file_path = ?1",
@@ -1934,6 +2002,81 @@ fn delete_book_metadata(file_path: String) -> Result<(), String> {
             .map_err(|error| error.to_string())?;
     }
 
+    Ok(())
+}
+
+#[tauri::command]
+fn save_custom_source(
+    id: Option<String>,
+    name: String,
+    icon: String,
+) -> Result<CustomSource, String> {
+    let connection = open_database()?;
+    let source_id = id.unwrap_or_else(uuid_v4);
+    let created_at = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs();
+    connection
+        .execute(
+            "
+            INSERT INTO custom_sources (id, name, icon, created_at)
+            VALUES (?1, ?2, ?3, ?4)
+            ON CONFLICT(id) DO UPDATE SET
+              name = excluded.name,
+              icon = excluded.icon
+            ",
+            params![&source_id, &name, &icon, created_at],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(CustomSource {
+        id: source_id,
+        name,
+        icon,
+    })
+}
+
+#[tauri::command]
+fn delete_custom_source(id: String) -> Result<(), String> {
+    let connection = open_database()?;
+    // Collect file_paths of books in this source before deleting
+    let mut stmt = connection
+        .prepare("SELECT file_path FROM external_books WHERE source_type = ?1")
+        .map_err(|error| error.to_string())?;
+    let file_paths: Vec<String> = stmt
+        .query_map(params![&id], |row| row.get(0))
+        .map_err(|error| error.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    for fp in &file_paths {
+        connection
+            .execute("DELETE FROM book_tags WHERE file_path = ?1", params![fp])
+            .map_err(|error| error.to_string())?;
+        connection
+            .execute("DELETE FROM notes WHERE file_path = ?1", params![fp])
+            .map_err(|error| error.to_string())?;
+        connection
+            .execute(
+                "DELETE FROM reading_positions WHERE file_path = ?1",
+                params![fp],
+            )
+            .map_err(|error| error.to_string())?;
+        connection
+            .execute(
+                "DELETE FROM viewer_preferences WHERE file_path = ?1 OR scope_key = ?1",
+                params![fp],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+    connection
+        .execute(
+            "DELETE FROM external_books WHERE source_type = ?1",
+            params![&id],
+        )
+        .map_err(|error| error.to_string())?;
+    connection
+        .execute("DELETE FROM custom_sources WHERE id = ?1", params![&id])
+        .map_err(|error| error.to_string())?;
     Ok(())
 }
 
@@ -2084,6 +2227,8 @@ pub fn run() {
             load_book_metadata,
             save_book_metadata,
             delete_book_metadata,
+            save_custom_source,
+            delete_custom_source,
             load_reading_position,
             save_reading_position,
             load_viewer_preferences,
@@ -2702,6 +2847,12 @@ mod tests {
                   cover_url TEXT NOT NULL,
                   updated_at INTEGER NOT NULL
                 );
+                CREATE TABLE custom_sources (
+                  id TEXT PRIMARY KEY,
+                  name TEXT NOT NULL,
+                  icon TEXT NOT NULL,
+                  created_at INTEGER NOT NULL
+                );
                 ",
             )
             .expect("books schema should be created");
@@ -2955,6 +3106,12 @@ mod tests {
                   asin TEXT NOT NULL,
                   cover_url TEXT NOT NULL,
                   updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE custom_sources (
+                  id TEXT PRIMARY KEY,
+                  name TEXT NOT NULL,
+                  icon TEXT NOT NULL,
+                  created_at INTEGER NOT NULL
                 );
                 ",
             )

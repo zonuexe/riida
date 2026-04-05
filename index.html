@@ -85,6 +85,9 @@
               <button id="library-add-kindle" class="app-settings-secondary" type="button" hidden>
                 Add Kindle book
               </button>
+              <button id="library-add-custom" class="app-settings-secondary" type="button" hidden>
+                Add book
+              </button>
               <label id="tag-direct-filter" class="tag-direct-filter" hidden>
                 <input id="tag-direct-only" type="checkbox" />
                 <span>Show only directly tagged files</span>
@@ -276,6 +279,19 @@
               <input id="config-kindle-enabled" type="checkbox" />
               <span><i class="fa-brands fa-amazon" aria-hidden="true"></i> Kindle</span>
             </label>
+          </section>
+          <section class="app-settings-field app-settings-field--block">
+            <div class="app-settings-field-header">
+              <span>Custom sources</span>
+              <button
+                id="config-add-custom-source"
+                class="app-settings-secondary app-settings-secondary--small"
+                type="button"
+              >
+                <i class="fa-solid fa-plus" aria-hidden="true"></i> Add source
+              </button>
+            </div>
+            <div id="config-custom-sources-list"></div>
           </section>
           <p id="app-settings-config-path" class="app-settings-path"></p>
           <p id="app-settings-status" class="app-settings-status" hidden></p>
@@ -520,6 +536,41 @@
           <button id="book-metadata-save" class="app-settings-primary" type="button">
             Save and close
           </button>
+        </div>
+      </section>
+    </div>
+
+    <div id="custom-source-editor-modal" class="app-settings-modal" hidden>
+      <div class="app-settings-backdrop"></div>
+      <section
+        class="app-settings-dialog custom-source-editor-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="custom-source-editor-heading"
+      >
+        <div class="app-settings-header">
+          <h2 id="custom-source-editor-heading" class="app-settings-title">Custom source</h2>
+        </div>
+        <div class="app-settings-body">
+          <label class="app-settings-field">
+            <span>Name</span>
+            <input id="custom-source-name" type="text" placeholder="My bookshelf" />
+          </label>
+          <div class="app-settings-field">
+            <span>Icon</span>
+            <div id="custom-source-icon-picker" class="custom-source-icon-picker"></div>
+          </div>
+          <p id="custom-source-status" class="app-settings-status" hidden></p>
+        </div>
+        <div class="app-settings-actions">
+          <button
+            id="custom-source-cancel"
+            class="app-settings-secondary app-settings-leading"
+            type="button"
+          >
+            Cancel
+          </button>
+          <button id="custom-source-save" class="app-settings-primary" type="button">Save</button>
         </div>
       </section>
     </div>

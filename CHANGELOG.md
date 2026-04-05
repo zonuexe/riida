@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-04-05
+
+### Added
+
+- Book list entries now show an Amazon link for books with an ASIN, and a URL link for books with a URL.
+- Custom external sources can be created in Settings with a chosen name and icon, for tracking physical books, library loans, and other non-digital collections. Each source appears in the sidebar under External and supports adding, editing, and deleting books independently.
+
+### Changed
+
+- External book entries (Kindle and custom sources) no longer show a redundant source label in the book list.
+
 ## [0.1.3] - 2026-04-05
 
 ### Fixed
@@ -125,7 +136,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/zonuexe/riida/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/zonuexe/riida/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/zonuexe/riida/releases/tag/v0.1.2
 [0.1.1]: https://github.com/zonuexe/riida/releases/tag/v0.1.1

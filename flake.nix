@@ -14,6 +14,16 @@
         };
 
       in {
+        packages.riida-mcp = pkgs.writeShellApplication {
+          name = "riida-mcp";
+          runtimeInputs = [ pkgs.nodejs_22 ];
+          # dist/index.js is a local build artifact; resolve via $PWD so the
+          # script works regardless of where nix stored the derivation.
+          text = ''
+            exec node "$PWD/mcp-server/dist/index.js"
+          '';
+        };
+
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             cargo

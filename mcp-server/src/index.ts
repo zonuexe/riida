@@ -31,6 +31,16 @@ interface BookRow {
   file_name: string;
 }
 
+interface SearchBookRow {
+  file_path: string;
+  file_name: string;
+  title: string;
+  authors_json: string;
+  publisher: string;
+  language: string;
+  release_date: string;
+}
+
 interface MetadataRow {
   file_path: string;
   title: string;
@@ -163,6 +173,46 @@ export function createServer(options: CreateServerOptions = {}): Server {
             language: {
               type: "string",
               description: "ISO 639-1 code e.g. 'ja', 'en'",
+            },
+          },
+        },
+      },
+      {
+        name: "search_books",
+        description:
+          "Lists books matching the given filters (all combined with AND). " +
+          "Omit a filter to leave it unrestricted. " +
+          "Returns basic metadata alongside the file path.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            directory: {
+              type: "string",
+              description: "Only books whose path starts with this directory",
+            },
+            path_contains: {
+              type: "string",
+              description: "Only books whose file path contains this string",
+            },
+            title_contains: {
+              type: "string",
+              description: "Only books whose title contains this string (case-insensitive)",
+            },
+            author_contains: {
+              type: "string",
+              description: "Only books whose author list contains this string (case-insensitive)",
+            },
+            tag: {
+              type: "string",
+              description: "Only books that have exactly this tag",
+            },
+            missing_metadata: {
+              type: "boolean",
+              description: "If true, only books missing title or authors",
+            },
+            limit: {
+              type: "number",
+              description: "Max results to return (default 50)",
             },
           },
         },
@@ -316,6 +366,96 @@ export function createServer(options: CreateServerOptions = {}): Server {
           },
         ],
       };
+    }
+
+    // -------------------------------------------------------------------------
+    // search_books
+    // -------------------------------------------------------------------------
+    if (name === "search_books") {
+      const limit = typeof args?.["limit"] === "number" ? args["limit"] : 50;
+      const directory     = args?.["directory"]      as string | undefined;
+      const pathContains  = args?.["path_contains"]  as string | undefined;
+      const titleContains = args?.["title_contains"] as string | undefined;
+      const authorContains = args?.["author_contains"] as string | undefined;
+      const tag           = args?.["tag"]            as string | undefined;
+      const missingMeta   = args?.["missing_metadata"] as boolean | undefined;
+
+      const conditions: string[] = [];
+      const params: unknown[] = [];
+
+      if (directory !== undefined) {
+        const dir = directory.replace(/\/+$/, "");
+        conditions.push("b.file_path LIKE ?");
+        params.push(dir + "/%");
+      }
+      if (pathContains !== undefined) {
+        conditions.push("b.file_path LIKE ?");
+        params.push("%" + pathContains + "%");
+      }
+      if (titleContains !== undefined) {
+        conditions.push("COALESCE(m.title, '') LIKE ? ESCAPE '\\'");
+        params.push("%" + titleContains.replace(/[%_\\]/g, "\\$&") + "%");
+      }
+      if (authorContains !== undefined) {
+        conditions.push("COALESCE(m.authors_json, '') LIKE ? ESCAPE '\\'");
+        params.push("%" + authorContains.replace(/[%_\\]/g, "\\$&") + "%");
+      }
+      if (tag !== undefined) {
+        conditions.push(
+          "EXISTS (SELECT 1 FROM book_tags t WHERE t.file_path = b.file_path AND t.tag = ?)",
+        );
+        params.push(tag);
+      }
+      if (missingMeta === true) {
+        conditions.push(
+          "(m.file_path IS NULL OR COALESCE(m.title, '') = '' OR COALESCE(m.authors_json, '') IN ('', '[]'))",
+        );
+      }
+
+      const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
+      params.push(limit);
+
+      const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+      try {
+        const rows = db
+          .prepare<unknown[], SearchBookRow>(
+            `SELECT b.file_path,
+                    b.file_name,
+                    COALESCE(m.title, '')        AS title,
+                    COALESCE(m.authors_json, '[]') AS authors_json,
+                    COALESCE(m.publisher, '')    AS publisher,
+                    COALESCE(m.language, '')     AS language,
+                    COALESCE(m.release_date, '') AS release_date
+             FROM books b
+             LEFT JOIN book_metadata m ON b.file_path = m.file_path
+             ${where}
+             ORDER BY b.file_name
+             LIMIT ?`,
+          )
+          .all(...params);
+
+        const books = rows.map((r) => ({
+          file_path:    r.file_path,
+          file_name:    r.file_name,
+          directory:    path.dirname(r.file_path),
+          title:        r.title,
+          authors:      r.authors_json ? (JSON.parse(r.authors_json) as string[]) : [],
+          publisher:    r.publisher,
+          language:     r.language,
+          release_date: r.release_date,
+        }));
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ count: books.length, books }, null, 2),
+            },
+          ],
+        };
+      } finally {
+        db.close();
+      }
     }
 
     // -------------------------------------------------------------------------

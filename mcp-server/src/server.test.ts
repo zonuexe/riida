@@ -97,16 +97,17 @@ describe("tools/list", () => {
     fs.unlinkSync(dbPath);
   });
 
-  it("exposes all 6 tools", async () => {
+  it("exposes all 7 tools", async () => {
     const result = await client.listTools();
     const names = result.tools.map((t) => t.name);
     expect(names).toContain("list_books_needing_metadata");
     expect(names).toContain("get_book_metadata");
     expect(names).toContain("read_pdf_pages");
     expect(names).toContain("update_book_metadata");
+    expect(names).toContain("search_books");
     expect(names).toContain("get_book_tags");
     expect(names).toContain("set_book_tags");
-    expect(names).toHaveLength(6);
+    expect(names).toHaveLength(7);
   });
 });
 
@@ -526,5 +527,141 @@ describe("read_pdf_pages", () => {
     } finally {
       fs.unlinkSync(tmpPdf);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("search_books", () => {
+  let dbPath: string;
+  let db: Database.Database;
+  let client: Client;
+  let cleanup: () => Promise<void>;
+
+  beforeEach(async () => {
+    dbPath = tempDbPath();
+    db = createTestDb(dbPath);
+
+    // Seed books
+    const insertBook = db.prepare(
+      "INSERT INTO books (file_path, file_name) VALUES (?, ?)",
+    );
+    const insertMeta = db.prepare(
+      `INSERT INTO book_metadata (file_path, title, authors_json, publisher, language)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    const insertTag = db.prepare(
+      "INSERT OR IGNORE INTO book_tags (file_path, tag) VALUES (?, ?)",
+    );
+
+    insertBook.run("/lib/sci-fi/dune.pdf",        "dune.pdf");
+    insertBook.run("/lib/sci-fi/foundation.pdf",  "foundation.pdf");
+    insertBook.run("/lib/tech/clean-code.pdf",    "clean-code.pdf");
+    insertBook.run("/lib/tech/refactoring.pdf",   "refactoring.pdf");
+    insertBook.run("/other/novel.pdf",            "novel.pdf");
+
+    insertMeta.run("/lib/sci-fi/dune.pdf",       "Dune",        '["Frank Herbert"]', "Chilton", "en");
+    insertMeta.run("/lib/sci-fi/foundation.pdf",  "Foundation",  '["Isaac Asimov"]',  "Gnome",   "en");
+    insertMeta.run("/lib/tech/clean-code.pdf",    "Clean Code",  '["Robert Martin"]', "Prentice","en");
+    // refactoring and novel have no metadata row
+
+    insertTag.run("/lib/sci-fi/dune.pdf",       "SF");
+    insertTag.run("/lib/sci-fi/foundation.pdf", "SF");
+    insertTag.run("/lib/tech/clean-code.pdf",   "tech");
+
+    ({ client, cleanup } = await makeClient(dbPath));
+  });
+
+  afterEach(async () => {
+    await cleanup();
+    db.close();
+    fs.unlinkSync(dbPath);
+  });
+
+  it("returns all books when no filters given", async () => {
+    const result = parseText(await callTool(client, "search_books")) as { count: number };
+    expect(result.count).toBe(5);
+  });
+
+  it("filters by directory prefix", async () => {
+    const result = parseText(
+      await callTool(client, "search_books", { directory: "/lib/sci-fi" }),
+    ) as { count: number; books: Array<{ file_name: string }> };
+    expect(result.count).toBe(2);
+    expect(result.books.map((b) => b.file_name)).toContain("dune.pdf");
+    expect(result.books.map((b) => b.file_name)).toContain("foundation.pdf");
+  });
+
+  it("directory filter ignores trailing slash", async () => {
+    const withSlash    = parseText(await callTool(client, "search_books", { directory: "/lib/sci-fi/" }))  as { count: number };
+    const withoutSlash = parseText(await callTool(client, "search_books", { directory: "/lib/sci-fi" }))   as { count: number };
+    expect(withSlash.count).toBe(withoutSlash.count);
+  });
+
+  it("filters by path_contains", async () => {
+    const result = parseText(
+      await callTool(client, "search_books", { path_contains: "tech" }),
+    ) as { count: number };
+    expect(result.count).toBe(2);
+  });
+
+  it("filters by title_contains (case-insensitive via LIKE)", async () => {
+    const result = parseText(
+      await callTool(client, "search_books", { title_contains: "clean" }),
+    ) as { count: number; books: Array<{ title: string }> };
+    expect(result.count).toBe(1);
+    expect(result.books[0].title).toBe("Clean Code");
+  });
+
+  it("filters by author_contains", async () => {
+    const result = parseText(
+      await callTool(client, "search_books", { author_contains: "Asimov" }),
+    ) as { count: number; books: Array<{ authors: string[] }> };
+    expect(result.count).toBe(1);
+    expect(result.books[0].authors).toContain("Isaac Asimov");
+  });
+
+  it("filters by tag", async () => {
+    const result = parseText(
+      await callTool(client, "search_books", { tag: "SF" }),
+    ) as { count: number };
+    expect(result.count).toBe(2);
+  });
+
+  it("filters by missing_metadata", async () => {
+    const result = parseText(
+      await callTool(client, "search_books", { missing_metadata: true }),
+    ) as { count: number; books: Array<{ file_name: string }> };
+    expect(result.count).toBe(2);
+    const names = result.books.map((b) => b.file_name);
+    expect(names).toContain("refactoring.pdf");
+    expect(names).toContain("novel.pdf");
+  });
+
+  it("combines multiple filters with AND", async () => {
+    // directory=/lib AND tag=SF → dune + foundation
+    const result = parseText(
+      await callTool(client, "search_books", { directory: "/lib", tag: "SF" }),
+    ) as { count: number };
+    expect(result.count).toBe(2);
+  });
+
+  it("respects the limit parameter", async () => {
+    const result = parseText(
+      await callTool(client, "search_books", { limit: 2 }),
+    ) as { count: number };
+    expect(result.count).toBe(2);
+  });
+
+  it("result includes metadata fields", async () => {
+    const result = parseText(
+      await callTool(client, "search_books", { path_contains: "dune" }),
+    ) as { books: Array<{ title: string; authors: string[]; publisher: string; language: string; directory: string }> };
+    const book = result.books[0];
+    expect(book.title).toBe("Dune");
+    expect(book.authors).toContain("Frank Herbert");
+    expect(book.publisher).toBe("Chilton");
+    expect(book.language).toBe("en");
+    expect(book.directory).toBe("/lib/sci-fi");
   });
 });

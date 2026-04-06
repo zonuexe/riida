@@ -56,17 +56,20 @@ export interface CreateServerOptions {
 // DB path resolution (mirrors Tauri backend logic)
 // ---------------------------------------------------------------------------
 
+/** Tauri bundle identifier — must match src-tauri/tauri.conf.json */
+const TAURI_IDENTIFIER = "me.zonu.riida";
+
 export function getDbPath(): string {
   const home = os.homedir();
   if (process.platform === "darwin") {
-    return path.join(home, "Library", "Application Support", "riida", "app.db");
+    return path.join(home, "Library", "Application Support", TAURI_IDENTIFIER, "app.db");
   }
   if (process.platform === "win32") {
-    return path.join(process.env["APPDATA"] ?? home, "riida", "app.db");
+    return path.join(process.env["APPDATA"] ?? home, TAURI_IDENTIFIER, "app.db");
   }
   return path.join(
     process.env["XDG_DATA_HOME"] ?? path.join(home, ".local", "share"),
-    "riida",
+    TAURI_IDENTIFIER,
     "app.db",
   );
 }

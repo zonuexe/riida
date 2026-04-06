@@ -433,6 +433,8 @@ describe("get_book_tags / set_book_tags", () => {
     expect(result.tags).toEqual(["SF"]);
   });
 
+// ---------------------------------------------------------------------------
+
   it("set_book_tags deduplicates tags", async () => {
     await callTool(client, "set_book_tags", {
       file_path: "/books/f.pdf",

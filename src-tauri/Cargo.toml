@@ -30,6 +30,7 @@ serde_json = "1"
 toml = "0.8"
 walkdir = "2"
 globset = "0.4"
+unicode-normalization = "0.1"
 
 [dev-dependencies]
 proptest = "1"

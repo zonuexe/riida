@@ -1,5 +1,6 @@
 use directories::ProjectDirs;
 use globset::{Glob, GlobMatcher};
+use unicode_normalization::UnicodeNormalization;
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -757,7 +758,102 @@ fn open_database() -> Result<Connection, String> {
         [],
     );
 
+    migrate_paths_to_nfc(&connection).map_err(|error| error.to_string())?;
+
     Ok(connection)
+}
+
+/// One-time migration: convert any NFD file_path values to NFC across all tables.
+///
+/// macOS (HFS+/APFS) returns NFD strings from the file system API. Previous
+/// versions of the app wrote those raw NFD paths into the database. External
+/// writers such as the MCP server write NFC paths. This mismatch silently
+/// breaks JOINs between `books` and `book_metadata`. Running this on every
+/// startup is idempotent (NFC strings normalise to themselves), so it is safe
+/// to leave in place permanently.
+fn migrate_paths_to_nfc(connection: &Connection) -> Result<(), rusqlite::Error> {
+    // Tables where file_path is the sole primary / unique key.
+    let simple_tables = [
+        "books",
+        "notes",
+        "viewer_preferences",
+        "reading_positions",
+        "external_books",
+    ];
+
+    for table in &simple_tables {
+        let nfd_paths: Vec<String> = {
+            let mut stmt =
+                connection.prepare(&format!("SELECT file_path FROM {table}"))?;
+            let all_paths: Vec<String> = stmt
+                .query_map([], |row| row.get(0))?
+                .filter_map(|r| r.ok())
+                .collect();
+            all_paths
+                .into_iter()
+                .filter(|p| {
+                    let nfc: String = p.nfc().collect();
+                    nfc != *p
+                })
+                .collect()
+        };
+
+        for nfd in nfd_paths {
+            let nfc: String = nfd.nfc().collect();
+            let nfc_exists = connection
+                .query_row(
+                    &format!("SELECT 1 FROM {table} WHERE file_path = ?1"),
+                    params![nfc],
+                    |_| Ok(()),
+                )
+                .is_ok();
+
+            if nfc_exists {
+                // NFC row already exists (written by MCP or a later scan).
+                // Drop the obsolete NFD duplicate.
+                connection.execute(
+                    &format!("DELETE FROM {table} WHERE file_path = ?1"),
+                    params![nfd],
+                )?;
+            } else {
+                connection.execute(
+                    &format!("UPDATE {table} SET file_path = ?1 WHERE file_path = ?2"),
+                    params![nfc, nfd],
+                )?;
+            }
+        }
+    }
+
+    // book_tags has a compound primary key (file_path, tag).
+    let nfd_tags: Vec<(String, String)> = {
+        let mut stmt =
+            connection.prepare("SELECT file_path, tag FROM book_tags")?;
+        let all_tags: Vec<(String, String)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .filter_map(|r| r.ok())
+            .collect();
+        all_tags
+            .into_iter()
+            .filter(|(p, _)| {
+                let nfc: String = p.nfc().collect();
+                nfc != *p
+            })
+            .collect()
+    };
+
+    for (nfd, tag) in nfd_tags {
+        let nfc: String = nfd.nfc().collect();
+        connection.execute(
+            "INSERT OR IGNORE INTO book_tags (file_path, tag) VALUES (?1, ?2)",
+            params![nfc, tag],
+        )?;
+        connection.execute(
+            "DELETE FROM book_tags WHERE file_path = ?1 AND tag = ?2",
+            params![nfd, tag],
+        )?;
+    }
+
+    Ok(())
 }
 
 fn is_pdf_file(path: &Path) -> bool {
@@ -1189,12 +1285,17 @@ fn scan_and_index(
                 continue;
             }
 
-            let file_path = path.to_string_lossy().into_owned();
-            let file_name = path
+            // Normalize to NFC so that paths stored in the database are
+            // consistent across all writers (Tauri, MCP server, etc.).
+            // macOS (HFS+/APFS) returns NFD strings from the file system API,
+            // which would otherwise cause JOIN mismatches with NFC-written rows.
+            let file_path: String = path.to_string_lossy().nfc().collect();
+            let file_name: String = path
                 .file_name()
                 .and_then(|name| name.to_str())
                 .unwrap_or("unknown.pdf")
-                .to_string();
+                .nfc()
+                .collect();
             let modified_at = modified_unix_seconds(&metadata);
 
             connection

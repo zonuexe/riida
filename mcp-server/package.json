@@ -2,6 +2,22 @@
   "name": "riida-mcp",
   "version": "0.1.0",
   "description": "MCP server for riida — infer and update book metadata from PDF content and file paths",
+  "license": "MPL-2.0",
+  "author": "USAMI Kenta <tadsan@zonu.me>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zonuexe/riida.git",
+    "directory": "mcp-server"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "pdf",
+    "ebook",
+    "metadata",
+    "riida"
+  ],
   "type": "module",
   "bin": {
     "riida-mcp": "dist/index.js"

@@ -1,6 +1,6 @@
 {
   "name": "riida-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server for riida — infer and update book metadata from PDF content and file paths",
   "license": "MPL-2.0",
   "author": "USAMI Kenta <tadsan@zonu.me>",

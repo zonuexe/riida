@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-08
+
+### Added
+
+- MCP server (`riida-mcp`) for metadata enrichment via Claude — reads PDF content and file paths to infer and bulk-update title, authors, publisher, and other fields directly in the library database.
+- `search_books` MCP tool for filtering the library by directory, path, title, author, tag, or missing-metadata status.
+- File paths are now normalized to NFC on macOS, and existing NFD paths in the database are migrated automatically to avoid duplicate entries.
+
+### Fixed
+
+- MCP server now connects to the correct database location using the Tauri bundle identifier.
+
 ## [0.1.4] - 2026-04-05
 
 ### Added
@@ -136,7 +148,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/zonuexe/riida/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/zonuexe/riida/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/zonuexe/riida/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/zonuexe/riida/releases/tag/v0.1.2

@@ -1,6 +1,5 @@
 use directories::ProjectDirs;
 use globset::{Glob, GlobMatcher};
-use unicode_normalization::UnicodeNormalization;
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -15,6 +14,7 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Manager, State};
+use unicode_normalization::UnicodeNormalization;
 use walkdir::WalkDir;
 
 const CONFIG_FILE: &str = "riida.toml";
@@ -783,8 +783,7 @@ fn migrate_paths_to_nfc(connection: &Connection) -> Result<(), rusqlite::Error> 
 
     for table in &simple_tables {
         let nfd_paths: Vec<String> = {
-            let mut stmt =
-                connection.prepare(&format!("SELECT file_path FROM {table}"))?;
+            let mut stmt = connection.prepare(&format!("SELECT file_path FROM {table}"))?;
             let all_paths: Vec<String> = stmt
                 .query_map([], |row| row.get(0))?
                 .filter_map(|r| r.ok())
@@ -826,8 +825,7 @@ fn migrate_paths_to_nfc(connection: &Connection) -> Result<(), rusqlite::Error> 
 
     // book_tags has a compound primary key (file_path, tag).
     let nfd_tags: Vec<(String, String)> = {
-        let mut stmt =
-            connection.prepare("SELECT file_path, tag FROM book_tags")?;
+        let mut stmt = connection.prepare("SELECT file_path, tag FROM book_tags")?;
         let all_tags: Vec<(String, String)> = stmt
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
             .filter_map(|r| r.ok())

@@ -103,7 +103,7 @@ describe("tools/list", () => {
     expect(names).toContain("list_books_needing_metadata");
     expect(names).toContain("get_book_metadata");
     expect(names).toContain("read_pdf_pages");
-    expect(names).toContain("update_book_metadata");
+    expect(names).toContain("update_books_metadata");
     expect(names).toContain("search_books");
     expect(names).toContain("get_book_tags");
     expect(names).toContain("set_book_tags");
@@ -265,7 +265,7 @@ describe("get_book_metadata", () => {
 
 // ---------------------------------------------------------------------------
 
-describe("update_book_metadata", () => {
+describe("update_books_metadata", () => {
   let dbPath: string;
   let db: Database.Database;
   let client: Client;
@@ -285,18 +285,15 @@ describe("update_book_metadata", () => {
 
   it("inserts a new metadata row", async () => {
     const result = parseText(
-      await callTool(client, "update_book_metadata", {
-        file_path: "/books/new.pdf",
-        title: "新しい本",
-        authors: ["新著者"],
-        publisher: "新出版社",
-        language: "ja",
+      await callTool(client, "update_books_metadata", {
+        books: [{ file_path: "/books/new.pdf", title: "新しい本", authors: ["新著者"], publisher: "新出版社", language: "ja" }],
       }),
-    ) as { success: boolean; updated: { title: string; authors: string[] } };
+    ) as { success: boolean; count: number; results: Array<{ file_path: string; updated: { title: string; authors: string[] } }> };
 
     expect(result.success).toBe(true);
-    expect(result.updated.title).toBe("新しい本");
-    expect(result.updated.authors).toEqual(["新著者"]);
+    expect(result.count).toBe(1);
+    expect(result.results[0].updated.title).toBe("新しい本");
+    expect(result.results[0].updated.authors).toEqual(["新著者"]);
 
     const row = db
       .prepare<[string], { title: string }>("SELECT title FROM book_metadata WHERE file_path = ?")
@@ -316,9 +313,8 @@ describe("update_book_metadata", () => {
       "https://example.com",
     );
 
-    await callTool(client, "update_book_metadata", {
-      file_path: "/books/existing.pdf",
-      title: "改訂版書名",
+    await callTool(client, "update_books_metadata", {
+      books: [{ file_path: "/books/existing.pdf", title: "改訂版書名" }],
     });
 
     const row = db
@@ -337,9 +333,8 @@ describe("update_book_metadata", () => {
   it("sets updated_at timestamp", async () => {
     const before = Date.now();
 
-    await callTool(client, "update_book_metadata", {
-      file_path: "/books/ts.pdf",
-      title: "タイムスタンプ確認",
+    await callTool(client, "update_books_metadata", {
+      books: [{ file_path: "/books/ts.pdf", title: "タイムスタンプ確認" }],
     });
 
     const after = Date.now();
@@ -351,6 +346,43 @@ describe("update_book_metadata", () => {
 
     expect(row?.updated_at).toBeGreaterThanOrEqual(before);
     expect(row?.updated_at).toBeLessThanOrEqual(after);
+  });
+
+  it("updates multiple books in a single call", async () => {
+    const result = parseText(
+      await callTool(client, "update_books_metadata", {
+        books: [
+          { file_path: "/books/a.pdf", title: "本A", authors: ["著者A"], language: "ja" },
+          { file_path: "/books/b.pdf", title: "本B", publisher: "出版社B", language: "ja" },
+          { file_path: "/books/c.pdf", title: "本C", release_date: "2024-01-01", language: "ja" },
+        ],
+      }),
+    ) as { success: boolean; count: number; results: Array<{ file_path: string }> };
+
+    expect(result.success).toBe(true);
+    expect(result.count).toBe(3);
+
+    const rowA = db.prepare<[string], { title: string; language: string }>(
+      "SELECT title, language FROM book_metadata WHERE file_path = ?",
+    ).get("/books/a.pdf");
+    const rowB = db.prepare<[string], { title: string; publisher: string }>(
+      "SELECT title, publisher FROM book_metadata WHERE file_path = ?",
+    ).get("/books/b.pdf");
+    const rowC = db.prepare<[string], { title: string; release_date: string }>(
+      "SELECT title, release_date FROM book_metadata WHERE file_path = ?",
+    ).get("/books/c.pdf");
+
+    expect(rowA?.title).toBe("本A");
+    expect(rowA?.language).toBe("ja");
+    expect(rowB?.title).toBe("本B");
+    expect(rowB?.publisher).toBe("出版社B");
+    expect(rowC?.title).toBe("本C");
+    expect(rowC?.release_date).toBe("2024-01-01");
+  });
+
+  it("returns an error for empty books array", async () => {
+    const result = await callTool(client, "update_books_metadata", { books: [] });
+    expect(result.isError).toBe(true);
   });
 });
 

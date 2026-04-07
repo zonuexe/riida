@@ -149,30 +149,41 @@ export function createServer(options: CreateServerOptions = {}): Server {
         },
       },
       {
-        name: "update_book_metadata",
+        name: "update_books_metadata",
         description:
-          "Updates metadata for a book in the riida database. " +
-          "Only the fields you provide are changed; omitted fields keep their current values.",
+          "Updates metadata for one or more books in a single atomic transaction. " +
+          "Pass an array of book objects — only the fields you include are changed; omitted fields keep their current values. " +
+          "Always use this instead of calling update_book_metadata in a loop.",
         inputSchema: {
           type: "object" as const,
-          required: ["file_path"],
+          required: ["books"],
           properties: {
-            file_path: { type: "string" },
-            title: { type: "string" },
-            authors: {
+            books: {
               type: "array",
-              items: { type: "string" },
-              description: "Author names",
-            },
-            publisher: { type: "string" },
-            release_date: {
-              type: "string",
-              description: "YYYY-MM-DD",
-            },
-            description: { type: "string" },
-            language: {
-              type: "string",
-              description: "ISO 639-1 code e.g. 'ja', 'en'",
+              description: "List of books to update",
+              items: {
+                type: "object",
+                required: ["file_path"],
+                properties: {
+                  file_path: { type: "string" },
+                  title: { type: "string" },
+                  authors: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Author names",
+                  },
+                  publisher: { type: "string" },
+                  release_date: {
+                    type: "string",
+                    description: "YYYY-MM-DD",
+                  },
+                  description: { type: "string" },
+                  language: {
+                    type: "string",
+                    description: "ISO 639-1 code e.g. 'ja', 'en'",
+                  },
+                },
+              },
             },
           },
         },
@@ -459,82 +470,93 @@ export function createServer(options: CreateServerOptions = {}): Server {
     }
 
     // -------------------------------------------------------------------------
-    // update_book_metadata
+    // update_books_metadata
     // -------------------------------------------------------------------------
-    if (name === "update_book_metadata") {
-      const filePath = args?.["file_path"] as string;
+    if (name === "update_books_metadata") {
+      type BookInput = {
+        file_path: string;
+        title?: string;
+        authors?: string[];
+        publisher?: string;
+        release_date?: string;
+        description?: string;
+        language?: string;
+      };
+
+      const books = args?.["books"] as BookInput[] | undefined;
+      if (!Array.isArray(books) || books.length === 0) {
+        return {
+          content: [
+            { type: "text", text: JSON.stringify({ error: "books must be a non-empty array" }) },
+          ],
+          isError: true,
+        };
+      }
+
       const db = new Database(dbPath, { readonly: false, fileMustExist: true });
+      db.pragma("busy_timeout = 5000");
       try {
-        const existing = db
-          .prepare<[string], MetadataRow>(`SELECT * FROM book_metadata WHERE file_path = ?`)
-          .get(filePath);
-
-        const pick = <T>(incoming: T | undefined, fallback: T): T =>
-          incoming !== undefined ? incoming : fallback;
-
-        const title = pick(args?.["title"] as string | undefined, existing?.title ?? "");
-        const authors = pick(
-          args?.["authors"] as string[] | undefined,
-          existing?.authors_json ? (JSON.parse(existing.authors_json) as string[]) : [],
+        const getExisting = db.prepare<[string], MetadataRow>(
+          `SELECT * FROM book_metadata WHERE file_path = ?`,
         );
-        const publisher = pick(
-          args?.["publisher"] as string | undefined,
-          existing?.publisher ?? "",
-        );
-        const releaseDate = pick(
-          args?.["release_date"] as string | undefined,
-          existing?.release_date ?? "",
-        );
-        const description = pick(
-          args?.["description"] as string | undefined,
-          existing?.description ?? "",
-        );
-        const language = pick(args?.["language"] as string | undefined, existing?.language ?? "");
-
-        // Preserve untouched fields
-        const url = existing?.url ?? "";
-        const asin = existing?.asin ?? "";
-        const coverUrl = existing?.cover_url ?? "";
-
-        db.prepare(
+        const upsert = db.prepare(
           `INSERT OR REPLACE INTO book_metadata
            (file_path, title, authors_json, description, publisher,
             release_date, language, url, asin, cover_url, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        ).run(
-          filePath,
-          title,
-          JSON.stringify(authors),
-          description,
-          publisher,
-          releaseDate,
-          language,
-          url,
-          asin,
-          coverUrl,
-          Date.now(),
         );
+
+        const pick = <T>(incoming: T | undefined, fallback: T): T =>
+          incoming !== undefined ? incoming : fallback;
+
+        const results: Array<{ file_path: string; updated: object }> = [];
+
+        db.transaction(() => {
+          for (const book of books) {
+            const filePath = book.file_path;
+            const existing = getExisting.get(filePath);
+
+            const title = pick(book.title, existing?.title ?? "");
+            const authors = pick(
+              book.authors,
+              existing?.authors_json ? (JSON.parse(existing.authors_json) as string[]) : [],
+            );
+            const publisher = pick(book.publisher, existing?.publisher ?? "");
+            const releaseDate = pick(book.release_date, existing?.release_date ?? "");
+            const description = pick(book.description, existing?.description ?? "");
+            const language = pick(book.language, existing?.language ?? "");
+
+            // Preserve fields not managed by this tool
+            const url = existing?.url ?? "";
+            const asin = existing?.asin ?? "";
+            const coverUrl = existing?.cover_url ?? "";
+
+            upsert.run(
+              filePath,
+              title,
+              JSON.stringify(authors),
+              description,
+              publisher,
+              releaseDate,
+              language,
+              url,
+              asin,
+              coverUrl,
+              Date.now(),
+            );
+
+            results.push({
+              file_path: filePath,
+              updated: { title, authors, publisher, release_date: releaseDate, description, language },
+            });
+          }
+        })();
 
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify(
-                {
-                  success: true,
-                  file_path: filePath,
-                  updated: {
-                    title,
-                    authors,
-                    publisher,
-                    release_date: releaseDate,
-                    description,
-                    language,
-                  },
-                },
-                null,
-                2,
-              ),
+              text: JSON.stringify({ success: true, count: results.length, results }, null, 2),
             },
           ],
         };
@@ -573,6 +595,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
       const filePath = args?.["file_path"] as string;
       const tags = (args?.["tags"] as string[]).map((t) => t.trim()).filter(Boolean);
       const db = new Database(dbPath, { readonly: false, fileMustExist: true });
+      db.pragma("busy_timeout = 5000");
       try {
         db.transaction(() => {
           db.prepare(`DELETE FROM book_tags WHERE file_path = ?`).run(filePath);

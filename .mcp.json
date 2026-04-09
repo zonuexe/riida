@@ -2,8 +2,7 @@
   "mcpServers": {
     "riida": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "riida-mcp"]
+      "command": "./mcp-server/start.sh"
     }
   }
 }

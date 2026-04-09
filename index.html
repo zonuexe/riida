@@ -540,6 +540,34 @@
       </section>
     </div>
 
+    <div id="pdf-password-modal" class="app-settings-modal" hidden>
+      <div class="app-settings-backdrop"></div>
+      <section
+        class="app-settings-dialog pdf-password-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pdf-password-heading"
+      >
+        <div class="app-settings-header">
+          <div>
+            <p class="app-settings-kicker">Protected PDF</p>
+            <h2 id="pdf-password-heading">Enter password</h2>
+          </div>
+        </div>
+        <div class="app-settings-body">
+          <label class="app-settings-field">
+            <span>Password</span>
+            <input id="pdf-password-input" type="password" autocomplete="current-password" />
+          </label>
+          <p id="pdf-password-status" class="app-settings-status" hidden></p>
+        </div>
+        <div class="app-settings-actions">
+          <button id="pdf-password-cancel" class="app-settings-secondary app-settings-leading" type="button">Cancel</button>
+          <button id="pdf-password-submit" class="app-settings-primary" type="button">Open</button>
+        </div>
+      </section>
+    </div>
+
     <div id="custom-source-editor-modal" class="app-settings-modal" hidden>
       <div class="app-settings-backdrop"></div>
       <section

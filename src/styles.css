@@ -1395,6 +1395,10 @@ h1 {
   max-width: 480px;
 }
 
+.pdf-password-dialog {
+  max-width: 400px;
+}
+
 /* Settings: custom sources section */
 .app-settings-field--block {
   display: grid;

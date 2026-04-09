@@ -466,6 +466,62 @@ async function loadNoteEditorModule() {
   return noteEditorModulePromise;
 }
 
+function promptPdfPassword(isRetry: boolean): Promise<string | null> {
+  return new Promise((resolve) => {
+    const modalEl = document.querySelector<HTMLElement>("#pdf-password-modal");
+    const inputEl = document.querySelector<HTMLInputElement>("#pdf-password-input");
+    const submitEl = document.querySelector<HTMLButtonElement>("#pdf-password-submit");
+    const cancelEl = document.querySelector<HTMLButtonElement>("#pdf-password-cancel");
+    const statusEl = document.querySelector<HTMLElement>("#pdf-password-status");
+    if (!modalEl || !inputEl || !submitEl || !cancelEl || !statusEl) {
+      resolve(null);
+      return;
+    }
+
+    inputEl.value = "";
+    modalEl.hidden = false;
+    if (isRetry) {
+      statusEl.textContent = "Incorrect password. Try again.";
+      statusEl.dataset.tone = "error";
+      statusEl.hidden = false;
+    } else {
+      statusEl.hidden = true;
+      delete statusEl.dataset.tone;
+    }
+    inputEl.focus();
+
+    function cleanup() {
+      modalEl!.hidden = true;
+      submitEl!.removeEventListener("click", onSubmit);
+      cancelEl!.removeEventListener("click", onCancel);
+      inputEl!.removeEventListener("keydown", onKeydown);
+    }
+
+    function onSubmit() {
+      const pw = inputEl!.value;
+      cleanup();
+      resolve(pw.length > 0 ? pw : null);
+    }
+
+    function onCancel() {
+      cleanup();
+      resolve(null);
+    }
+
+    function onKeydown(event: KeyboardEvent) {
+      if (event.key === "Enter" && !event.isComposing && event.keyCode !== 229) {
+        onSubmit();
+      } else if (event.key === "Escape") {
+        onCancel();
+      }
+    }
+
+    submitEl.addEventListener("click", onSubmit);
+    cancelEl.addEventListener("click", onCancel);
+    inputEl.addEventListener("keydown", onKeydown);
+  });
+}
+
 const noteState: NoteState = {
   isOpen: false,
   isLoading: false,
@@ -1402,9 +1458,16 @@ function updateBookTagsInState(filePath: string, tags: string[]) {
   }
 }
 
+function bookSourceDisplayName(sourceType: string): string {
+  if (sourceType === "kindle") return "Kindle";
+  const custom = lastSnapshot?.customSources.find((s) => s.id === sourceType);
+  return custom?.name ?? sourceType;
+}
+
 function populateBookMetadataEditor(book: BookSummary, metadata: BookMetadataPayload) {
   bookMetadataEditorState.filePath = metadata.filePath;
-  bookMetadataEditorState.bookTitle = metadata.title || book.fileName;
+  bookMetadataEditorState.bookTitle =
+    book.sourceType === "pdf" ? book.fileName : bookSourceDisplayName(book.sourceType);
   bookMetadataEditorState.sourceType = book.sourceType;
   bookMetadataEditorState.title = metadata.title;
   bookMetadataEditorState.authorsText = joinMetadataAuthors(metadata.authors);
@@ -1421,7 +1484,7 @@ function openNewKindleBookEditor() {
   bookMetadataEditorState.loadToken += 1;
   bookMetadataEditorState.isOpen = true;
   bookMetadataEditorState.filePath = null;
-  bookMetadataEditorState.bookTitle = "New Kindle book";
+  bookMetadataEditorState.bookTitle = "Kindle";
   bookMetadataEditorState.sourceType = "kindle";
   bookMetadataEditorState.title = "";
   bookMetadataEditorState.authorsText = "";
@@ -1441,7 +1504,7 @@ function openNewCustomBookEditor(source: CustomSource) {
   bookMetadataEditorState.loadToken += 1;
   bookMetadataEditorState.isOpen = true;
   bookMetadataEditorState.filePath = null;
-  bookMetadataEditorState.bookTitle = `New book in ${source.name}`;
+  bookMetadataEditorState.bookTitle = source.name;
   bookMetadataEditorState.sourceType = source.id;
   bookMetadataEditorState.title = "";
   bookMetadataEditorState.authorsText = "";
@@ -1472,7 +1535,8 @@ async function openBookMetadataEditor(book: BookSummary) {
   bookMetadataEditorState.loadToken = loadToken;
   bookMetadataEditorState.isOpen = true;
   bookMetadataEditorState.filePath = book.filePath;
-  bookMetadataEditorState.bookTitle = book.fileName;
+  bookMetadataEditorState.bookTitle =
+    book.sourceType === "pdf" ? book.fileName : bookSourceDisplayName(book.sourceType);
   bookMetadataEditorState.sourceType = book.sourceType;
   bookMetadataEditorState.title = "";
   bookMetadataEditorState.authorsText = "";
@@ -2740,6 +2804,9 @@ async function renderCurrentPage() {
 
     try {
       const { getDocument } = await loadPdfJsRuntime();
+      const filePath = viewerState.currentBook.filePath;
+      const savedPassword = await invoke<string | null>("get_pdf_password", { filePath });
+      let usedPassword: string | null = savedPassword;
       const documentTask = getDocument({
         url: sourceUrl,
         cMapUrl: "/pdfjs/cmaps/node_modules/pdfjs-dist/cmaps/",
@@ -2747,8 +2814,27 @@ async function renderCurrentPage() {
         standardFontDataUrl: "/pdfjs/standard_fonts/node_modules/pdfjs-dist/standard_fonts/",
         useSystemFonts: true,
         disableFontFace: true,
+        password: savedPassword ?? undefined,
       });
+      documentTask.onPassword = async (updatePassword: (pw: string) => void, reason: number) => {
+        // reason 1 = needs password, reason 2 = wrong password
+        const isRetry = reason === 2;
+        if (isRetry) {
+          usedPassword = null;
+        }
+        const entered = await promptPdfPassword(isRetry);
+        if (entered !== null) {
+          usedPassword = entered;
+          updatePassword(entered);
+        } else {
+          // Cancel: reject by providing empty string so PDF.js raises an error
+          updatePassword("");
+        }
+      };
       const pdfDocument = await documentTask.promise;
+      if (usedPassword !== null && usedPassword !== savedPassword) {
+        await invoke("save_pdf_password", { filePath, password: usedPassword });
+      }
 
       if (currentToken !== pdfRenderToken) {
         return;
@@ -2831,7 +2917,10 @@ async function renderCurrentPage() {
       pdfjsViewerEl.innerHTML = "";
       const errorEl = document.createElement("div");
       errorEl.className = "pdfjs-loading";
-      errorEl.textContent = `Failed to render with PDF.js: ${String(error)}`;
+      const msg = String(error);
+      errorEl.textContent = msg.includes("PasswordException") || msg.includes("No password given")
+        ? "This PDF requires a password."
+        : `Failed to render with PDF.js: ${msg}`;
       pdfjsViewerEl.appendChild(errorEl);
     }
 

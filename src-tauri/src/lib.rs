@@ -749,6 +749,11 @@ fn open_database() -> Result<Connection, String> {
               icon TEXT NOT NULL,
               created_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS pdf_passwords (
+              file_path TEXT PRIMARY KEY,
+              password TEXT NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
             ",
         )
         .map_err(|error| error.to_string())?;
@@ -2298,6 +2303,38 @@ fn clear_file_viewer_preferences(file_path: String) -> Result<ViewerPreferencesP
     load_viewer_preferences_payload(&connection, Some(&file_path))
 }
 
+#[tauri::command]
+fn get_pdf_password(file_path: String) -> Result<Option<String>, String> {
+    let connection = open_database()?;
+    let result = connection.query_row(
+        "SELECT password FROM pdf_passwords WHERE file_path = ?1",
+        params![&file_path],
+        |row| row.get::<_, String>(0),
+    );
+    match result {
+        Ok(password) => Ok(Some(password)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+#[tauri::command]
+fn save_pdf_password(file_path: String, password: String) -> Result<(), String> {
+    let connection = open_database()?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    connection
+        .execute(
+            "INSERT INTO pdf_passwords (file_path, password, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(file_path) DO UPDATE SET password = excluded.password, updated_at = excluded.updated_at",
+            params![&file_path, &password, now],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -2333,7 +2370,9 @@ pub fn run() {
             load_viewer_preferences,
             save_default_viewer_preferences,
             save_file_viewer_preferences,
-            clear_file_viewer_preferences
+            clear_file_viewer_preferences,
+            get_pdf_password,
+            save_pdf_password
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

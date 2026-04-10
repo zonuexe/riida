@@ -2918,9 +2918,10 @@ async function renderCurrentPage() {
       const errorEl = document.createElement("div");
       errorEl.className = "pdfjs-loading";
       const msg = String(error);
-      errorEl.textContent = msg.includes("PasswordException") || msg.includes("No password given")
-        ? "This PDF requires a password."
-        : `Failed to render with PDF.js: ${msg}`;
+      errorEl.textContent =
+        msg.includes("PasswordException") || msg.includes("No password given")
+          ? "This PDF requires a password."
+          : `Failed to render with PDF.js: ${msg}`;
       pdfjsViewerEl.appendChild(errorEl);
     }
 

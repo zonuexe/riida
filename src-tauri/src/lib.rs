@@ -2303,12 +2303,10 @@ fn clear_file_viewer_preferences(file_path: String) -> Result<ViewerPreferencesP
     load_viewer_preferences_payload(&connection, Some(&file_path))
 }
 
-#[tauri::command]
-fn get_pdf_password(file_path: String) -> Result<Option<String>, String> {
-    let connection = open_database()?;
+fn query_pdf_password(connection: &Connection, file_path: &str) -> Result<Option<String>, String> {
     let result = connection.query_row(
         "SELECT password FROM pdf_passwords WHERE file_path = ?1",
-        params![&file_path],
+        params![file_path],
         |row| row.get::<_, String>(0),
     );
     match result {
@@ -2318,9 +2316,11 @@ fn get_pdf_password(file_path: String) -> Result<Option<String>, String> {
     }
 }
 
-#[tauri::command]
-fn save_pdf_password(file_path: String, password: String) -> Result<(), String> {
-    let connection = open_database()?;
+fn upsert_pdf_password(
+    connection: &Connection,
+    file_path: &str,
+    password: &str,
+) -> Result<(), String> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -2329,10 +2329,22 @@ fn save_pdf_password(file_path: String, password: String) -> Result<(), String> 
         .execute(
             "INSERT INTO pdf_passwords (file_path, password, updated_at) VALUES (?1, ?2, ?3)
              ON CONFLICT(file_path) DO UPDATE SET password = excluded.password, updated_at = excluded.updated_at",
-            params![&file_path, &password, now],
+            params![file_path, password, now],
         )
         .map_err(|error| error.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+fn get_pdf_password(file_path: String) -> Result<Option<String>, String> {
+    let connection = open_database()?;
+    query_pdf_password(&connection, &file_path)
+}
+
+#[tauri::command]
+fn save_pdf_password(file_path: String, password: String) -> Result<(), String> {
+    let connection = open_database()?;
+    upsert_pdf_password(&connection, &file_path, &password)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -3305,5 +3317,63 @@ mod tests {
             Some("Kindle library".to_string())
         );
         assert!(!snapshot.books[0].is_openable);
+    }
+
+    fn password_connection() -> Connection {
+        let connection = Connection::open_in_memory().expect("in-memory db should open");
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE pdf_passwords (
+                  file_path TEXT PRIMARY KEY,
+                  password TEXT NOT NULL,
+                  updated_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .expect("pdf_passwords table should be created");
+        connection
+    }
+
+    #[test]
+    fn pdf_password_returns_none_when_not_saved() {
+        let connection = password_connection();
+        let result = query_pdf_password(&connection, "/some/book.pdf");
+        assert_eq!(result, Ok(None));
+    }
+
+    #[test]
+    fn pdf_password_round_trips_after_save() {
+        let connection = password_connection();
+        upsert_pdf_password(&connection, "/some/book.pdf", "s3cr3t")
+            .expect("save should succeed");
+        let result = query_pdf_password(&connection, "/some/book.pdf");
+        assert_eq!(result, Ok(Some("s3cr3t".to_string())));
+    }
+
+    #[test]
+    fn pdf_password_save_updates_existing_entry() {
+        let connection = password_connection();
+        upsert_pdf_password(&connection, "/some/book.pdf", "old_pass")
+            .expect("first save should succeed");
+        upsert_pdf_password(&connection, "/some/book.pdf", "new_pass")
+            .expect("second save should succeed");
+        let result = query_pdf_password(&connection, "/some/book.pdf");
+        assert_eq!(result, Ok(Some("new_pass".to_string())));
+    }
+
+    #[test]
+    fn pdf_password_is_scoped_to_file_path() {
+        let connection = password_connection();
+        upsert_pdf_password(&connection, "/books/a.pdf", "pass_a")
+            .expect("save should succeed");
+        assert_eq!(
+            query_pdf_password(&connection, "/books/a.pdf"),
+            Ok(Some("pass_a".to_string()))
+        );
+        assert_eq!(
+            query_pdf_password(&connection, "/books/b.pdf"),
+            Ok(None)
+        );
     }
 }

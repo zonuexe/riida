@@ -2802,6 +2802,7 @@ async function renderCurrentPage() {
     loadingEl.textContent = "Rendering PDF...";
     pdfjsViewerEl.appendChild(loadingEl);
 
+    let passwordCancelled = false;
     try {
       const { getDocument } = await loadPdfJsRuntime();
       const filePath = viewerState.currentBook.filePath;
@@ -2827,8 +2828,9 @@ async function renderCurrentPage() {
           usedPassword = entered;
           updatePassword(entered);
         } else {
-          // Cancel: reject by providing empty string so PDF.js raises an error
-          updatePassword("");
+          // User cancelled — destroy the task so documentTask.promise rejects
+          passwordCancelled = true;
+          void documentTask.destroy();
         }
       };
       const pdfDocument = await documentTask.promise;
@@ -2914,6 +2916,11 @@ async function renderCurrentPage() {
       activePdfRenderSession = session;
       schedulePdfRenderWindowUpdate(session, targetGroupIndex);
     } catch (error) {
+      if (passwordCancelled) {
+        pdfjsViewerEl.innerHTML = "";
+        navigateBack();
+        return;
+      }
       pdfjsViewerEl.innerHTML = "";
       const errorEl = document.createElement("div");
       errorEl.className = "pdfjs-loading";

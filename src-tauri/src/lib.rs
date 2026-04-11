@@ -61,6 +61,7 @@ struct CustomSource {
 #[serde(rename_all = "camelCase")]
 struct BookSummary {
     file_name: String,
+    title: Option<String>,
     file_path: String,
     file_size: u64,
     tags: Vec<String>,
@@ -1370,7 +1371,8 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
               COALESCE(book_metadata.cover_url, ''),
               books.modified_at,
               COALESCE(book_metadata.asin, ''),
-              COALESCE(book_metadata.url, '')
+              COALESCE(book_metadata.url, ''),
+              COALESCE(book_metadata.title, '')
             FROM books
             LEFT JOIN book_metadata ON book_metadata.file_path = books.file_path
             ORDER BY books.modified_at DESC, books.file_name ASC
@@ -1389,18 +1391,20 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 row.get::<_, u64>(5)?,
                 row.get::<_, String>(6)?,
                 row.get::<_, String>(7)?,
+                row.get::<_, String>(8)?,
             ))
         })
         .map_err(|error| error.to_string())?;
 
     for row in pdf_rows {
-        let (file_name, file_path, file_size, authors_json, cover_url, sort_key, asin, url) =
+        let (file_name, file_path, file_size, authors_json, cover_url, sort_key, asin, url, title) =
             row.map_err(|error| error.to_string())?;
         let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
         books.push((
             sort_key,
             BookSummary {
                 file_name,
+                title: if title.is_empty() { None } else { Some(title) },
                 tags: tags_by_file_path.remove(&file_path).unwrap_or_default(),
                 file_path,
                 file_size,
@@ -1484,6 +1488,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
             sort_key,
             BookSummary {
                 file_name: title,
+                title: None,
                 tags: tags_by_file_path.remove(&file_path).unwrap_or_default(),
                 file_path,
                 file_size: 0,

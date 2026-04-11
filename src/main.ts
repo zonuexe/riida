@@ -58,6 +58,7 @@ type CustomSource = {
 
 type BookSummary = {
   fileName: string;
+  title: string | null;
   filePath: string;
   fileSize: number;
   tags: string[];
@@ -1802,6 +1803,7 @@ async function saveBookMetadataChanges() {
         ? viewerState.currentBook
         : {
             fileName: bookMetadataEditorState.bookTitle,
+            title: null,
             filePath: payload.filePath,
             fileSize: 0,
             tags: [],
@@ -3268,7 +3270,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     bodyEl.className = "book-copy";
 
     const titleEl = document.createElement("strong");
-    titleEl.textContent = book.fileName;
+    titleEl.textContent = book.title ?? book.fileName;
 
     const pathEl = document.createElement("span");
     pathEl.textContent = book.locationLabel ?? formatBookLocation(book.filePath, cachedHomeDir);

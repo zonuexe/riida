@@ -15,6 +15,7 @@ type DirectorySnapshot = {
 
 type SearchableBook = {
   fileName: string;
+  title?: string | null;
   filePath: string;
   tags?: string[];
   locationLabel?: string | null;
@@ -166,12 +167,14 @@ export function filterVisibleBooks<T extends SearchableBook>(
 
     const query = normalizeSearchText(searchQuery);
     const normalizedName = normalizeSearchText(book.fileName);
+    const normalizedTitle = normalizeSearchText(book.title ?? "");
     const normalizedPath = normalizeSearchText(book.filePath);
     const normalizedLocation = normalizeSearchText(book.locationLabel ?? "");
     const normalizedAuthors = normalizeSearchText((book.authors ?? []).join(" "));
 
     return (
       normalizedName.includes(query) ||
+      normalizedTitle.includes(query) ||
       normalizedPath.includes(query) ||
       normalizedLocation.includes(query) ||
       normalizedAuthors.includes(query)

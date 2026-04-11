@@ -3350,8 +3350,7 @@ mod tests {
     #[test]
     fn pdf_password_round_trips_after_save() {
         let connection = password_connection();
-        upsert_pdf_password(&connection, "/some/book.pdf", "s3cr3t")
-            .expect("save should succeed");
+        upsert_pdf_password(&connection, "/some/book.pdf", "s3cr3t").expect("save should succeed");
         let result = query_pdf_password(&connection, "/some/book.pdf");
         assert_eq!(result, Ok(Some("s3cr3t".to_string())));
     }
@@ -3370,15 +3369,11 @@ mod tests {
     #[test]
     fn pdf_password_is_scoped_to_file_path() {
         let connection = password_connection();
-        upsert_pdf_password(&connection, "/books/a.pdf", "pass_a")
-            .expect("save should succeed");
+        upsert_pdf_password(&connection, "/books/a.pdf", "pass_a").expect("save should succeed");
         assert_eq!(
             query_pdf_password(&connection, "/books/a.pdf"),
             Ok(Some("pass_a".to_string()))
         );
-        assert_eq!(
-            query_pdf_password(&connection, "/books/b.pdf"),
-            Ok(None)
-        );
+        assert_eq!(query_pdf_password(&connection, "/books/b.pdf"), Ok(None));
     }
 }

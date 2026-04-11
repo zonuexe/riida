@@ -3036,7 +3036,7 @@ function renderSidebar(snapshot: LibrarySnapshot) {
           activeTag: null,
           activeExternalSource: null,
           activeTagDirectOnly: false,
-          searchQuery: viewerState.searchQuery,
+          searchQuery: "",
         },
         "push",
       );

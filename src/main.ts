@@ -507,6 +507,20 @@ function handleEpubIframeKeydown(event: KeyboardEvent) {
   }
 }
 
+function handleEpubIframeClick(event: MouseEvent) {
+  const target = (event.target as Element | null)?.closest("a");
+  if (!target) return;
+  const href = target.getAttribute("href");
+  if (!href) return;
+  // External URLs — open in the system browser instead of navigating inside the WebView.
+  if (/^https?:\/\//i.test(href)) {
+    event.preventDefault();
+    event.stopPropagation();
+    void openUrl(href);
+  }
+  // Internal EPUB links (no scheme, or epub:// etc.) are handled by epub.js natively.
+}
+
 async function loadNoteEditorModule() {
   noteEditorModulePromise ??= import("./note-editor");
   return noteEditorModulePromise;
@@ -2919,7 +2933,7 @@ async function renderCurrentPage() {
       // initial render event. Also attach immediately after display() as
       // a safety net in case the first rendered fires before the handler
       // was in place.
-      const attachKeydownToIframes = () => {
+      const attachIframeHandlers = () => {
         const iframes = epubViewerEl.querySelectorAll<HTMLIFrameElement>("iframe");
         for (const iframe of iframes) {
           try {
@@ -2927,6 +2941,9 @@ async function renderCurrentPage() {
             if (!doc) continue;
             doc.removeEventListener("keydown", handleEpubIframeKeydown);
             doc.addEventListener("keydown", handleEpubIframeKeydown);
+            // Use capture so we intercept clicks before epub.js link handling.
+            doc.removeEventListener("click", handleEpubIframeClick, true);
+            doc.addEventListener("click", handleEpubIframeClick, true);
           } catch {
             // cross-origin frame — skip
           }
@@ -2934,7 +2951,7 @@ async function renderCurrentPage() {
       };
 
       // Re-attach on every section load (contentDocument is replaced).
-      rendition.on("rendered", attachKeydownToIframes);
+      rendition.on("rendered", attachIframeHandlers);
 
       const restoreCfi = activeReadingPosition?.cfi ?? undefined;
       await rendition.display(restoreCfi);
@@ -2944,7 +2961,7 @@ async function renderCurrentPage() {
 
       // Direct attach after display() in case the rendered event already
       // fired before the listener above was registered.
-      attachKeydownToIframes();
+      attachIframeHandlers();
 
       rendition.on("relocated", (location: import("epubjs").Location) => {
         const cfi = location.start.cfi;

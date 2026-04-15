@@ -483,20 +483,6 @@ function isEpubPrevPageKey(event: KeyboardEvent): boolean {
   return event.key === "PageUp" || event.key === "ArrowUp" || event.key === "ArrowLeft";
 }
 
-function handleEpubIframeClick(event: MouseEvent) {
-  const target = (event.target as Element | null)?.closest("a");
-  if (!target) return;
-  const href = target.getAttribute("href");
-  if (!href) return;
-  // External URLs — open in the system browser instead of navigating inside the WebView.
-  if (/^https?:\/\//i.test(href)) {
-    event.preventDefault();
-    event.stopPropagation();
-    void openUrl(href);
-  }
-  // Internal EPUB links (no scheme, or epub:// etc.) are handled by epub.js natively.
-}
-
 async function loadNoteEditorModule() {
   noteEditorModulePromise ??= import("./note-editor");
   return noteEditorModulePromise;
@@ -2905,35 +2891,33 @@ async function renderCurrentPage() {
         },
       });
 
-      // Attach click handlers to intercept external URL clicks.
-      // Re-attach on every section load because contentDocument is replaced.
-      const attachIframeHandlers = () => {
-        const iframes = epubViewerEl.querySelectorAll<HTMLIFrameElement>("iframe");
-        for (const iframe of iframes) {
-          try {
-            const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
-            if (!doc) continue;
-            // Use capture so we intercept clicks before epub.js link handling.
-            doc.removeEventListener("click", handleEpubIframeClick, true);
-            doc.addEventListener("click", handleEpubIframeClick, true);
-          } catch {
-            // cross-origin frame — skip
+      // Intercept external and mailto links so they open in the system browser.
+      // Registered on hooks.content so it runs for every section after epub.js
+      // has already processed the links (handleLinks sets target="_blank" on
+      // external links and skips mailto entirely).  Using a non-passive
+      // addEventListener on each <a> element lets us call preventDefault() to
+      // suppress any in-WebView navigation.
+      rendition.hooks.content.register((contents: import("epubjs").Contents) => {
+        const doc = (contents as unknown as { document: Document }).document;
+        if (!doc) return;
+        for (const link of Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
+          const href = link.getAttribute("href");
+          if (!href) continue;
+          if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
+            link.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              void openUrl(href);
+            });
           }
         }
-      };
-
-      // Re-attach on every section load (contentDocument is replaced).
-      rendition.on("rendered", attachIframeHandlers);
+      });
 
       const restoreCfi = activeReadingPosition?.cfi ?? undefined;
       await rendition.display(restoreCfi);
       if (currentToken !== epubRenderToken) return;
 
       activeEpubRendition = rendition;
-
-      // Direct attach after display() in case the rendered event already
-      // fired before the listener above was registered.
-      attachIframeHandlers();
 
       rendition.on("relocated", (location: import("epubjs").Location) => {
         const cfi = location.start.cfi;
@@ -4359,14 +4343,19 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // When the EPUB viewer is active, prevent keyboard focus from being
   // captured by the epub.js iframe.  If the window loses focus to one of
-  // those iframes, immediately return focus to the window so that the
-  // global keydown handler above keeps working.
+  // those iframes, return focus to the window so that the global keydown
+  // handler above keeps working.
+  // Deferred with setTimeout(0) so the focus steal happens after any click
+  // sequence (mousedown → mouseup → click) completes — otherwise stealing
+  // focus during mousedown would suppress the click event in the iframe.
   window.addEventListener("blur", () => {
     if (!activeEpubRendition) return;
     const epubViewerEl = document.querySelector("#epub-viewer");
     const active = document.activeElement;
     if (active instanceof HTMLIFrameElement && epubViewerEl?.contains(active)) {
-      window.focus();
+      setTimeout(() => {
+        if (activeEpubRendition) window.focus();
+      }, 0);
     }
   });
 

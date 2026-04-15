@@ -2891,24 +2891,39 @@ async function renderCurrentPage() {
         },
       });
 
-      // Intercept external and mailto links so they open in the system browser.
-      // Registered on hooks.content so it runs for every section after epub.js
-      // has already processed the links (handleLinks sets target="_blank" on
-      // external links and skips mailto entirely).  Using a non-passive
-      // addEventListener on each <a> element lets us call preventDefault() to
-      // suppress any in-WebView navigation.
-      rendition.hooks.content.register((contents: import("epubjs").Contents) => {
-        const doc = (contents as unknown as { document: Document }).document;
-        if (!doc) return;
-        for (const link of Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
-          const href = link.getAttribute("href");
-          if (!href) continue;
-          if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
-            link.addEventListener("click", (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              void openUrl(href);
-            });
+      // After each section renders, patch links directly on the iframe's
+      // contentDocument with non-passive click listeners so we can call
+      // preventDefault().  hooks.content runs inside a try/catch that swallows
+      // errors, making debugging hard; the rendered event is more reliable here.
+      //
+      // - External (https?://) and mailto: links → open in the system browser.
+      // - Same-section #anchor links → prevent epub.js from navigating away
+      //   to the wrong spine item when the anchor exists in the current page.
+      rendition.on("rendered", () => {
+        const iframes = epubViewerEl.querySelectorAll<HTMLIFrameElement>("iframe");
+        for (const iframe of iframes) {
+          const doc = iframe.contentDocument;
+          if (!doc) continue;
+          for (const link of Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
+            const href = link.getAttribute("href");
+            if (!href) continue;
+            if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
+              link.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void openUrl(href);
+              });
+            } else if (href.startsWith("#")) {
+              // Same-page anchor: only prevent navigation if the target element
+              // exists in the current section's document.
+              const targetId = href.slice(1);
+              if (doc.getElementById(targetId)) {
+                link.addEventListener("click", (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                });
+              }
+            }
           }
         }
       });

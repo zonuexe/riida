@@ -2891,14 +2891,20 @@ async function renderCurrentPage() {
         },
       });
 
-      // After each section renders, patch links directly on the iframe's
-      // contentDocument with non-passive click listeners so we can call
-      // preventDefault().  hooks.content runs inside a try/catch that swallows
-      // errors, making debugging hard; the rendered event is more reliable here.
+      // After each section renders, patch link click behaviour.
       //
-      // - External (https?://) and mailto: links → open in the system browser.
-      // - Same-section #anchor links → prevent epub.js from navigating away
-      //   to the wrong spine item when the anchor exists in the current page.
+      // epub.js's own replaceLinks uses `link.onclick = fn` (property
+      // assignment) which works in Tauri's WKWebView.  addEventListener
+      // called from the parent document on iframe contentDocument elements
+      // does NOT reliably fire in WKWebView, so we must use the same
+      // onclick-property approach.
+      //
+      // - External (https?://) and mailto: → open via openUrl() in the
+      //   system browser / mail client.  Also strip target="_blank" that
+      //   epub.js adds to absolute URLs so Tauri doesn't try to open a
+      //   new WebView window.
+      // - Same-section #anchor links → suppress epub.js cross-section
+      //   navigation when the target element exists in the current page.
       rendition.on("rendered", () => {
         const iframes = epubViewerEl.querySelectorAll<HTMLIFrameElement>("iframe");
         for (const iframe of iframes) {
@@ -2908,21 +2914,23 @@ async function renderCurrentPage() {
             const href = link.getAttribute("href");
             if (!href) continue;
             if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
-              link.addEventListener("click", (e) => {
+              link.removeAttribute("target");
+              link.onclick = (e) => {
                 e.preventDefault();
-                e.stopPropagation();
                 void openUrl(href);
-              });
+                return false;
+              };
             } else if (href.startsWith("#")) {
-              // Same-page anchor: only prevent navigation if the target element
-              // exists in the current section's document.
               const targetId = href.slice(1);
               if (doc.getElementById(targetId)) {
-                link.addEventListener("click", (e) => {
+                // Same-section anchor: override epub.js onclick so it
+                // doesn't navigate to a different spine item.
+                link.onclick = (e) => {
                   e.preventDefault();
-                  e.stopPropagation();
-                });
+                  return false;
+                };
               }
+              // Cross-section anchor: keep epub.js's onclick intact.
             }
           }
         }

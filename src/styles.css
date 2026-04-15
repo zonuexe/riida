@@ -1059,6 +1059,7 @@ h1 {
   background: rgba(121, 91, 47, 0.12);
   padding: 0;
   box-shadow: 0 20px 40px var(--shadow);
+  position: relative;
 }
 
 #pdf-frame {
@@ -1067,6 +1068,16 @@ h1 {
   min-height: 0;
   border: 0;
   background: white;
+}
+
+.epub-viewer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.epub-viewer iframe {
+  border: none;
 }
 
 .pdfjs-viewer {

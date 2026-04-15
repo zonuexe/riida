@@ -107,6 +107,7 @@ type ReadingPosition = {
   filePath: string;
   pageNumber: number;
   pageOffsetRatio: number;
+  cfi?: string | null;
   updatedAt: number | null;
 };
 
@@ -307,6 +308,9 @@ let noteLoadToken = 0;
 let pdfRenderToken = 0;
 let pdfRenderResizeTimer: number | null = null;
 let activePdfRenderSession: PdfRenderSession | null = null;
+let epubRenderToken = 0;
+let activeEpubBook: import("epubjs").Book | null = null;
+let activeEpubRendition: import("epubjs").Rendition | null = null;
 let viewerSettingsLoadToken = 0;
 let readingPositionSaveTimer: number | null = null;
 let suppressHistoryUpdates = false;
@@ -460,6 +464,47 @@ async function loadPdfJsRuntime() {
   });
 
   return pdfJsRuntimePromise;
+}
+
+let epubJsModulePromise: Promise<typeof import("epubjs")> | null = null;
+
+async function loadEpubJs() {
+  epubJsModulePromise ??= import("epubjs");
+  return epubJsModulePromise;
+}
+
+function isEpubNextPageKey(event: KeyboardEvent): boolean {
+  if (event.metaKey || event.ctrlKey || event.altKey) return false;
+  return event.key === "PageDown" || event.key === "ArrowDown" || event.key === "ArrowRight";
+}
+
+function isEpubPrevPageKey(event: KeyboardEvent): boolean {
+  if (event.metaKey || event.ctrlKey || event.altKey) return false;
+  return event.key === "PageUp" || event.key === "ArrowUp" || event.key === "ArrowLeft";
+}
+
+function handleEpubIframeKeydown(event: KeyboardEvent) {
+  const input = {
+    platform: navigator.platform,
+    key: event.key,
+    metaKey: event.metaKey,
+    altKey: event.altKey,
+    ctrlKey: event.ctrlKey,
+    shiftKey: event.shiftKey,
+  };
+  if (isNavigationBackShortcut(input)) {
+    event.preventDefault();
+    navigateBack();
+  } else if (isNavigationForwardShortcut(input)) {
+    event.preventDefault();
+    navigateForward();
+  } else if (isEpubNextPageKey(event)) {
+    event.preventDefault();
+    void activeEpubRendition?.next();
+  } else if (isEpubPrevPageKey(event)) {
+    event.preventDefault();
+    void activeEpubRendition?.prev();
+  }
 }
 
 async function loadNoteEditorModule() {
@@ -2638,15 +2683,33 @@ async function flushReadingPositionSave() {
     return;
   }
 
+  const sourceType = viewerState.currentBook?.sourceType;
+
   try {
-    activeReadingPosition = await invoke<ReadingPosition>("save_reading_position", {
-      filePath: activeReadingPosition.filePath,
-      pageNumber: activeReadingPosition.pageNumber,
-      pageOffsetRatio: activeReadingPosition.pageOffsetRatio,
-    });
+    if (sourceType === "epub" && activeReadingPosition.cfi) {
+      await invoke("save_epub_position", {
+        filePath: activeReadingPosition.filePath,
+        cfi: activeReadingPosition.cfi,
+      });
+    } else if (sourceType !== "epub") {
+      activeReadingPosition = await invoke<ReadingPosition>("save_reading_position", {
+        filePath: activeReadingPosition.filePath,
+        pageNumber: activeReadingPosition.pageNumber,
+        pageOffsetRatio: activeReadingPosition.pageOffsetRatio,
+      });
+    }
   } catch (error) {
     console.error("Failed to save reading position:", error);
   }
+}
+
+function scheduleEpubPositionSave() {
+  if (readingPositionSaveTimer !== null) {
+    window.clearTimeout(readingPositionSaveTimer);
+  }
+  readingPositionSaveTimer = window.setTimeout(() => {
+    void flushReadingPositionSave();
+  }, 300);
 }
 
 function scheduleReadingPositionSave() {
@@ -2769,13 +2832,36 @@ function navigateForward() {
   });
 }
 
+function destroyEpubBook() {
+  activeEpubRendition = null;
+  if (activeEpubBook) {
+    activeEpubBook.destroy();
+    activeEpubBook = null;
+  }
+  epubRenderToken += 1;
+  const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
+  if (epubViewerEl) {
+    epubViewerEl.innerHTML = "";
+    epubViewerEl.hidden = true;
+    epubViewerEl.dataset.filePath = "";
+  }
+}
+
 async function renderCurrentPage() {
   const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
   const viewerStageEl = currentViewerStage();
   const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
+  const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
   const snapshot = lastSnapshot;
 
-  if (!frame || !viewerStageEl || !pdfjsViewerEl || !viewerState.currentBook || !snapshot) {
+  if (
+    !frame ||
+    !viewerStageEl ||
+    !pdfjsViewerEl ||
+    !epubViewerEl ||
+    !viewerState.currentBook ||
+    !snapshot
+  ) {
     return;
   }
 
@@ -2785,6 +2871,106 @@ async function renderCurrentPage() {
   }
 
   const sourceUrl = convertFileSrc(viewerState.currentBook.filePath);
+
+  if (viewerState.currentBook.sourceType === "epub") {
+    destroyEpubBook();
+    activePdfRenderSession = null;
+    frame.hidden = true;
+    frame.src = "about:blank";
+    frame.dataset.filePath = "";
+    pdfjsViewerEl.hidden = true;
+    pdfjsViewerEl.innerHTML = "";
+    pdfjsViewerEl.dataset.filePath = "";
+    epubViewerEl.hidden = false;
+    epubViewerEl.dataset.filePath = viewerState.currentBook.filePath;
+
+    epubRenderToken += 1;
+    const currentToken = epubRenderToken;
+
+    try {
+      const EpubModule = await loadEpubJs();
+      if (currentToken !== epubRenderToken) return;
+
+      const Epub = EpubModule.default;
+      const book = Epub(sourceUrl);
+      activeEpubBook = book;
+
+      const spread = viewerSettings.pageMode === "spread" ? "always" : "none";
+      const rendition = book.renderTo(epubViewerEl, {
+        width: "100%",
+        height: "100%",
+        spread,
+        flow: "paginated",
+      });
+
+      rendition.themes.default({
+        pre: {
+          "white-space": "pre-wrap !important",
+          "word-break": "break-all !important",
+          "overflow-wrap": "break-word !important",
+        },
+        code: {
+          "word-break": "break-all !important",
+          "overflow-wrap": "break-word !important",
+        },
+      });
+
+      // Register rendered handler BEFORE display() so we don't miss the
+      // initial render event. Also attach immediately after display() as
+      // a safety net in case the first rendered fires before the handler
+      // was in place.
+      const attachKeydownToIframes = () => {
+        const iframes = epubViewerEl.querySelectorAll<HTMLIFrameElement>("iframe");
+        for (const iframe of iframes) {
+          try {
+            const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+            if (!doc) continue;
+            doc.removeEventListener("keydown", handleEpubIframeKeydown);
+            doc.addEventListener("keydown", handleEpubIframeKeydown);
+          } catch {
+            // cross-origin frame — skip
+          }
+        }
+      };
+
+      // Re-attach on every section load (contentDocument is replaced).
+      rendition.on("rendered", attachKeydownToIframes);
+
+      const restoreCfi = activeReadingPosition?.cfi ?? undefined;
+      await rendition.display(restoreCfi);
+      if (currentToken !== epubRenderToken) return;
+
+      activeEpubRendition = rendition;
+
+      // Direct attach after display() in case the rendered event already
+      // fired before the listener above was registered.
+      attachKeydownToIframes();
+
+      rendition.on("relocated", (location: import("epubjs").Location) => {
+        const cfi = location.start.cfi;
+        const currentBook = viewerState.currentBook;
+        if (!cfi || !currentBook || currentBook.sourceType !== "epub") return;
+        activeReadingPosition = {
+          filePath: currentBook.filePath,
+          pageNumber: 0,
+          pageOffsetRatio: 0,
+          cfi,
+          updatedAt: activeReadingPosition?.updatedAt ?? null,
+        };
+        scheduleEpubPositionSave();
+      });
+    } catch (error) {
+      if (currentToken !== epubRenderToken) return;
+      epubViewerEl.innerHTML = "";
+      const errorEl = document.createElement("div");
+      errorEl.className = "pdfjs-loading";
+      errorEl.textContent = `Failed to open EPUB: ${String(error)}`;
+      epubViewerEl.appendChild(errorEl);
+    }
+    return;
+  }
+
+  destroyEpubBook();
 
   if (snapshot.pdfRenderer === "pdfjs") {
     activePdfRenderSession = null;
@@ -2952,10 +3138,19 @@ async function renderCurrentPage() {
 function viewerNeedsRender(snapshot: LibrarySnapshot) {
   const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
   const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
+  const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
   const currentBook = viewerState.currentBook;
 
-  if (!frame || !pdfjsViewerEl || !currentBook) {
+  if (!frame || !pdfjsViewerEl || !epubViewerEl || !currentBook) {
     return false;
+  }
+
+  if (currentBook.sourceType === "epub") {
+    return (
+      epubViewerEl.hidden ||
+      epubViewerEl.dataset.filePath !== currentBook.filePath ||
+      activeEpubBook === null
+    );
   }
 
   if (snapshot.pdfRenderer === "pdfjs") {
@@ -3538,6 +3733,7 @@ function renderMain(snapshot: LibrarySnapshot) {
       pdfjsViewerEl.innerHTML = "";
       pdfjsViewerEl.hidden = true;
     }
+    destroyEpubBook();
     syncNoteUi();
     if (shelfEl) {
       renderBookList(books, shelfEl);
@@ -4158,6 +4354,17 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (wantsForward) {
       event.preventDefault();
       navigateForward();
+      return;
+    }
+
+    if (viewerState.currentBook?.sourceType === "epub" && activeEpubRendition) {
+      if (isEpubNextPageKey(event)) {
+        event.preventDefault();
+        void activeEpubRendition.next();
+      } else if (isEpubPrevPageKey(event)) {
+        event.preventDefault();
+        void activeEpubRendition.prev();
+      }
     }
   });
 

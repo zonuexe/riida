@@ -45,6 +45,7 @@ describe("parseCachedReadingPosition", () => {
       filePath: "/Books/Rust.pdf",
       pageNumber: 12,
       pageOffsetRatio: 1,
+      cfi: null,
       updatedAt: 123,
     });
   });

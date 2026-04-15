@@ -157,6 +157,7 @@ struct ReadingPosition {
     file_path: String,
     page_number: u32,
     page_offset_ratio: f64,
+    cfi: Option<String>,
     updated_at: Option<u64>,
 }
 
@@ -686,7 +687,8 @@ fn open_database() -> Result<Connection, String> {
               file_name TEXT NOT NULL,
               file_size INTEGER NOT NULL,
               modified_at INTEGER NOT NULL,
-              indexed_at INTEGER NOT NULL
+              indexed_at INTEGER NOT NULL,
+              source_type TEXT NOT NULL DEFAULT 'pdf'
             );
             CREATE TABLE IF NOT EXISTS notes (
               id INTEGER PRIMARY KEY,
@@ -710,6 +712,7 @@ fn open_database() -> Result<Connection, String> {
               file_path TEXT PRIMARY KEY,
               page_number INTEGER NOT NULL,
               page_offset_ratio REAL NOT NULL,
+              cfi TEXT,
               updated_at INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS book_tags (
@@ -763,6 +766,11 @@ fn open_database() -> Result<Connection, String> {
         "ALTER TABLE book_metadata ADD COLUMN cover_url TEXT NOT NULL DEFAULT ''",
         [],
     );
+    let _ = connection.execute(
+        "ALTER TABLE books ADD COLUMN source_type TEXT NOT NULL DEFAULT 'pdf'",
+        [],
+    );
+    let _ = connection.execute("ALTER TABLE reading_positions ADD COLUMN cfi TEXT", []);
 
     migrate_paths_to_nfc(&connection).map_err(|error| error.to_string())?;
 
@@ -867,6 +875,27 @@ fn is_pdf_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn is_epub_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("epub"))
+        .unwrap_or(false)
+}
+
+fn book_source_type(path: &Path) -> Option<&'static str> {
+    if is_pdf_file(path) {
+        Some("pdf")
+    } else if is_epub_file(path) {
+        Some("epub")
+    } else {
+        None
+    }
+}
+
+fn should_include_book(path: &Path, compiled: &CompiledExcludePatterns) -> bool {
+    book_source_type(path).is_some() && !matches_excluded_pattern(path, compiled)
+}
+
 fn normalized_path_for_glob(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/").to_lowercase()
 }
@@ -894,6 +923,7 @@ fn matches_excluded_pattern(path: &Path, compiled: &CompiledExcludePatterns) -> 
     })
 }
 
+#[cfg(test)]
 fn should_include_pdf(path: &Path, compiled: &CompiledExcludePatterns) -> bool {
     is_pdf_file(path) && !matches_excluded_pattern(path, compiled)
 }
@@ -1278,7 +1308,7 @@ fn scan_and_index(
             .into_iter()
             .filter_map(Result::ok)
             .filter(|entry| {
-                entry.file_type().is_file() && should_include_pdf(entry.path(), excluded_patterns)
+                entry.file_type().is_file() && should_include_book(entry.path(), excluded_patterns)
             })
         {
             let path = entry.path();
@@ -1297,23 +1327,25 @@ fn scan_and_index(
             let file_name: String = path
                 .file_name()
                 .and_then(|name| name.to_str())
-                .unwrap_or("unknown.pdf")
+                .unwrap_or("unknown")
                 .nfc()
                 .collect();
             let modified_at = modified_unix_seconds(&metadata);
+            let source_type = book_source_type(path).unwrap_or("pdf");
 
             connection
                 .execute(
                     "
-                    INSERT INTO books (file_path, file_name, file_size, modified_at, indexed_at)
-                    VALUES (?1, ?2, ?3, ?4, ?5)
+                    INSERT INTO books (file_path, file_name, file_size, modified_at, indexed_at, source_type)
+                    VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                     ON CONFLICT(file_path) DO UPDATE SET
                       file_name = excluded.file_name,
                       file_size = excluded.file_size,
                       modified_at = excluded.modified_at,
-                      indexed_at = excluded.indexed_at
+                      indexed_at = excluded.indexed_at,
+                      source_type = excluded.source_type
                     ",
-                    params![file_path, file_name, file_size, modified_at, scan_token],
+                    params![file_path, file_name, file_size, modified_at, scan_token, source_type],
                 )
                 .map_err(|error| error.to_string())?;
         }
@@ -1372,7 +1404,8 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
               books.modified_at,
               COALESCE(book_metadata.asin, ''),
               COALESCE(book_metadata.url, ''),
-              COALESCE(book_metadata.title, '')
+              COALESCE(book_metadata.title, ''),
+              books.source_type
             FROM books
             LEFT JOIN book_metadata ON book_metadata.file_path = books.file_path
             ORDER BY books.modified_at DESC, books.file_name ASC
@@ -1392,13 +1425,24 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 row.get::<_, String>(6)?,
                 row.get::<_, String>(7)?,
                 row.get::<_, String>(8)?,
+                row.get::<_, String>(9)?,
             ))
         })
         .map_err(|error| error.to_string())?;
 
     for row in pdf_rows {
-        let (file_name, file_path, file_size, authors_json, cover_url, sort_key, asin, url, title) =
-            row.map_err(|error| error.to_string())?;
+        let (
+            file_name,
+            file_path,
+            file_size,
+            authors_json,
+            cover_url,
+            sort_key,
+            asin,
+            url,
+            title,
+            source_type,
+        ) = row.map_err(|error| error.to_string())?;
         let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
         books.push((
             sort_key,
@@ -1409,7 +1453,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 file_path,
                 file_size,
                 authors,
-                source_type: "pdf".to_string(),
+                source_type,
                 cover_url: if cover_url.is_empty() {
                     None
                 } else {
@@ -1422,6 +1466,37 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
             },
         ));
     }
+
+    // PDF-priority deduplication: when both book.pdf and book.epub exist in the
+    // same directory, only show the PDF and suppress the EPUB entry.
+    let pdf_keys: HashSet<(String, String)> = books
+        .iter()
+        .filter(|(_, book)| book.source_type == "pdf")
+        .filter_map(|(_, book)| {
+            let path = Path::new(&book.file_path);
+            let parent = path.parent()?.to_string_lossy().to_lowercase();
+            let stem = path.file_stem()?.to_string_lossy().to_lowercase();
+            Some((parent, stem))
+        })
+        .collect();
+
+    books.retain(|(_, book)| {
+        if book.source_type != "epub" {
+            return true;
+        }
+        let path = Path::new(&book.file_path);
+        let Some(parent) = path.parent() else {
+            return true;
+        };
+        let Some(stem) = path.file_stem() else {
+            return true;
+        };
+        let key = (
+            parent.to_string_lossy().to_lowercase(),
+            stem.to_string_lossy().to_lowercase(),
+        );
+        !pdf_keys.contains(&key)
+    });
 
     let mut external_statement = connection
         .prepare(
@@ -1633,7 +1708,7 @@ fn start_thumbnail_worker(app: AppHandle) -> ThumbnailQueue {
 fn should_rescan(event: &Event, excluded_patterns: &CompiledExcludePatterns) -> bool {
     event.paths.iter().any(|path| {
         (path.is_dir() && !matches_excluded_pattern(path, excluded_patterns))
-            || should_include_pdf(path, excluded_patterns)
+            || should_include_book(path, excluded_patterns)
     })
 }
 
@@ -1725,7 +1800,7 @@ fn book_thumbnail(
     let config = lock_config(&config_state)?.clone();
     let excluded_patterns = compile_exclude_patterns(&config)?;
 
-    if !pdf_path.exists() || !should_include_pdf(&pdf_path, &excluded_patterns) {
+    if !pdf_path.exists() || !should_include_book(&pdf_path, &excluded_patterns) {
         return Ok(None);
     }
 
@@ -2198,6 +2273,7 @@ fn load_reading_position(file_path: String) -> Result<Option<ReadingPosition>, S
             SELECT
               page_number,
               page_offset_ratio,
+              cfi,
               updated_at
             FROM reading_positions
             WHERE file_path = ?1
@@ -2210,7 +2286,8 @@ fn load_reading_position(file_path: String) -> Result<Option<ReadingPosition>, S
             file_path: file_path.clone(),
             page_number: row.get(0)?,
             page_offset_ratio: row.get(1)?,
-            updated_at: Some(row.get(2)?),
+            cfi: row.get(2)?,
+            updated_at: Some(row.get(3)?),
         })
     });
 
@@ -2252,8 +2329,33 @@ fn save_reading_position(
         file_path,
         page_number,
         page_offset_ratio: normalized_ratio,
+        cfi: None,
         updated_at: Some(updated_at),
     })
+}
+
+#[tauri::command]
+fn save_epub_position(file_path: String, cfi: String) -> Result<(), String> {
+    let connection = open_database()?;
+    let updated_at = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs();
+
+    connection
+        .execute(
+            "
+            INSERT INTO reading_positions (file_path, page_number, page_offset_ratio, cfi, updated_at)
+            VALUES (?1, 0, 0.0, ?2, ?3)
+            ON CONFLICT(file_path) DO UPDATE SET
+              cfi = excluded.cfi,
+              updated_at = excluded.updated_at
+            ",
+            params![&file_path, &cfi, updated_at],
+        )
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
 }
 
 fn normalize_page_offset_ratio(page_offset_ratio: f64) -> f64 {
@@ -2384,6 +2486,7 @@ pub fn run() {
             delete_custom_source,
             load_reading_position,
             save_reading_position,
+            save_epub_position,
             load_viewer_preferences,
             save_default_viewer_preferences,
             save_file_viewer_preferences,
@@ -2576,6 +2679,33 @@ mod tests {
         ));
         assert!(!should_include_pdf(
             Path::new("/tmp/library/regular/document.epub"),
+            &compiled
+        ));
+    }
+
+    #[test]
+    fn should_include_book_accepts_epub_files() {
+        let compiled = compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak.epub"]))
+            .expect("patterns should compile");
+
+        assert!(should_include_book(
+            Path::new("/tmp/library/regular/document.epub"),
+            &compiled
+        ));
+        assert!(should_include_book(
+            Path::new("/tmp/library/regular/document.pdf"),
+            &compiled
+        ));
+        assert!(!should_include_book(
+            Path::new("/tmp/library/backup/document.epub"),
+            &compiled
+        ));
+        assert!(!should_include_book(
+            Path::new("/tmp/library/regular/document.bak.epub"),
+            &compiled
+        ));
+        assert!(!should_include_book(
+            Path::new("/tmp/library/regular/document.txt"),
             &compiled
         ));
     }
@@ -2911,7 +3041,7 @@ mod tests {
     }
 
     #[test]
-    fn should_rescan_ignores_excluded_paths_and_non_pdf_files() {
+    fn should_rescan_ignores_excluded_paths_and_non_book_files() {
         let compiled = compile_exclude_patterns(&test_config(&["**/backup/**", "*.bak"]))
             .expect("patterns should compile");
 
@@ -2942,6 +3072,11 @@ mod tests {
             paths: vec![regular_dir.join("notes.txt")],
             attrs: Default::default(),
         };
+        let epub_event = Event {
+            kind: EventKind::Modify(ModifyKind::Data(DataChange::Content)),
+            paths: vec![regular_dir.join("book.epub")],
+            attrs: Default::default(),
+        };
         let regular_dir_event = Event {
             kind: EventKind::Remove(RemoveKind::Folder),
             paths: vec![regular_dir.clone()],
@@ -2951,6 +3086,7 @@ mod tests {
         assert!(!should_rescan(&excluded_dir_event, &compiled));
         assert!(should_rescan(&pdf_event, &compiled));
         assert!(!should_rescan(&txt_event, &compiled));
+        assert!(should_rescan(&epub_event, &compiled));
         assert!(should_rescan(&regular_dir_event, &compiled));
 
         let _ = fs::remove_dir_all(&temp_root);
@@ -2968,7 +3104,8 @@ mod tests {
                   file_name TEXT NOT NULL,
                   file_size INTEGER NOT NULL,
                   modified_at INTEGER NOT NULL,
-                  indexed_at INTEGER NOT NULL
+                  indexed_at INTEGER NOT NULL,
+                  source_type TEXT NOT NULL DEFAULT 'pdf'
                 );
                 CREATE TABLE book_tags (
                   file_path TEXT NOT NULL,
@@ -3228,7 +3365,8 @@ mod tests {
                   file_name TEXT NOT NULL,
                   file_size INTEGER NOT NULL,
                   modified_at INTEGER NOT NULL,
-                  indexed_at INTEGER NOT NULL
+                  indexed_at INTEGER NOT NULL,
+                  source_type TEXT NOT NULL DEFAULT 'pdf'
                 );
                 CREATE TABLE book_tags (
                   file_path TEXT NOT NULL,
@@ -3375,5 +3513,130 @@ mod tests {
             Ok(Some("pass_a".to_string()))
         );
         assert_eq!(query_pdf_password(&connection, "/books/b.pdf"), Ok(None));
+    }
+
+    fn books_schema_connection() -> Connection {
+        let connection = Connection::open_in_memory().expect("in-memory db should open");
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE books (
+                  id INTEGER PRIMARY KEY,
+                  file_path TEXT NOT NULL UNIQUE,
+                  file_name TEXT NOT NULL,
+                  file_size INTEGER NOT NULL,
+                  modified_at INTEGER NOT NULL,
+                  indexed_at INTEGER NOT NULL,
+                  source_type TEXT NOT NULL DEFAULT 'pdf'
+                );
+                CREATE TABLE book_tags (
+                  file_path TEXT NOT NULL,
+                  tag TEXT NOT NULL,
+                  PRIMARY KEY (file_path, tag)
+                );
+                CREATE TABLE book_metadata (
+                  file_path TEXT PRIMARY KEY,
+                  title TEXT NOT NULL,
+                  authors_json TEXT NOT NULL,
+                  description TEXT NOT NULL,
+                  publisher TEXT NOT NULL,
+                  release_date TEXT NOT NULL,
+                  language TEXT NOT NULL,
+                  url TEXT NOT NULL,
+                  asin TEXT NOT NULL,
+                  cover_url TEXT NOT NULL DEFAULT '',
+                  updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE external_books (
+                  file_path TEXT PRIMARY KEY,
+                  source_type TEXT NOT NULL,
+                  title TEXT NOT NULL,
+                  authors_json TEXT NOT NULL,
+                  description TEXT NOT NULL,
+                  publisher TEXT NOT NULL,
+                  release_date TEXT NOT NULL,
+                  language TEXT NOT NULL,
+                  url TEXT NOT NULL,
+                  asin TEXT NOT NULL,
+                  cover_url TEXT NOT NULL,
+                  updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE custom_sources (
+                  id TEXT PRIMARY KEY,
+                  name TEXT NOT NULL,
+                  icon TEXT NOT NULL,
+                  created_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .expect("schema should be created");
+        connection
+    }
+
+    #[test]
+    fn load_snapshot_epub_only_book_is_shown() {
+        let connection = books_schema_connection();
+        let temp_root = unique_temp_dir("epub-only");
+        fs::create_dir_all(&temp_root).expect("temp dir should be created");
+        fs::write(temp_root.join("novel.epub"), "epub").expect("epub fixture should be written");
+
+        let config = AppConfig {
+            library_roots: vec![temp_root.to_string_lossy().into_owned()],
+            excluded_patterns: Vec::new(),
+            pdf_renderer: DEFAULT_PDF_RENDERER.to_string(),
+            enabled_external_sources: vec![],
+        };
+        let patterns = compile_exclude_patterns(&config).expect("patterns should compile");
+        scan_and_index(&connection, &config, &patterns).expect("scan should succeed");
+        let snapshot = load_snapshot(&connection, &config).expect("snapshot should load");
+
+        assert_eq!(snapshot.indexed_count, 1);
+        assert_eq!(snapshot.books[0].source_type, "epub");
+        assert!(snapshot.books[0].is_openable);
+
+        let _ = fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn load_snapshot_pdf_takes_priority_over_same_stem_epub() {
+        let connection = books_schema_connection();
+        let temp_root = unique_temp_dir("pdf-epub-dedup");
+        fs::create_dir_all(&temp_root).expect("temp dir should be created");
+        fs::write(temp_root.join("book.pdf"), "pdf").expect("pdf fixture should be written");
+        fs::write(temp_root.join("book.epub"), "epub").expect("epub fixture should be written");
+        fs::write(temp_root.join("epub-only.epub"), "epub")
+            .expect("epub-only fixture should be written");
+
+        let config = AppConfig {
+            library_roots: vec![temp_root.to_string_lossy().into_owned()],
+            excluded_patterns: Vec::new(),
+            pdf_renderer: DEFAULT_PDF_RENDERER.to_string(),
+            enabled_external_sources: vec![],
+        };
+        let patterns = compile_exclude_patterns(&config).expect("patterns should compile");
+        scan_and_index(&connection, &config, &patterns).expect("scan should succeed");
+        let snapshot = load_snapshot(&connection, &config).expect("snapshot should load");
+
+        // book.epub is suppressed; book.pdf and epub-only.epub are shown
+        assert_eq!(snapshot.indexed_count, 2);
+        let shown_paths: Vec<&str> = snapshot
+            .books
+            .iter()
+            .map(|b| b.file_path.as_str())
+            .collect();
+        assert!(
+            shown_paths.iter().any(|p| p.ends_with("book.pdf")),
+            "book.pdf should be shown"
+        );
+        assert!(
+            shown_paths.iter().any(|p| p.ends_with("epub-only.epub")),
+            "epub-only.epub should be shown"
+        );
+        assert!(
+            !shown_paths.iter().any(|p| p.ends_with("book.epub")),
+            "book.epub should be suppressed"
+        );
+
+        let _ = fs::remove_dir_all(temp_root);
     }
 }

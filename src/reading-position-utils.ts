@@ -2,6 +2,7 @@ export type ReadingPositionLike = {
   filePath: string;
   pageNumber: number;
   pageOffsetRatio: number;
+  cfi?: string | null;
   updatedAt: number | null;
 };
 
@@ -32,6 +33,7 @@ export function parseCachedReadingPosition(rawValue: string | null): ReadingPosi
       filePath: parsed.filePath,
       pageNumber: parsed.pageNumber,
       pageOffsetRatio: clampReadingPositionOffsetRatio(parsed.pageOffsetRatio),
+      cfi: typeof parsed.cfi === "string" ? parsed.cfi : null,
       updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : null,
     };
   } catch {

@@ -504,6 +504,10 @@ function handleEpubIframeKeydown(event: KeyboardEvent) {
   } else if (isEpubPrevPageKey(event)) {
     event.preventDefault();
     void activeEpubRendition?.prev();
+  } else {
+    // Forward unhandled keys to the main window so app-level and OS-level
+    // shortcuts (e.g. Cmd+F, Cmd+Option+I) continue to work.
+    window.dispatchEvent(new KeyboardEvent(event.type, event));
   }
 }
 

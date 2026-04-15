@@ -483,30 +483,6 @@ function isEpubPrevPageKey(event: KeyboardEvent): boolean {
   return event.key === "PageUp" || event.key === "ArrowUp" || event.key === "ArrowLeft";
 }
 
-function handleEpubIframeKeydown(event: KeyboardEvent) {
-  const input = {
-    platform: navigator.platform,
-    key: event.key,
-    metaKey: event.metaKey,
-    altKey: event.altKey,
-    ctrlKey: event.ctrlKey,
-    shiftKey: event.shiftKey,
-  };
-  if (isNavigationBackShortcut(input)) {
-    event.preventDefault();
-    navigateBack();
-  } else if (isNavigationForwardShortcut(input)) {
-    event.preventDefault();
-    navigateForward();
-  } else if (isEpubNextPageKey(event)) {
-    event.preventDefault();
-    void activeEpubRendition?.next();
-  } else if (isEpubPrevPageKey(event)) {
-    event.preventDefault();
-    void activeEpubRendition?.prev();
-  }
-}
-
 function handleEpubIframeClick(event: MouseEvent) {
   const target = (event.target as Element | null)?.closest("a");
   if (!target) return;
@@ -2929,18 +2905,14 @@ async function renderCurrentPage() {
         },
       });
 
-      // Register rendered handler BEFORE display() so we don't miss the
-      // initial render event. Also attach immediately after display() as
-      // a safety net in case the first rendered fires before the handler
-      // was in place.
+      // Attach click handlers to intercept external URL clicks.
+      // Re-attach on every section load because contentDocument is replaced.
       const attachIframeHandlers = () => {
         const iframes = epubViewerEl.querySelectorAll<HTMLIFrameElement>("iframe");
         for (const iframe of iframes) {
           try {
             const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
             if (!doc) continue;
-            doc.removeEventListener("keydown", handleEpubIframeKeydown);
-            doc.addEventListener("keydown", handleEpubIframeKeydown);
             // Use capture so we intercept clicks before epub.js link handling.
             doc.removeEventListener("click", handleEpubIframeClick, true);
             doc.addEventListener("click", handleEpubIframeClick, true);
@@ -4382,6 +4354,19 @@ window.addEventListener("DOMContentLoaded", async () => {
         event.preventDefault();
         void activeEpubRendition.prev();
       }
+    }
+  });
+
+  // When the EPUB viewer is active, prevent keyboard focus from being
+  // captured by the epub.js iframe.  If the window loses focus to one of
+  // those iframes, immediately return focus to the window so that the
+  // global keydown handler above keeps working.
+  window.addEventListener("blur", () => {
+    if (!activeEpubRendition) return;
+    const epubViewerEl = document.querySelector("#epub-viewer");
+    const active = document.activeElement;
+    if (active instanceof HTMLIFrameElement && epubViewerEl?.contains(active)) {
+      window.focus();
     }
   });
 

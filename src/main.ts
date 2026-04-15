@@ -2891,47 +2891,47 @@ async function renderCurrentPage() {
         },
       });
 
-      // After each section renders, patch link click behaviour.
+      // Intercept link clicks via epub.js's own event forwarding.
       //
-      // epub.js's own replaceLinks uses `link.onclick = fn` (property
-      // assignment) which works in Tauri's WKWebView.  addEventListener
-      // called from the parent document on iframe contentDocument elements
-      // does NOT reliably fire in WKWebView, so we must use the same
-      // onclick-property approach.
+      // Direct DOM manipulation on iframe contentDocument (addEventListener,
+      // onclick property assignment) from the parent document is unreliable
+      // in Tauri's WKWebView.  Instead we use two complementary mechanisms:
       //
-      // - External (https?://) and mailto: → open via openUrl() in the
-      //   system browser / mail client.  Also strip target="_blank" that
-      //   epub.js adds to absolute URLs so Tauri doesn't try to open a
-      //   new WebView window.
-      // - Same-section #anchor links → suppress epub.js cross-section
-      //   navigation when the target element exists in the current page.
-      rendition.on("rendered", () => {
-        const iframes = epubViewerEl.querySelectorAll<HTMLIFrameElement>("iframe");
-        for (const iframe of iframes) {
-          const doc = iframe.contentDocument;
-          if (!doc) continue;
-          for (const link of Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
-            const href = link.getAttribute("href");
-            if (!href) continue;
-            if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
-              link.removeAttribute("target");
-              link.onclick = (e) => {
-                e.preventDefault();
-                void openUrl(href);
-                return false;
-              };
-            } else if (href.startsWith("#")) {
-              const targetId = href.slice(1);
-              if (doc.getElementById(targetId)) {
-                // Same-section anchor: override epub.js onclick so it
-                // doesn't navigate to a different spine item.
-                link.onclick = (e) => {
-                  e.preventDefault();
-                  return false;
-                };
-              }
-              // Cross-section anchor: keep epub.js's onclick intact.
-            }
+      // 1. rendition.on("click") — epub.js's Contents → Rendition event
+      //    pipeline forwards DOM events via passive listeners that DO fire
+      //    in WKWebView.  We use this for external/mailto links where we
+      //    only need to call openUrl() (no need to preventDefault since
+      //    Tauri blocks in-WebView navigation anyway).
+      //
+      // 2. rendition.hooks.content — runs in the same content-initialisation
+      //    pipeline as epub.js's own replaceLinks, so link.onclick property
+      //    assignment works.  We use this for #anchor links where we need to
+      //    override epub.js's onclick to prevent spurious cross-section
+      //    navigation.
+      rendition.on("click", (event: MouseEvent) => {
+        const anchor = (event.target as Element)?.closest?.("a[href]") as HTMLAnchorElement | null;
+        if (!anchor) return;
+        const href = anchor.getAttribute("href");
+        if (!href) return;
+        if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
+          void openUrl(href);
+        }
+      });
+
+      // Override epub.js's onclick for same-section #anchor links.
+      // epub.js's handleLinks (registered earlier in the same hook chain)
+      // resolves #anchor hrefs relative to the base URL and may navigate
+      // to the wrong spine item.  When the anchor target exists in the
+      // current section, we replace the onclick to suppress that navigation.
+      rendition.hooks.content.register((contents: import("epubjs").Contents) => {
+        const doc = contents.document;
+        if (!doc) return;
+        for (const link of Array.from(doc.querySelectorAll<HTMLAnchorElement>('a[href^="#"]'))) {
+          const href = link.getAttribute("href");
+          if (!href) continue;
+          const targetId = href.slice(1);
+          if (targetId && doc.getElementById(targetId)) {
+            link.onclick = () => false;
           }
         }
       });

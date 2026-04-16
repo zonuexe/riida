@@ -35,7 +35,7 @@
     "@milkdown/kit": "^7.20.0",
     "@milkdown/theme-nord": "^7.20.0",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2",
     "epubjs": "^0.3.93",
     "pdfjs-dist": "^5.6.205"

@@ -117,6 +117,118 @@ If you touch rendering order or page DOM structure, manually re-check:
 - restore after reopening a file
 - restore after back/forward navigation
 
+## EPUB Viewer Notes
+
+EPUB support is shipped as an **in-development feature**. On first open
+the viewer shows a one-time notice warning that links may not work and
+that the layout may break. The notice is gated by the
+`riida.epub.previewNoticeShown` key in `localStorage`.
+
+Rendering is done with [epub.js](https://github.com/futurepress/epub.js)
+in paginated flow. Reading position is persisted via CFI
+(`ReadingPosition.cfi`). Keyboard navigation is wired through a
+top-level `window` `keydown` listener that checks `activeEpubRendition`
+and calls `rendition.next()` / `rendition.prev()`.
+
+### Known Link-Handling Issue
+
+Link clicks inside the EPUB iframe do not behave correctly in Tauri v2
+on macOS (WKWebView). As of v0.2.3 the observable symptoms are:
+
+- `https://` and `mailto:` links: clicking them produces **no visible
+  reaction**. The system browser does not open; the viewer does not
+  change.
+- Same-section `#anchor` links: clicking them **breaks the paginated
+  layout** (e.g. the right pane shows the whole section at once) or
+  navigates to the wrong spine item.
+
+These symptoms are reproducible against the current best-effort
+implementation in [src/main.ts](src/main.ts) (see the
+`rendition.hooks.content.register` + `rendition.on("click")` block
+inside `renderCurrentPage()`).
+
+### Root-Cause Hypothesis
+
+Something about cross-frame DOM interaction between the parent Tauri
+WebView document and the EPUB iframe document is not behaving the way
+it would in a plain browser. The narrower hypotheses worth testing:
+
+1. **Cross-frame listeners silently fail in WKWebView.**
+   `addEventListener` attached from the parent frame to the iframe's
+   `contentDocument` never fires. epub.js's own `Contents.addEventListeners`
+   also attaches listeners this way (with `{ passive: true }`) and
+   those listeners appear to work for its internal event forwarding,
+   so the failure mode may be narrower than "all cross-frame
+   listeners".
+2. **`link.onclick` property assignment from the parent frame is
+   partially unreliable.** epub.js uses property assignment in
+   `replaceLinks` to wire internal navigation, and that mechanism works
+   for at least some relative links. Our overrides using the same
+   pattern do not reliably fire on external / mailto links. It is
+   unclear whether the assignment itself is lost or whether the click
+   event does not dispatch through that property.
+3. **Default navigation inside the iframe replaces the EPUB content
+   before our handler runs.** If the click triggers iframe-level
+   navigation to the target URL synchronously, `preventDefault` from a
+   JS handler may be ineffective, and the viewer becomes blank.
+4. **Tauri-level navigation filtering interacts badly.** Tauri may be
+   intercepting `target="_blank"` / external-URL navigations in a way
+   that neither opens the system browser nor leaves the page intact.
+   An IPC-level handler (Tauri `on_navigation` / `on_page_load`) may be
+   required.
+
+### Approaches Tried (and why each failed)
+
+All changes were in [src/main.ts](src/main.ts), inside the
+`renderCurrentPage()` EPUB branch, across commits `2edc1c7` through
+`2096c58`. Listed newest-first:
+
+1. **Rewrite `href` to `javascript:void(0)` + dispatch via
+   `rendition.on("click")`**. Stashed original URLs in
+   `data-riida-external` / `data-riida-anchor`, deregistered epub.js's
+   own `handleLinks` hook. Clean on paper, but clicks still produced
+   no reaction for external / mailto and still broke layout for
+   `#anchor`. Suggests the click event simply does not reach any
+   handler we can register from the parent frame.
+2. **`link.onclick` property assignment + keep `target="_blank"` as a
+   safety net.** Prevented the "viewer disappears" failure mode when
+   `preventDefault` did not actually suppress navigation, but clicks
+   still did not open the system browser.
+3. **`link.onclick` + `removeAttribute("target")`.** External clicks
+   caused the iframe to navigate to the external URL, wiping the EPUB
+   content. Confirmed that `preventDefault` alone is not sufficient.
+4. **`rendition.on("rendered", ...)` + `addEventListener`.** No effect;
+   the added listener never fired.
+5. **`rendition.hooks.content.register` + `addEventListener`.** Same
+   as above: no listener fired.
+6. **Forwarding unhandled iframe keydowns to the main window**
+   (`6706592`, later reverted). Solved keyboard focus by a different
+   approach (`window.blur` → `setTimeout(0)` → `window.focus()` in
+   `799b5f7`) which is still in place.
+
+### Possible Next Steps
+
+If and when this is picked up again, worth trying in order:
+
+- Add visible logging inside both `hooks.content` and
+  `rendition.on("click")` to verify whether they actually run in Tauri
+  runtime (tests so far have not distinguished "handler never runs"
+  from "handler runs but effect is masked").
+- Move link interception down to Tauri: register a Rust-side
+  navigation handler (`tauri::WebviewWindowBuilder::on_navigation`) and
+  translate external URLs to `open` commands there. This sidesteps all
+  cross-frame JS quirks.
+- Inject a `<script>` tag into each EPUB section via a content hook so
+  that link wiring runs *inside* the iframe, then use
+  `window.__TAURI__.event.emit` (or a `MessageChannel`) to call out to
+  the parent frame.
+- Re-evaluate whether a different EPUB library (e.g. `foliate-js`)
+  behaves better in WKWebView.
+
+Do not use Claude Preview tools (`mcp__Claude_Preview__*`) to verify
+link behavior — a plain browser preview does not reproduce the Tauri
+runtime environment where these failures occur.
+
 ## Navigation Notes
 
 The app uses an application-level navigation stack in the frontend.

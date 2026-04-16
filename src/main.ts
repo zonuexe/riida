@@ -2891,48 +2891,43 @@ async function renderCurrentPage() {
         },
       });
 
-      // Intercept link clicks via epub.js's own event forwarding.
+      // Link handling is done via hooks.content which runs in the same
+      // content-initialisation pipeline as epub.js's own replaceLinks.
+      // This lets us use link.onclick property assignment which is the
+      // one cross-frame DOM modification that reliably works in Tauri's
+      // WKWebView (epub.js itself depends on it).
       //
-      // Direct DOM manipulation on iframe contentDocument (addEventListener,
-      // onclick property assignment) from the parent document is unreliable
-      // in Tauri's WKWebView.  Instead we use two complementary mechanisms:
-      //
-      // 1. rendition.on("click") — epub.js's Contents → Rendition event
-      //    pipeline forwards DOM events via passive listeners that DO fire
-      //    in WKWebView.  We use this for external/mailto links where we
-      //    only need to call openUrl() (no need to preventDefault since
-      //    Tauri blocks in-WebView navigation anyway).
-      //
-      // 2. rendition.hooks.content — runs in the same content-initialisation
-      //    pipeline as epub.js's own replaceLinks, so link.onclick property
-      //    assignment works.  We use this for #anchor links where we need to
-      //    override epub.js's onclick to prevent spurious cross-section
-      //    navigation.
-      rendition.on("click", (event: MouseEvent) => {
-        const anchor = (event.target as Element)?.closest?.("a[href]") as HTMLAnchorElement | null;
-        if (!anchor) return;
-        const href = anchor.getAttribute("href");
-        if (!href) return;
-        if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
-          void openUrl(href);
-        }
-      });
-
-      // Override epub.js's onclick for same-section #anchor links.
-      // epub.js's handleLinks (registered earlier in the same hook chain)
-      // resolves #anchor hrefs relative to the base URL and may navigate
-      // to the wrong spine item.  When the anchor target exists in the
-      // current section, we replace the onclick to suppress that navigation.
+      // Important: we do NOT remove target="_blank" that epub.js sets on
+      // absolute URLs.  If our onclick's preventDefault fails for any
+      // reason, target="_blank" ensures the browser attempts a new-window
+      // navigation (which Tauri blocks) rather than navigating the current
+      // iframe away from the EPUB content.
       rendition.hooks.content.register((contents: import("epubjs").Contents) => {
-        const doc = contents.document;
-        if (!doc) return;
-        for (const link of Array.from(doc.querySelectorAll<HTMLAnchorElement>('a[href^="#"]'))) {
-          const href = link.getAttribute("href");
-          if (!href) continue;
-          const targetId = href.slice(1);
-          if (targetId && doc.getElementById(targetId)) {
-            link.onclick = () => false;
+        try {
+          const doc = contents.document;
+          if (!doc) return;
+          for (const link of Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
+            const href = link.getAttribute("href");
+            if (!href) continue;
+            if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
+              // External / mailto — open in the system browser.
+              link.onclick = (e) => {
+                e?.preventDefault?.();
+                void openUrl(href);
+                return false;
+              };
+            } else if (href.startsWith("#")) {
+              const targetId = href.slice(1);
+              if (targetId && doc.getElementById(targetId)) {
+                // Same-section anchor — override epub.js's onclick so it
+                // doesn't try to navigate to a different spine item.
+                link.onclick = () => false;
+              }
+            }
           }
+        } catch (err) {
+          // hooks.content swallows errors, so log explicitly.
+          console.error("[riida] epub link hook failed:", err);
         }
       });
 

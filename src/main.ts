@@ -473,6 +473,31 @@ async function loadEpubJs() {
   return epubJsModulePromise;
 }
 
+const EPUB_PREVIEW_NOTICE_STORAGE_KEY = "riida.epub.previewNoticeShown";
+
+async function maybeShowEpubPreviewNotice(): Promise<void> {
+  try {
+    if (window.localStorage.getItem(EPUB_PREVIEW_NOTICE_STORAGE_KEY) === "1") {
+      return;
+    }
+  } catch {
+    // localStorage unavailable — fall through and show the notice once.
+  }
+  try {
+    await message("EPUBは開発中です。リンクは機能せず、画面が乱れる可能性があります。", {
+      title: "EPUB (開発中)",
+      kind: "warning",
+    });
+  } catch {
+    // Ignore dialog failures; we still record that we tried to show it.
+  }
+  try {
+    window.localStorage.setItem(EPUB_PREVIEW_NOTICE_STORAGE_KEY, "1");
+  } catch {
+    // localStorage unavailable — the notice will show again next time.
+  }
+}
+
 function isEpubNextPageKey(event: KeyboardEvent): boolean {
   if (event.metaKey || event.ctrlKey || event.altKey) return false;
   return event.key === "PageDown" || event.key === "ArrowDown" || event.key === "ArrowRight";
@@ -2849,6 +2874,7 @@ async function renderCurrentPage() {
   const sourceUrl = convertFileSrc(viewerState.currentBook.filePath);
 
   if (viewerState.currentBook.sourceType === "epub") {
+    await maybeShowEpubPreviewNotice();
     destroyEpubBook();
     activePdfRenderSession = null;
     frame.hidden = true;

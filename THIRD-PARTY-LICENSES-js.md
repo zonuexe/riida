@@ -1302,7 +1302,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @tauri-apps/plugin-dialog 2.6.0
+### @tauri-apps/plugin-dialog 2.7.0
 
 - License: MIT OR Apache-2.0
 - Authors: Tauri Programme within The Commons Conservancy

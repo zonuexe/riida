@@ -2891,17 +2891,45 @@ async function renderCurrentPage() {
         },
       });
 
-      // Link handling is done via hooks.content which runs in the same
-      // content-initialisation pipeline as epub.js's own replaceLinks.
-      // This lets us use link.onclick property assignment which is the
-      // one cross-frame DOM modification that reliably works in Tauri's
-      // WKWebView (epub.js itself depends on it).
+      // Link handling strategy:
       //
-      // Important: we do NOT remove target="_blank" that epub.js sets on
-      // absolute URLs.  If our onclick's preventDefault fails for any
-      // reason, target="_blank" ensures the browser attempts a new-window
-      // navigation (which Tauri blocks) rather than navigating the current
-      // iframe away from the EPUB content.
+      // Previous attempts relied on `link.onclick` property assignment
+      // (which is what epub.js itself uses internally) but in Tauri's
+      // WKWebView the assignment on the iframe's document from the parent
+      // frame is unreliable — external/mailto clicks did not fire our
+      // handler at all.
+      //
+      // Instead we neutralise the default navigation by rewriting hrefs
+      // and dispatch through epub.js's own `rendition.on("click")` event
+      // pipeline.  That pipeline forwards DOM events from the iframe
+      // via passive listeners attached during Contents construction and
+      // is confirmed to fire in WKWebView.
+      //
+      // For external/mailto links we:
+      //   - stash the original URL in `data-riida-external`
+      //   - replace `href` with `javascript:void(0)` so default navigation
+      //     is a no-op (the iframe can no longer get replaced by the
+      //     target URL even if our click handler fails to run)
+      //   - remove any `target="_blank"` that epub.js added
+      //
+      // For same-section `#anchor` links we:
+      //   - stash the anchor id in `data-riida-anchor`
+      //   - deregister epub.js's default `handleLinks` (which otherwise
+      //     tries to navigate via `book.path.relative(href)` and lands in
+      //     the wrong spine item)
+      //   - replace `href` with `javascript:void(0)` so the browser does
+      //     not perform its own intra-iframe scroll-to-anchor (which
+      //     breaks the paginated column layout)
+      //
+      // All click dispatch is then handled by the `rendition.on("click")`
+      // handler registered below.
+      const contentHooks = rendition.hooks.content.list();
+      if (contentHooks.length > 0) {
+        // Index 0 is epub.js's own `handleLinks` (registered first in the
+        // Rendition constructor).  Remove it so it cannot steer navigation.
+        rendition.hooks.content.deregister(contentHooks[0]);
+      }
+
       rendition.hooks.content.register((contents: import("epubjs").Contents) => {
         try {
           const doc = contents.document;
@@ -2910,24 +2938,43 @@ async function renderCurrentPage() {
             const href = link.getAttribute("href");
             if (!href) continue;
             if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
-              // External / mailto — open in the system browser.
-              link.onclick = (e) => {
-                e?.preventDefault?.();
-                void openUrl(href);
-                return false;
-              };
+              link.setAttribute("data-riida-external", href);
+              link.setAttribute("href", "javascript:void(0)");
+              link.removeAttribute("target");
             } else if (href.startsWith("#")) {
               const targetId = href.slice(1);
               if (targetId && doc.getElementById(targetId)) {
-                // Same-section anchor — override epub.js's onclick so it
-                // doesn't try to navigate to a different spine item.
-                link.onclick = () => false;
+                link.setAttribute("data-riida-anchor", targetId);
+                link.setAttribute("href", "javascript:void(0)");
               }
             }
           }
         } catch (err) {
           // hooks.content swallows errors, so log explicitly.
           console.error("[riida] epub link hook failed:", err);
+        }
+      });
+
+      rendition.on("click", (event: MouseEvent, contents: import("epubjs").Contents) => {
+        const target = event.target as Element | null;
+        if (!target?.closest) return;
+        const externalEl = target.closest("[data-riida-external]");
+        if (externalEl) {
+          const url = externalEl.getAttribute("data-riida-external");
+          if (url) void openUrl(url);
+          return;
+        }
+        const anchorEl = target.closest("[data-riida-anchor]");
+        if (anchorEl) {
+          const anchorId = anchorEl.getAttribute("data-riida-anchor");
+          if (!anchorId) return;
+          const doc = contents.document;
+          if (!doc?.getElementById?.(anchorId)) return;
+          const current = rendition.currentLocation() as { start?: { href?: string } } | undefined;
+          const sectionHref = current?.start?.href;
+          if (sectionHref) {
+            void rendition.display(`${sectionHref}#${anchorId}`);
+          }
         }
       });
 

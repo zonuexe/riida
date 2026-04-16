@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-04-16
+
+### Added
+
+- EPUB viewer (in-development feature) supporting paginated display, keyboard navigation, and reading position persistence using epub.js.
+- First-time EPUB user warning notice explaining known limitations.
+
+### Changed
+
+- Book list now displays the configured metadata title when available, instead of always showing the filename.
+
+### Fixed
+
+- Search query is now cleared when selecting a directory from the sidebar.
+- EPUB keyboard navigation focus handling improved.
+
 ## [0.2.2] - 2026-04-12
 
 ### Fixed
@@ -164,7 +180,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/zonuexe/riida/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/zonuexe/riida/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/zonuexe/riida/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/zonuexe/riida/compare/v0.1.4...v0.2.0

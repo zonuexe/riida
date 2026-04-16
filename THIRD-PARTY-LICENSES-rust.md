@@ -436,7 +436,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### async-signal 0.2.13
+### async-signal 0.2.14
 
 - License: Apache-2.0 OR MIT
 - Authors: John Nunley <dev@notgull.net>
@@ -926,7 +926,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### bitflags 2.11.0
+### bitflags 2.11.1
 
 - License: MIT OR Apache-2.0
 - Authors: The Rust Project Developers
@@ -1405,7 +1405,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### cc 1.2.58
+### cc 1.2.60
 
 - License: MIT OR Apache-2.0
 - Authors: Alex Crichton <alex@alexcrichton.com>
@@ -4269,7 +4269,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### fastrand 2.3.0
+### fastrand 2.4.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Stjepan Glavina <stjepang@gmail.com>
@@ -5966,7 +5966,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### hashbrown 0.16.1
+### hashbrown 0.17.0
 
 - License: MIT OR Apache-2.0
 - Authors: Amanieu d'Antras <amanieu@gmail.com>
@@ -6345,7 +6345,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### icu_collections 2.1.1
+### icu_collections 2.2.0
 
 - License: Unicode-3.0
 - Authors: The ICU4X Project Developers
@@ -6402,7 +6402,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### icu_locale_core 2.1.1
+### icu_locale_core 2.2.0
 
 - License: Unicode-3.0
 - Authors: The ICU4X Project Developers
@@ -6459,7 +6459,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### icu_normalizer 2.1.1
+### icu_normalizer 2.2.0
 
 - License: Unicode-3.0
 - Authors: The ICU4X Project Developers
@@ -6516,7 +6516,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### icu_normalizer_data 2.1.1
+### icu_normalizer_data 2.2.0
 
 - License: Unicode-3.0
 - Authors: The ICU4X Project Developers
@@ -6573,7 +6573,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### icu_properties 2.1.2
+### icu_properties 2.2.0
 
 - License: Unicode-3.0
 - Authors: The ICU4X Project Developers
@@ -6630,7 +6630,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### icu_properties_data 2.1.2
+### icu_properties_data 2.2.0
 
 - License: Unicode-3.0
 - Authors: The ICU4X Project Developers
@@ -6687,7 +6687,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### icu_provider 2.1.1
+### icu_provider 2.2.0
 
 - License: Unicode-3.0
 - Authors: The ICU4X Project Developers
@@ -6893,7 +6893,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### indexmap 2.13.0
+### indexmap 2.14.0
 
 - License: Apache-2.0 OR MIT
 - Source: https://github.com/indexmap-rs/indexmap
@@ -7359,7 +7359,7 @@ SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### libc 0.2.183
+### libc 0.2.185
 
 - License: MIT OR Apache-2.0
 - Authors: The Rust Project Developers
@@ -7494,7 +7494,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### litemap 0.8.1
+### litemap 0.8.2
 
 - License: Unicode-3.0
 - Authors: The ICU4X Project Developers
@@ -7943,10 +7943,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### muda 0.17.1
+### muda 0.17.2
 
 - License: Apache-2.0 OR MIT
-- Source: https://github.com/amrbashir/muda
+- Source: https://github.com/tauri-apps/muda
 
 #### LICENSE-APACHE
 
@@ -9366,7 +9366,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### pkg-config 0.3.32
+### pkg-config 0.3.33
 
 - License: MIT OR Apache-2.0
 - Authors: Alex Crichton <alex@alexcrichton.com>
@@ -9514,7 +9514,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### potential_utf 0.1.4
+### potential_utf 0.1.5
 
 - License: Unicode-3.0
 - Authors: The ICU4X Project Developers
@@ -10168,7 +10168,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### rand 0.9.2
+### rand 0.9.4
 
 - License: MIT OR Apache-2.0
 - Authors: The Rand Project Developers, The Rust Project Developers
@@ -11184,7 +11184,7 @@ DEALINGS IN THE SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### semver 1.0.27
+### semver 1.0.28
 
 - License: MIT OR Apache-2.0
 - Authors: David Tolnay <dtolnay@gmail.com>
@@ -11483,7 +11483,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### serde_spanned 1.1.0
+### serde_spanned 1.1.1
 
 - License: MIT OR Apache-2.0
 - Source: https://github.com/toml-rs/toml
@@ -12671,7 +12671,7 @@ SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### tauri-plugin-dialog 2.6.0
+### tauri-plugin-dialog 2.7.0
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -12732,7 +12732,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/tauri.git
 Creator: Person: Daniel Thompson-Yvetot
 ```
 
-### tauri-plugin-fs 2.4.5
+### tauri-plugin-fs 2.5.0
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13335,7 +13335,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tinystr 0.8.2
+### tinystr 0.8.3
 
 - License: Unicode-3.0
 - Authors: The ICU4X Project Developers
@@ -13488,7 +13488,7 @@ freely, subject to the following restrictions:
 3. This notice may not be removed or altered from any source distribution.
 ```
 
-### tokio 1.50.0
+### tokio 1.52.0
 
 - License: MIT
 - Authors: Tokio Contributors <team@tokio.rs>
@@ -13660,7 +13660,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### toml_datetime 1.1.0+spec-1.1.0
+### toml_datetime 1.1.1+spec-1.1.0
 
 - License: MIT OR Apache-2.0
 - Source: https://github.com/toml-rs/toml
@@ -13761,7 +13761,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### toml_edit 0.25.8+spec-1.1.0
+### toml_edit 0.25.11+spec-1.1.0
 
 - License: MIT OR Apache-2.0
 - Source: https://github.com/toml-rs/toml
@@ -13794,7 +13794,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### toml_parser 1.1.0+spec-1.1.0
+### toml_parser 1.1.2+spec-1.1.0
 
 - License: MIT OR Apache-2.0
 - Source: https://github.com/toml-rs/toml
@@ -13827,7 +13827,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### toml_writer 1.1.0+spec-1.1.0
+### toml_writer 1.1.1+spec-1.1.0
 
 - License: MIT OR Apache-2.0
 - Source: https://github.com/toml-rs/toml
@@ -14494,7 +14494,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### uuid 1.23.0
+### uuid 1.23.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Ashley Mannix<ashleymannix@live.com.au>, Dylan DPC<dylan.dpc@gmail.com>, Hunar Roop Kahlon<hunar.roop@gmail.com>
@@ -15728,7 +15728,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### winnow 1.0.0
+### winnow 1.0.1
 
 - License: MIT
 - Source: https://github.com/winnow-rs/winnow
@@ -15786,7 +15786,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### writeable 0.6.2
+### writeable 0.6.3
 
 - License: Unicode-3.0
 - Authors: The ICU4X Project Developers
@@ -15972,7 +15972,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### yoke 0.8.1
+### yoke 0.8.2
 
 - License: Unicode-3.0
 - Authors: Manish Goregaokar <manishsmail@gmail.com>
@@ -16029,7 +16029,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### yoke-derive 0.8.1
+### yoke-derive 0.8.2
 
 - License: Unicode-3.0
 - Authors: Manish Goregaokar <manishsmail@gmail.com>
@@ -16263,7 +16263,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### zerofrom 0.1.6
+### zerofrom 0.1.7
 
 - License: Unicode-3.0
 - Authors: Manish Goregaokar <manishsmail@gmail.com>
@@ -16320,7 +16320,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### zerofrom-derive 0.1.6
+### zerofrom-derive 0.1.7
 
 - License: Unicode-3.0
 - Authors: Manish Goregaokar <manishsmail@gmail.com>
@@ -16377,7 +16377,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### zerotrie 0.2.3
+### zerotrie 0.2.4
 
 - License: Unicode-3.0
 - Authors: The ICU4X Project Developers
@@ -16434,7 +16434,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### zerovec 0.11.5
+### zerovec 0.11.6
 
 - License: Unicode-3.0
 - Authors: The ICU4X Project Developers
@@ -16491,7 +16491,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### zerovec-derive 0.11.2
+### zerovec-derive 0.11.3
 
 - License: Unicode-3.0
 - Authors: Manish Goregaokar <manishsmail@gmail.com>

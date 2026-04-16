@@ -13,7 +13,8 @@ use std::{
     thread,
     time::{Duration, UNIX_EPOCH},
 };
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, Url};
+use tauri_plugin_opener::OpenerExt;
 use unicode_normalization::UnicodeNormalization;
 use walkdir::WalkDir;
 
@@ -29,6 +30,17 @@ const DEFAULT_VIEWER_VERTICAL_GAP_MODE: &str = "compact";
 const DEFAULT_VIEWER_TREAT_FIRST_PAGE_AS_COVER: bool = true;
 
 static APP_PATHS: OnceLock<AppPaths> = OnceLock::new();
+
+fn should_allow_internal_navigation(url: &Url) -> bool {
+    match url.scheme() {
+        "tauri" | "about" | "blob" | "data" | "file" | "asset" | "ipc" => true,
+        "http" | "https" => matches!(
+            url.host_str(),
+            Some("localhost") | Some("127.0.0.1") | Some("asset.localhost") | Some("ipc.localhost")
+        ),
+        _ => false,
+    }
+}
 
 fn uuid_v4() -> String {
     use std::collections::hash_map::DefaultHasher;
@@ -2470,6 +2482,26 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry, ()>::new("riida-epub-navigation")
+                .on_navigation(|webview, url| {
+                    if should_allow_internal_navigation(url) {
+                        return true;
+                    }
+
+                    match url.scheme() {
+                        // EPUB iframe external links do not reliably open from WKWebView.
+                        // Route them through the system opener and cancel the embedded
+                        // navigation so the reader content stays intact.
+                        "http" | "https" | "mailto" | "tel" => {
+                            let _ = webview.opener().open_url(url.as_str(), None::<String>);
+                            false
+                        }
+                        _ => true,
+                    }
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             library_snapshot,

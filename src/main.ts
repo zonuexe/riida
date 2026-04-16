@@ -20,6 +20,12 @@ import {
   validateBookMetadataDraft,
 } from "./book-metadata-utils";
 import {
+  clampEpubPageNumber,
+  epubLocationIndexFromPageNumber,
+  epubPageNumberFromLocation,
+} from "./epub-page-utils";
+import { resolveEpubLinkAction } from "./epub-link-routing";
+import {
   deriveDirectories,
   deriveTags,
   filterVisibleBooks,
@@ -311,6 +317,8 @@ let activePdfRenderSession: PdfRenderSession | null = null;
 let epubRenderToken = 0;
 let activeEpubBook: import("epubjs").Book | null = null;
 let activeEpubRendition: import("epubjs").Rendition | null = null;
+let activeEpubLinkMessageHandler: ((event: MessageEvent) => void) | null = null;
+let activeEpubTotalPages: number | null = null;
 let viewerSettingsLoadToken = 0;
 let readingPositionSaveTimer: number | null = null;
 let suppressHistoryUpdates = false;
@@ -736,16 +744,35 @@ function currentViewerPageNumber() {
     return null;
   }
 
+  if (viewerState.currentBook.sourceType === "epub") {
+    return activeReadingPosition?.pageNumber ?? (activeEpubTotalPages ? 1 : null);
+  }
+
   return activeReadingPosition?.pageNumber ?? 1;
+}
+
+function currentViewerTotalPages() {
+  const currentBook = viewerState.currentBook;
+  if (!currentBook) {
+    return null;
+  }
+
+  if (currentBook.sourceType === "epub") {
+    return activeEpubTotalPages;
+  }
+
+  return activePdfRenderSession?.pdfDocument.numPages ?? null;
 }
 
 function syncViewerPageJumpUi() {
   const pageJumpEl = document.querySelector<HTMLElement>("#viewer-page-jump");
   const formEl = document.querySelector<HTMLFormElement>("#viewer-page-jump-form");
   const inputEl = document.querySelector<HTMLInputElement>("#viewer-page-jump-input");
+  const totalEl = document.querySelector<HTMLElement>("#viewer-page-jump-total");
   const currentPageNumber = currentViewerPageNumber();
+  const totalPages = currentViewerTotalPages();
 
-  if (!pageJumpEl || !formEl || !inputEl) {
+  if (!pageJumpEl || !formEl || !inputEl || !totalEl) {
     return;
   }
 
@@ -754,8 +781,11 @@ function syncViewerPageJumpUi() {
   formEl.hidden = !shouldShow;
 
   if (!shouldShow || currentPageNumber === null) {
+    totalEl.textContent = "";
     return;
   }
+
+  totalEl.textContent = totalPages ? `/ ${totalPages}` : "";
 
   if (document.activeElement !== inputEl) {
     viewerPageJumpState.input = String(currentPageNumber);
@@ -769,6 +799,33 @@ function navigateViewerToPage(pageNumber: number) {
   const currentBook = viewerState.currentBook;
 
   if (!currentBook) {
+    return;
+  }
+
+  if (currentBook.sourceType === "epub") {
+    if (!activeEpubBook || !activeEpubRendition || !activeEpubTotalPages) {
+      return;
+    }
+
+    const boundedPageNumber = clampEpubPageNumber(pageNumber, activeEpubTotalPages);
+    const cfi = activeEpubBook.locations.cfiFromLocation(
+      epubLocationIndexFromPageNumber(boundedPageNumber, activeEpubTotalPages),
+    );
+    if (!cfi) {
+      return;
+    }
+
+    activeReadingPosition = {
+      filePath: currentBook.filePath,
+      pageNumber: boundedPageNumber,
+      pageOffsetRatio: 0,
+      cfi,
+      updatedAt: activeReadingPosition?.updatedAt ?? null,
+    };
+    cacheReadingPosition(activeReadingPosition);
+    syncViewerPageJumpUi();
+    void activeEpubRendition.display(cfi);
+    void flushReadingPositionSave();
     return;
   }
 
@@ -2834,6 +2891,11 @@ function navigateForward() {
 }
 
 function destroyEpubBook() {
+  if (activeEpubLinkMessageHandler) {
+    window.removeEventListener("message", activeEpubLinkMessageHandler);
+    activeEpubLinkMessageHandler = null;
+  }
+  activeEpubTotalPages = null;
   activeEpubRendition = null;
   if (activeEpubBook) {
     activeEpubBook.destroy();
@@ -2845,6 +2907,105 @@ function destroyEpubBook() {
     epubViewerEl.innerHTML = "";
     epubViewerEl.hidden = true;
     epubViewerEl.dataset.filePath = "";
+  }
+}
+
+type EpubLinkMessage = {
+  type: "riida:epub-link";
+  href: string;
+  filePath: string;
+  sectionIndex: number;
+};
+
+function isEpubLinkMessage(value: unknown): value is EpubLinkMessage {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return (
+    record.type === "riida:epub-link" &&
+    typeof record.href === "string" &&
+    typeof record.filePath === "string" &&
+    typeof record.sectionIndex === "number"
+  );
+}
+
+function installEpubLinkBridge(contents: import("epubjs").Contents, filePath: string) {
+  const doc = contents.document;
+  if (!doc?.documentElement) {
+    return;
+  }
+
+  doc.documentElement.dataset.riidaFilePath = filePath;
+  doc.documentElement.dataset.riidaSectionIndex = String(contents.sectionIndex);
+}
+
+function syncEpubLinkOverlays(
+  rendition: import("epubjs").Rendition,
+  book: import("epubjs").Book,
+  epubViewerEl: HTMLElement,
+) {
+  let overlayRoot = epubViewerEl.querySelector<HTMLElement>(".epub-link-overlays");
+  if (!overlayRoot) {
+    overlayRoot = document.createElement("div");
+    overlayRoot.className = "epub-link-overlays";
+    epubViewerEl.appendChild(overlayRoot);
+  }
+
+  overlayRoot.innerHTML = "";
+  const viewerRect = epubViewerEl.getBoundingClientRect();
+  const contentsList = rendition.getContents() as unknown as import("epubjs").Contents[];
+
+  for (const contents of contentsList) {
+    const frameEl = contents.window?.frameElement;
+    if (!(frameEl instanceof HTMLIFrameElement)) {
+      continue;
+    }
+
+    const frameRect = frameEl.getBoundingClientRect();
+    const links = contents.document
+      ? (Array.from(contents.document.querySelectorAll("a[href]")) as HTMLAnchorElement[])
+      : null;
+    if (!links) {
+      continue;
+    }
+
+    for (const link of links) {
+      const href = link.getAttribute("href");
+      if (!href) {
+        continue;
+      }
+
+      const rect = link.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        continue;
+      }
+
+      const action = resolveEpubLinkAction(href, book.spine.get(contents.sectionIndex)?.href ?? null);
+      if (!action) {
+        continue;
+      }
+
+      const overlay = document.createElement("button");
+      overlay.type = "button";
+      overlay.className = "epub-link-overlay";
+      overlay.style.left = `${frameRect.left - viewerRect.left + rect.left}px`;
+      overlay.style.top = `${frameRect.top - viewerRect.top + rect.top}px`;
+      overlay.style.width = `${rect.width}px`;
+      overlay.style.height = `${rect.height}px`;
+      overlay.setAttribute("aria-label", href);
+      overlay.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (action.kind === "external") {
+          void openUrl(action.target);
+          return;
+        }
+        void rendition.display(action.target);
+      });
+      overlayRoot.appendChild(overlay);
+    }
   }
 }
 
@@ -2896,13 +3057,24 @@ async function renderCurrentPage() {
       const Epub = EpubModule.default;
       const book = Epub(sourceUrl);
       activeEpubBook = book;
+      await book.ready;
+      if (currentToken !== epubRenderToken) return;
+      await book.locations.generate(1200);
+      if (currentToken !== epubRenderToken) return;
+      activeEpubTotalPages = Math.max(book.locations.length(), 1);
+      syncViewerPageJumpUi();
 
       const spread = viewerSettings.pageMode === "spread" ? "always" : "none";
+      book.spine.hooks.content.register((doc: Document, section: { index: number }) => {
+        doc.documentElement?.setAttribute("data-riida-file-path", viewerState.currentBook?.filePath ?? "");
+        doc.documentElement?.setAttribute("data-riida-section-index", String(section.index));
+      });
       const rendition = book.renderTo(epubViewerEl, {
         width: "100%",
         height: "100%",
         spread,
         flow: "paginated",
+        script: "/epub-link-bridge.js",
       });
 
       rendition.themes.default({
@@ -2917,111 +3089,75 @@ async function renderCurrentPage() {
         },
       });
 
-      // Link handling strategy:
-      //
-      // Previous attempts relied on `link.onclick` property assignment
-      // (which is what epub.js itself uses internally) but in Tauri's
-      // WKWebView the assignment on the iframe's document from the parent
-      // frame is unreliable — external/mailto clicks did not fire our
-      // handler at all.
-      //
-      // Instead we neutralise the default navigation by rewriting hrefs
-      // and dispatch through epub.js's own `rendition.on("click")` event
-      // pipeline.  That pipeline forwards DOM events from the iframe
-      // via passive listeners attached during Contents construction and
-      // is confirmed to fire in WKWebView.
-      //
-      // For external/mailto links we:
-      //   - stash the original URL in `data-riida-external`
-      //   - replace `href` with `javascript:void(0)` so default navigation
-      //     is a no-op (the iframe can no longer get replaced by the
-      //     target URL even if our click handler fails to run)
-      //   - remove any `target="_blank"` that epub.js added
-      //
-      // For same-section `#anchor` links we:
-      //   - stash the anchor id in `data-riida-anchor`
-      //   - deregister epub.js's default `handleLinks` (which otherwise
-      //     tries to navigate via `book.path.relative(href)` and lands in
-      //     the wrong spine item)
-      //   - replace `href` with `javascript:void(0)` so the browser does
-      //     not perform its own intra-iframe scroll-to-anchor (which
-      //     breaks the paginated column layout)
-      //
-      // All click dispatch is then handled by the `rendition.on("click")`
-      // handler registered below.
       const contentHooks = rendition.hooks.content.list();
       if (contentHooks.length > 0) {
-        // Index 0 is epub.js's own `handleLinks` (registered first in the
-        // Rendition constructor).  Remove it so it cannot steer navigation.
         rendition.hooks.content.deregister(contentHooks[0]);
       }
 
       rendition.hooks.content.register((contents: import("epubjs").Contents) => {
         try {
-          const doc = contents.document;
-          if (!doc) return;
-          for (const link of Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
-            const href = link.getAttribute("href");
-            if (!href) continue;
-            if (/^https?:\/\//i.test(href) || /^mailto:/i.test(href)) {
-              link.setAttribute("data-riida-external", href);
-              link.setAttribute("href", "javascript:void(0)");
-              link.removeAttribute("target");
-            } else if (href.startsWith("#")) {
-              const targetId = href.slice(1);
-              if (targetId && doc.getElementById(targetId)) {
-                link.setAttribute("data-riida-anchor", targetId);
-                link.setAttribute("href", "javascript:void(0)");
-              }
-            }
-          }
+          installEpubLinkBridge(contents, viewerState.currentBook?.filePath ?? "");
         } catch (err) {
-          // hooks.content swallows errors, so log explicitly.
           console.error("[riida] epub link hook failed:", err);
         }
       });
 
-      rendition.on("click", (event: MouseEvent, contents: import("epubjs").Contents) => {
-        const target = event.target as Element | null;
-        if (!target?.closest) return;
-        const externalEl = target.closest("[data-riida-external]");
-        if (externalEl) {
-          const url = externalEl.getAttribute("data-riida-external");
-          if (url) void openUrl(url);
+      activeEpubLinkMessageHandler = (event: MessageEvent) => {
+        if (currentToken !== epubRenderToken || !isEpubLinkMessage(event.data)) {
           return;
         }
-        const anchorEl = target.closest("[data-riida-anchor]");
-        if (anchorEl) {
-          const anchorId = anchorEl.getAttribute("data-riida-anchor");
-          if (!anchorId) return;
-          const doc = contents.document;
-          if (!doc?.getElementById?.(anchorId)) return;
-          const current = rendition.currentLocation() as { start?: { href?: string } } | undefined;
-          const sectionHref = current?.start?.href;
-          if (sectionHref) {
-            void rendition.display(`${sectionHref}#${anchorId}`);
-          }
+
+        const currentBook = viewerState.currentBook;
+        if (!currentBook || currentBook.sourceType !== "epub") {
+          return;
         }
-      });
+
+        if (event.data.filePath !== currentBook.filePath) {
+          return;
+        }
+
+        const sectionHref = book.spine.get(event.data.sectionIndex)?.href ?? null;
+        const action = resolveEpubLinkAction(event.data.href, sectionHref);
+        if (!action) {
+          return;
+        }
+
+        if (action.kind === "external") {
+          void openUrl(action.target);
+          return;
+        }
+
+        void rendition.display(action.target);
+      };
+      window.addEventListener("message", activeEpubLinkMessageHandler);
 
       const restoreCfi = activeReadingPosition?.cfi ?? undefined;
       await rendition.display(restoreCfi);
       if (currentToken !== epubRenderToken) return;
 
       activeEpubRendition = rendition;
+      syncEpubLinkOverlays(rendition, book, epubViewerEl);
 
       rendition.on("relocated", (location: import("epubjs").Location) => {
         const cfi = location.start.cfi;
         const currentBook = viewerState.currentBook;
         if (!cfi || !currentBook || currentBook.sourceType !== "epub") return;
+        const totalPages = activeEpubTotalPages ?? Math.max(book.locations.length(), 1);
+        const currentPageNumber = epubPageNumberFromLocation(location.start.location, totalPages);
         activeReadingPosition = {
           filePath: currentBook.filePath,
-          pageNumber: 0,
+          pageNumber: currentPageNumber,
           pageOffsetRatio: 0,
           cfi,
           updatedAt: activeReadingPosition?.updatedAt ?? null,
         };
+        syncEpubLinkOverlays(rendition, book, epubViewerEl);
+        syncViewerPageJumpUi();
         scheduleEpubPositionSave();
+      });
+
+      rendition.on("rendered", () => {
+        syncEpubLinkOverlays(rendition, book, epubViewerEl);
       });
     } catch (error) {
       if (currentToken !== epubRenderToken) return;

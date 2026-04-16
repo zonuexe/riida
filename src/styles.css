@@ -549,7 +549,7 @@ h1 {
 .viewer-page-jump-form {
   width: 100%;
   display: inline-grid;
-  grid-template-columns: minmax(0, 48px) 32px;
+  grid-template-columns: minmax(0, 48px) auto 32px;
   align-items: center;
   gap: 6px;
 }
@@ -589,6 +589,12 @@ h1 {
   box-shadow: 0 8px 18px rgba(74, 44, 18, 0.08);
   backdrop-filter: blur(10px);
   transition: opacity 120ms ease;
+}
+
+.viewer-page-jump-total {
+  color: rgba(125, 78, 33, 0.62);
+  font-size: 0.82rem;
+  white-space: nowrap;
 }
 
 .viewer-page-jump-form:not(:focus-within) .viewer-page-jump-go {
@@ -1078,6 +1084,23 @@ h1 {
 
 .epub-viewer iframe {
   border: none;
+}
+
+.epub-link-overlays {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.epub-link-overlay {
+  position: absolute;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .pdfjs-viewer {

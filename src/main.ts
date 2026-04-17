@@ -248,6 +248,23 @@ type PdfRenderPlan = {
   baseScale: number;
 };
 
+type PdfSearchNormChar = {
+  itemIndex: number;
+  origOffset: number;
+  origOffsetEnd: number;
+};
+
+type PdfSearchPageIndex = {
+  normalizedText: string;
+  normChars: PdfSearchNormChar[];
+};
+
+type PdfSearchMatch = {
+  pageNumber: number;
+  normalizedStart: number;
+  normalizedEnd: number;
+};
+
 type PdfRenderSession = {
   token: number;
   pdfDocument: {
@@ -320,6 +337,21 @@ let activeEpubRendition: import("epubjs").Rendition | null = null;
 let activeEpubLinkMessageHandler: ((event: MessageEvent) => void) | null = null;
 let activeEpubTotalPages: number | null = null;
 let viewerSettingsLoadToken = 0;
+const pdfSearchState: {
+  isOpen: boolean;
+  query: string;
+  pageIndices: Map<number, PdfSearchPageIndex>;
+  matches: PdfSearchMatch[];
+  currentMatchIndex: number;
+  searchTimer: number | null;
+} = {
+  isOpen: false,
+  query: "",
+  pageIndices: new Map(),
+  matches: [],
+  currentMatchIndex: -1,
+  searchTimer: null,
+};
 let readingPositionSaveTimer: number | null = null;
 let suppressHistoryUpdates = false;
 let navigationHistoryIndex = 0;
@@ -997,6 +1029,10 @@ async function renderPdfRenderPlan(session: PdfRenderSession, plan: PdfRenderPla
       viewport,
     });
     await textLayer.render();
+
+    if (pdfSearchState.isOpen && pdfSearchState.matches.length > 0) {
+      applyPdfSearchHighlights();
+    }
 
     const annotations = await page.getAnnotations();
     await renderPdfJsLinks(
@@ -2654,6 +2690,300 @@ function currentViewerStage() {
   return document.querySelector<HTMLElement>(".viewer-stage");
 }
 
+function searchNormalize(str: string): string {
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .normalize("NFKC")
+    .toLowerCase();
+}
+
+function buildPdfSearchPageIndex(items: Array<{ str: string }>): PdfSearchPageIndex {
+  const normChars: PdfSearchNormChar[] = [];
+  let normalizedText = "";
+
+  for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+    const str = items[itemIndex].str;
+    let origOffset = 0;
+    for (const cp of str) {
+      const origOffsetEnd = origOffset + cp.length;
+      const normalized = searchNormalize(cp);
+      for (const nc of normalized) {
+        normChars.push({ itemIndex, origOffset, origOffsetEnd });
+        normalizedText += nc;
+      }
+      origOffset = origOffsetEnd;
+    }
+  }
+
+  return { normalizedText, normChars };
+}
+
+async function ensurePdfSearchPageIndex(pageNumber: number): Promise<PdfSearchPageIndex | null> {
+  const cached = pdfSearchState.pageIndices.get(pageNumber);
+  if (cached) return cached;
+
+  const session = activePdfRenderSession;
+  if (!session) return null;
+
+  try {
+    const page = await session.pdfDocument.getPage(pageNumber);
+    const stream = page.streamTextContent() as ReadableStream<{ items: Array<{ str?: string }> }>;
+    const reader = stream.getReader();
+    const allItems: Array<{ str: string }> = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const item of value.items) {
+        if (typeof item.str === "string") {
+          allItems.push({ str: item.str });
+        }
+      }
+    }
+    const index = buildPdfSearchPageIndex(allItems);
+    pdfSearchState.pageIndices.set(pageNumber, index);
+    return index;
+  } catch (err) {
+    console.error(`[pdf-search] ensurePdfSearchPageIndex(${pageNumber}) threw:`, err);
+    return null;
+  }
+}
+
+async function executePdfSearch(query: string) {
+  const session = activePdfRenderSession;
+  const normalizedQuery = searchNormalize(query);
+  console.log(
+    `[pdf-search] executePdfSearch query="${query}" normalizedQuery="${normalizedQuery}" session=${session ? "ok" : "null"}`,
+  );
+
+  if (!session || !normalizedQuery) {
+    pdfSearchState.matches = [];
+    pdfSearchState.currentMatchIndex = -1;
+    applyPdfSearchHighlights();
+    syncPdfSearchUi();
+    return;
+  }
+
+  const matches: PdfSearchMatch[] = [];
+  const totalPages = session.pdfDocument.numPages;
+
+  for (let p = 1; p <= totalPages; p++) {
+    const index = await ensurePdfSearchPageIndex(p);
+    if (!index) continue;
+
+    if (pdfSearchState.query !== query) return;
+
+    const { normalizedText } = index;
+    let pos = 0;
+    while (pos <= normalizedText.length - normalizedQuery.length) {
+      const found = normalizedText.indexOf(normalizedQuery, pos);
+      if (found === -1) break;
+      matches.push({
+        pageNumber: p,
+        normalizedStart: found,
+        normalizedEnd: found + normalizedQuery.length,
+      });
+      pos = found + 1;
+    }
+  }
+
+  pdfSearchState.matches = matches;
+
+  if (matches.length > 0) {
+    const currentPage = activeReadingPosition?.pageNumber ?? 1;
+    const idx = matches.findIndex((m) => m.pageNumber >= currentPage);
+    pdfSearchState.currentMatchIndex = idx >= 0 ? idx : 0;
+  } else {
+    pdfSearchState.currentMatchIndex = -1;
+  }
+
+  applyPdfSearchHighlights();
+  syncPdfSearchUi();
+
+  if (pdfSearchState.currentMatchIndex >= 0) {
+    scrollToPdfSearchMatch(pdfSearchState.currentMatchIndex);
+  }
+}
+
+function findPageElement(pageNumber: number): HTMLElement | null {
+  const session = activePdfRenderSession;
+  if (!session) return null;
+
+  for (const plan of session.plans) {
+    const el = plan.pageSlots.get(pageNumber);
+    if (el) return el;
+  }
+  return null;
+}
+
+function getPdfSearchMatchRange(match: PdfSearchMatch): Range | null {
+  const index = pdfSearchState.pageIndices.get(match.pageNumber);
+  if (!index) return null;
+
+  const { normChars } = index;
+  if (match.normalizedStart >= normChars.length || match.normalizedEnd > normChars.length)
+    return null;
+
+  const startChar = normChars[match.normalizedStart];
+  const endChar = normChars[match.normalizedEnd - 1];
+
+  const pageEl = findPageElement(match.pageNumber);
+  if (!pageEl) return null;
+
+  const textLayerEl = pageEl.querySelector(".textLayer");
+  if (!textLayerEl) return null;
+
+  const spans = Array.from(textLayerEl.querySelectorAll<HTMLElement>("span"));
+  const startSpan = spans[startChar.itemIndex];
+  const endSpan = spans[endChar.itemIndex];
+  if (!startSpan?.firstChild || !endSpan?.firstChild) return null;
+
+  try {
+    const range = new Range();
+    range.setStart(startSpan.firstChild, startChar.origOffset);
+    range.setEnd(endSpan.firstChild, endChar.origOffsetEnd);
+    return range;
+  } catch {
+    return null;
+  }
+}
+
+function clearPdfSearchMarkEls() {
+  for (const el of document.querySelectorAll(".pdf-search-mark")) {
+    el.remove();
+  }
+}
+
+function applyPdfSearchHighlights() {
+  clearPdfSearchMarkEls();
+
+  if (!pdfSearchState.isOpen || !pdfSearchState.query || pdfSearchState.matches.length === 0) {
+    return;
+  }
+
+  for (let i = 0; i < pdfSearchState.matches.length; i++) {
+    const match = pdfSearchState.matches[i];
+    const range = getPdfSearchMatchRange(match);
+    if (!range) continue;
+
+    const pageEl = findPageElement(match.pageNumber);
+    if (!pageEl) continue;
+
+    const pageRect = pageEl.getBoundingClientRect();
+    const isCurrent = i === pdfSearchState.currentMatchIndex;
+
+    for (const rect of range.getClientRects()) {
+      const mark = document.createElement("div");
+      mark.className = isCurrent ? "pdf-search-mark pdf-search-mark--current" : "pdf-search-mark";
+      mark.style.left = `${rect.left - pageRect.left}px`;
+      mark.style.top = `${rect.top - pageRect.top}px`;
+      mark.style.width = `${rect.width}px`;
+      mark.style.height = `${rect.height}px`;
+      pageEl.appendChild(mark);
+    }
+  }
+}
+
+function syncPdfSearchUi() {
+  const countEl = document.querySelector<HTMLElement>("#pdf-search-count");
+  if (!countEl) return;
+
+  const { matches, currentMatchIndex } = pdfSearchState;
+  if (matches.length === 0) {
+    countEl.textContent = pdfSearchState.query ? "No matches" : "";
+  } else {
+    countEl.textContent = `${currentMatchIndex + 1} / ${matches.length}`;
+  }
+}
+
+function scrollToPdfSearchMatch(index: number) {
+  const match = pdfSearchState.matches[index];
+  if (!match) return;
+
+  const session = activePdfRenderSession;
+  if (!session) return;
+
+  const groupIndex = findPdfRenderGroupIndexForPage(session, match.pageNumber);
+  if (groupIndex >= 0) {
+    schedulePdfRenderWindowUpdate(session, groupIndex);
+  }
+
+  const attemptScroll = (attempts: number) => {
+    const pageEl = findPageElement(match.pageNumber);
+    if (!pageEl || pageEl.dataset.rendered !== "true") {
+      if (attempts < 8) {
+        requestAnimationFrame(() => attemptScroll(attempts + 1));
+      }
+      return;
+    }
+    const stageEl = session.stageEl;
+    const stageRect = stageEl.getBoundingClientRect();
+    const pageRect = pageEl.getBoundingClientRect();
+    const pageTopInStage = stageEl.scrollTop + (pageRect.top - stageRect.top);
+    stageEl.scrollTo({ top: Math.max(pageTopInStage - 32, 0), behavior: "smooth" });
+    applyPdfSearchHighlights();
+  };
+
+  requestAnimationFrame(() => attemptScroll(0));
+}
+
+function navigatePdfSearchForward() {
+  if (pdfSearchState.matches.length === 0) return;
+  pdfSearchState.currentMatchIndex =
+    (pdfSearchState.currentMatchIndex + 1) % pdfSearchState.matches.length;
+  applyPdfSearchHighlights();
+  syncPdfSearchUi();
+  scrollToPdfSearchMatch(pdfSearchState.currentMatchIndex);
+}
+
+function navigatePdfSearchBackward() {
+  if (pdfSearchState.matches.length === 0) return;
+  pdfSearchState.currentMatchIndex =
+    (pdfSearchState.currentMatchIndex - 1 + pdfSearchState.matches.length) %
+    pdfSearchState.matches.length;
+  applyPdfSearchHighlights();
+  syncPdfSearchUi();
+  scrollToPdfSearchMatch(pdfSearchState.currentMatchIndex);
+}
+
+function openPdfSearch() {
+  const bar = document.querySelector<HTMLElement>("#pdf-search-bar");
+  const input = document.querySelector<HTMLInputElement>("#pdf-search-input");
+  if (!bar || !input) return;
+
+  pdfSearchState.isOpen = true;
+  bar.hidden = false;
+  input.select();
+  input.focus();
+}
+
+function closePdfSearch() {
+  const bar = document.querySelector<HTMLElement>("#pdf-search-bar");
+  if (!bar) return;
+
+  if (pdfSearchState.searchTimer !== null) {
+    window.clearTimeout(pdfSearchState.searchTimer);
+    pdfSearchState.searchTimer = null;
+  }
+
+  pdfSearchState.isOpen = false;
+  pdfSearchState.query = "";
+  pdfSearchState.matches = [];
+  pdfSearchState.currentMatchIndex = -1;
+  pdfSearchState.pageIndices.clear();
+  bar.hidden = true;
+
+  applyPdfSearchHighlights();
+  syncPdfSearchUi();
+}
+
+function isPdfSearchShortcut(event: KeyboardEvent): boolean {
+  const isMac = navigator.platform.startsWith("Mac");
+  return (
+    event.key === "f" && (isMac ? event.metaKey : event.ctrlKey) && !event.shiftKey && !event.altKey
+  );
+}
+
 function captureReadingPositionFromViewer(): ReadingPosition | null {
   const currentBook = viewerState.currentBook;
   const stageEl = currentViewerStage();
@@ -3189,6 +3519,7 @@ async function renderCurrentPage() {
     pdfjsViewerEl.dataset.position = viewerSettings.alignMode;
     pdfjsViewerEl.dataset.verticalGap = viewerSettings.verticalGapMode;
 
+    closePdfSearch();
     pdfRenderToken += 1;
     const currentToken = pdfRenderToken;
     const loadingEl = document.createElement("div");
@@ -3329,6 +3660,7 @@ async function renderCurrentPage() {
     return;
   }
 
+  closePdfSearch();
   pdfRenderToken += 1;
   activePdfRenderSession = null;
   pdfjsViewerEl.hidden = true;
@@ -4484,6 +4816,37 @@ window.addEventListener("DOMContentLoaded", async () => {
     renderApp();
   });
 
+  const pdfSearchInputEl = document.querySelector<HTMLInputElement>("#pdf-search-input");
+  const pdfSearchPrevEl = document.querySelector<HTMLButtonElement>("#pdf-search-prev");
+  const pdfSearchNextEl = document.querySelector<HTMLButtonElement>("#pdf-search-next");
+  const pdfSearchCloseEl = document.querySelector<HTMLButtonElement>("#pdf-search-close");
+
+  pdfSearchInputEl?.addEventListener("input", () => {
+    const query = pdfSearchInputEl.value;
+    pdfSearchState.query = query;
+    if (pdfSearchState.searchTimer !== null) {
+      window.clearTimeout(pdfSearchState.searchTimer);
+    }
+    pdfSearchState.searchTimer = window.setTimeout(() => {
+      void executePdfSearch(query);
+    }, 200);
+  });
+
+  pdfSearchInputEl?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.isComposing && event.keyCode !== 229) {
+      event.preventDefault();
+      if (event.shiftKey) {
+        navigatePdfSearchBackward();
+      } else {
+        navigatePdfSearchForward();
+      }
+    }
+  });
+
+  pdfSearchPrevEl?.addEventListener("click", () => navigatePdfSearchBackward());
+  pdfSearchNextEl?.addEventListener("click", () => navigatePdfSearchForward());
+  pdfSearchCloseEl?.addEventListener("click", () => closePdfSearch());
+
   noteDragHandleEl?.addEventListener("pointerdown", (event) => {
     beginNoteDrag(event);
   });
@@ -4533,6 +4896,21 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     if (event.key === "Escape" && viewerState.isAppSettingsOpen) {
       closeAppSettings();
+      return;
+    }
+
+    if (event.key === "Escape" && pdfSearchState.isOpen) {
+      closePdfSearch();
+      return;
+    }
+
+    if (
+      isPdfSearchShortcut(event) &&
+      lastSnapshot?.pdfRenderer === "pdfjs" &&
+      viewerState.currentBook
+    ) {
+      event.preventDefault();
+      openPdfSearch();
       return;
     }
 

@@ -1203,7 +1203,7 @@ h1 {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
 }
 
 .pdfjs-viewer .annotationLayer section {
@@ -1226,6 +1226,78 @@ h1 {
   padding: 32px;
   text-align: center;
   color: rgba(31, 27, 22, 0.58);
+}
+
+.pdf-search-mark {
+  position: absolute;
+  background: rgba(255, 200, 0, 0.5);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.pdf-search-mark--current {
+  background: rgba(255, 120, 0, 0.7);
+}
+
+.pdf-search-bar {
+  position: absolute;
+  top: 12px;
+  right: 56px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 6px;
+  padding: 4px 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.pdf-view {
+  position: relative;
+}
+
+.pdf-search-input {
+  border: none;
+  outline: none;
+  font-size: 0.875rem;
+  width: 200px;
+  background: transparent;
+  color: #1f1b16;
+}
+
+.pdf-search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.pdf-search-count {
+  font-size: 0.8rem;
+  color: rgba(31, 27, 22, 0.55);
+  white-space: nowrap;
+  min-width: 56px;
+  text-align: center;
+}
+
+.pdf-search-nav,
+.pdf-search-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: rgba(31, 27, 22, 0.7);
+  font-size: 0.75rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+.pdf-search-nav:hover,
+.pdf-search-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #1f1b16;
 }
 
 .panel h2 {

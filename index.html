@@ -191,6 +191,42 @@
         </section>
 
         <section id="pdf-view" class="pdf-view" hidden>
+          <div id="pdf-search-bar" class="pdf-search-bar" hidden>
+            <input
+              id="pdf-search-input"
+              class="pdf-search-input"
+              type="search"
+              placeholder="Search..."
+              autocomplete="off"
+              spellcheck="false"
+              aria-label="Search in PDF"
+            />
+            <span id="pdf-search-count" class="pdf-search-count" aria-live="polite"></span>
+            <button
+              id="pdf-search-prev"
+              class="pdf-search-nav"
+              type="button"
+              aria-label="Previous match"
+            >
+              <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+            </button>
+            <button
+              id="pdf-search-next"
+              class="pdf-search-nav"
+              type="button"
+              aria-label="Next match"
+            >
+              <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+            </button>
+            <button
+              id="pdf-search-close"
+              class="pdf-search-close"
+              type="button"
+              aria-label="Close search"
+            >
+              <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+          </div>
           <article class="viewer-panel">
             <div class="viewer-stage">
               <iframe id="pdf-frame" title="PDF preview"></iframe>

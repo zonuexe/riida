@@ -373,11 +373,20 @@ const buildDate = __BUILD_DATE__;
 let cachedLicenseText = "Loading license text...";
 let cachedThirdPartyRustText = "Loading Rust notices...";
 let cachedThirdPartyJsText = "Loading JavaScript notices...";
+const APP_THEME_STORAGE_KEY = "riida.appTheme";
 
 function applyAppTheme(theme: AppTheme) {
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme =
     theme === "night-city" || theme === "navy-blue" ? "dark" : "light";
+}
+
+function persistAppTheme(theme: AppTheme) {
+  localStorage.setItem(APP_THEME_STORAGE_KEY, theme);
+}
+
+function finishStartupPhase() {
+  document.body.dataset.startup = "ready";
 }
 let isTagEditorComposing = false;
 let pdfJsRuntimePromise: Promise<PdfJsRuntime> | null = null;
@@ -2085,7 +2094,9 @@ async function loadThirdPartyLicenses() {
 
 async function loadAppConfig() {
   lastAppConfig = await invoke<AppConfigPayload>("load_app_config");
-  applyAppTheme(normalizeAppTheme(lastAppConfig.theme));
+  const theme = normalizeAppTheme(lastAppConfig.theme);
+  applyAppTheme(theme);
+  persistAppTheme(theme);
   if (!lastAppConfig.configExists) {
     viewerState.isAppSettingsOpen = true;
     setAppSettingsStatus("Choose at least one library folder to get started.");
@@ -2125,6 +2136,7 @@ async function saveAppSettingsFromForm() {
 
     lastAppConfig = payload;
     applyAppTheme(payload.theme);
+    persistAppTheme(payload.theme);
     const snapshot = await invoke<LibrarySnapshot>("library_snapshot");
     lastSnapshot = snapshot;
     viewerState.books = snapshot.books;
@@ -5103,6 +5115,15 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
+  try {
+    await loadAppConfig();
+  } catch (error) {
+    applyAppTheme("default");
+    console.error("failed to load app config", error);
+  } finally {
+    finishStartupPhase();
+  }
+
   invoke<LibrarySnapshot>("library_snapshot")
     .then((snapshot) => {
       lastSnapshot = snapshot;
@@ -5134,12 +5155,6 @@ window.addEventListener("DOMContentLoaded", async () => {
       renderApp();
       console.error("failed to load library snapshot", error);
     });
-
-  try {
-    await loadAppConfig();
-  } catch (error) {
-    console.error("failed to load app config", error);
-  }
 
   try {
     cachedAppName = await getName();

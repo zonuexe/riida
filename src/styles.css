@@ -127,6 +127,10 @@ body {
   overflow: hidden;
 }
 
+body[data-startup="loading"] .app-shell {
+  visibility: hidden;
+}
+
 [hidden] {
   display: none !important;
 }

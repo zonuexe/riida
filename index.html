@@ -2,13 +2,26 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (() => {
+        const key = "riida.appTheme";
+        const theme = localStorage.getItem(key);
+        if (!theme) {
+          return;
+        }
+
+        const root = document.documentElement;
+        root.dataset.theme = theme;
+        root.style.colorScheme = theme === "night-city" || theme === "navy-blue" ? "dark" : "light";
+      })();
+    </script>
     <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>riida</title>
     <script type="module" src="/src/main.ts" defer></script>
   </head>
 
-  <body>
+  <body data-startup="loading">
     <main class="app-shell two-pane">
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-brand">

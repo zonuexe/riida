@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-04-18
+
+### Added
+
+- PDF.js viewer now supports in-document text search with keyword highlighting and next/previous navigation.
+- Global app themes can now be changed from Settings, including `Snow White`, `Night City`, and `Navy Blue`.
+- EPUB viewer now shows page numbers and total page counts more clearly while reading.
+
+### Fixed
+
+- EPUB links now behave more reliably inside the reader.
+- EPUB pagination now resizes correctly after sidebar changes and window resizes.
+- The selected app theme now applies cleanly from app startup without briefly flashing a different background.
+- PDF search now treats CJK radical variants more consistently, improving match behavior for affected text.
+
 ## [0.2.4] - 2026-04-17
 
 ### Fixed
@@ -186,7 +201,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/zonuexe/riida/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/zonuexe/riida/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/zonuexe/riida/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/zonuexe/riida/compare/v0.2.1...v0.2.2

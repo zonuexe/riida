@@ -55,6 +55,7 @@ import {
   applyViewerSettingsPayloadToState,
   switchViewerSettingsScopeInState,
 } from "./viewer-settings-utils";
+import { CJK_RADICAL_MAP } from "./cjk-radical-map";
 
 type CustomSource = {
   id: string;
@@ -2691,11 +2692,15 @@ function currentViewerStage() {
 }
 
 function searchNormalize(str: string): string {
-  return str
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .normalize("NFKC")
-    .toLowerCase();
+  return [
+    ...str
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .normalize("NFKC")
+      .toLowerCase(),
+  ]
+    .map((c) => CJK_RADICAL_MAP[c] ?? c)
+    .join("");
 }
 
 function buildPdfSearchPageIndex(items: Array<{ str: string }>): PdfSearchPageIndex {

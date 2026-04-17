@@ -343,6 +343,10 @@ let activeEpubBook: import("epubjs").Book | null = null;
 let activeEpubRendition: import("epubjs").Rendition | null = null;
 let activeEpubLinkMessageHandler: ((event: MessageEvent) => void) | null = null;
 let activeEpubTotalPages: number | null = null;
+// True when the active EPUB's spine page-progression-direction is "rtl".
+// DPFJ guide §ページ進行方向の遵守: page direction is governed by OPF spine, not writing-mode.
+// In rtl books, ArrowLeft advances the reading order (next page) while ArrowRight goes back.
+let activeEpubIsRtl = false;
 let viewerSettingsLoadToken = 0;
 const pdfSearchState: {
   isOpen: boolean;
@@ -3271,6 +3275,7 @@ function destroyEpubBook() {
   }
   activeEpubTotalPages = null;
   activeEpubRendition = null;
+  activeEpubIsRtl = false;
   if (activeEpubBook) {
     activeEpubBook.destroy();
     activeEpubBook = null;
@@ -3441,7 +3446,30 @@ async function renderCurrentPage() {
       activeEpubTotalPages = Math.max(book.locations.length(), 1);
       syncViewerPageJumpUi();
 
-      const spread = viewerSettings.pageMode === "spread" ? "always" : "none";
+      // Detect page-progression-direction for correct key mapping.
+      // DPFJ guide §ページ進行方向の遵守: direction is from OPF spine, not writing-mode.
+      // In rtl books (Japanese vertical text etc.) ArrowLeft = next page, ArrowRight = prev.
+      // epub.js exposes package/spine internals not covered by the public typings.
+      const bookInternal = book as unknown as {
+        spine?: { direction?: string };
+        package?: { metadata?: { direction?: string; rendition_layout?: string } };
+      };
+      const spineDirection =
+        bookInternal.spine?.direction ?? bookInternal.package?.metadata?.direction ?? "ltr";
+      activeEpubIsRtl = spineDirection === "rtl";
+
+      // Detect fixed-layout vs. reflow from OPF metadata.
+      // DPFJ guide §固定レイアウト: pre-paginated books use SVG-wrapped images and
+      // require flow:"pre-paginated" so epub.js renders each spine item as a single page.
+      const renditionLayout = bookInternal.package?.metadata?.rendition_layout ?? "";
+      const isPrePaginated = renditionLayout === "pre-paginated";
+      const flow: string = isPrePaginated ? "pre-paginated" : "paginated";
+      const spread = isPrePaginated
+        ? "auto"
+        : viewerSettings.pageMode === "spread"
+          ? "always"
+          : "none";
+
       book.spine.hooks.content.register((doc: Document, section: { index: number }) => {
         doc.documentElement?.setAttribute(
           "data-riida-file-path",
@@ -3453,11 +3481,17 @@ async function renderCurrentPage() {
         width: "100%",
         height: "100%",
         spread,
-        flow: "paginated",
+        flow,
         script: "/epub-link-bridge.js",
       });
 
       rendition.themes.default({
+        // DPFJ guide §ページメディアの余白: RS should not add its own margins to body.
+        // epub.js injects padding by default; suppress it so the book's own CSS controls spacing.
+        body: {
+          padding: "0 !important",
+          margin: "0 !important",
+        },
         pre: {
           "white-space": "pre-wrap !important",
           "word-break": "break-all !important",
@@ -4987,10 +5021,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     if (viewerState.currentBook?.sourceType === "epub" && activeEpubRendition) {
-      if (isEpubNextPageKey(event)) {
+      // DPFJ guide §ページ進行方向の遵守: in rtl books ArrowLeft advances reading order.
+      const wantsNext = activeEpubIsRtl ? isEpubPrevPageKey(event) : isEpubNextPageKey(event);
+      const wantsPrev = activeEpubIsRtl ? isEpubNextPageKey(event) : isEpubPrevPageKey(event);
+      if (wantsNext) {
         event.preventDefault();
         void activeEpubRendition.next();
-      } else if (isEpubPrevPageKey(event)) {
+      } else if (wantsPrev) {
         event.preventDefault();
         void activeEpubRendition.prev();
       }

@@ -3245,6 +3245,13 @@ function navigateForward() {
   });
 }
 
+function resizeEpubRendition() {
+  if (!activeEpubRendition) return;
+  const el = document.querySelector<HTMLElement>("#epub-viewer");
+  if (!el) return;
+  activeEpubRendition.resize(el.clientWidth, el.clientHeight);
+}
+
 function destroyEpubBook() {
   if (activeEpubLinkMessageHandler) {
     window.removeEventListener("message", activeEpubLinkMessageHandler);
@@ -5021,6 +5028,17 @@ window.addEventListener("DOMContentLoaded", async () => {
       pdfRenderResizeTimer = window.setTimeout(() => {
         void renderCurrentPage();
       }, 120);
+    }
+
+    resizeEpubRendition();
+  });
+
+  // When the sidebar opens or closes the CSS grid transition changes the
+  // right-pane width.  Call resize() once the transition finishes so
+  // epub.js recalculates its column layout for the new dimensions.
+  document.querySelector(".two-pane")?.addEventListener("transitionend", (e) => {
+    if ((e as TransitionEvent).propertyName === "grid-template-columns") {
+      resizeEpubRendition();
     }
   });
 

@@ -128,7 +128,12 @@ Rendering is done with [epub.js](https://github.com/futurepress/epub.js)
 in paginated flow. Reading position is persisted via CFI
 (`ReadingPosition.cfi`). Keyboard navigation is wired through a
 top-level `window` `keydown` listener that checks `activeEpubRendition`
-and calls `rendition.next()` / `rendition.prev()`.
+and calls `rendition.next()` / `rendition.prev()`. Keyboard focus
+inside the iframe is handled by a `window.blur` → `setTimeout(0)` →
+`window.focus()` refocus trick so that key events always reach the
+top-level listener.
+
+The remaining known issue is **link handling** — see below.
 
 ### Known Link-Handling Issue
 
@@ -201,10 +206,6 @@ All changes were in [src/main.ts](src/main.ts), inside the
    the added listener never fired.
 5. **`rendition.hooks.content.register` + `addEventListener`.** Same
    as above: no listener fired.
-6. **Forwarding unhandled iframe keydowns to the main window**
-   (`6706592`, later reverted). Solved keyboard focus by a different
-   approach (`window.blur` → `setTimeout(0)` → `window.focus()` in
-   `799b5f7`) which is still in place.
 
 ### Possible Next Steps
 

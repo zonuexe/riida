@@ -2982,7 +2982,10 @@ function syncEpubLinkOverlays(
         continue;
       }
 
-      const action = resolveEpubLinkAction(href, book.spine.get(contents.sectionIndex)?.href ?? null);
+      const action = resolveEpubLinkAction(
+        href,
+        book.spine.get(contents.sectionIndex)?.href ?? null,
+      );
       if (!action) {
         continue;
       }
@@ -3066,7 +3069,10 @@ async function renderCurrentPage() {
 
       const spread = viewerSettings.pageMode === "spread" ? "always" : "none";
       book.spine.hooks.content.register((doc: Document, section: { index: number }) => {
-        doc.documentElement?.setAttribute("data-riida-file-path", viewerState.currentBook?.filePath ?? "");
+        doc.documentElement?.setAttribute(
+          "data-riida-file-path",
+          viewerState.currentBook?.filePath ?? "",
+        );
         doc.documentElement?.setAttribute("data-riida-section-index", String(section.index));
       });
       const rendition = book.renderTo(epubViewerEl, {

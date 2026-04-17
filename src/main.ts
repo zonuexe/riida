@@ -9,7 +9,12 @@ import "./vendor/fontawesome/css/brands.min.css";
 import "./vendor/fontawesome/css/regular.min.css";
 import "./vendor/fontawesome/css/solid.min.css";
 import type { NoteEditorHandle } from "./note-editor";
-import { addLibraryRoot, buildAppConfigDraft } from "./app-config-utils";
+import {
+  addLibraryRoot,
+  buildAppConfigDraft,
+  normalizeAppTheme,
+  type AppTheme,
+} from "./app-config-utils";
 import {
   applyBookMetadataImport,
   BOOK_METADATA_IMPORT_EXAMPLE,
@@ -140,6 +145,7 @@ type AppConfigPayload = {
   libraryRoots: string[];
   excludedPatterns: string[];
   pdfRenderer: "native" | "pdfjs";
+  theme: AppTheme;
   enabledExternalSources: string[];
 };
 
@@ -367,6 +373,12 @@ const buildDate = __BUILD_DATE__;
 let cachedLicenseText = "Loading license text...";
 let cachedThirdPartyRustText = "Loading Rust notices...";
 let cachedThirdPartyJsText = "Loading JavaScript notices...";
+
+function applyAppTheme(theme: AppTheme) {
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme =
+    theme === "night-city" || theme === "navy-blue" ? "dark" : "light";
+}
 let isTagEditorComposing = false;
 let pdfJsRuntimePromise: Promise<PdfJsRuntime> | null = null;
 let noteEditorModulePromise: Promise<typeof import("./note-editor")> | null = null;
@@ -1246,6 +1258,7 @@ function syncAppSettingsUi() {
     "#config-excluded-patterns",
   );
   const pdfRendererEl = document.querySelector<HTMLSelectElement>("#config-pdf-renderer");
+  const themeEl = document.querySelector<HTMLSelectElement>("#config-theme");
   const configPathEl = document.querySelector<HTMLElement>("#app-settings-config-path");
   const kindleEnabledEl = document.querySelector<HTMLInputElement>("#config-kindle-enabled");
 
@@ -1259,6 +1272,9 @@ function syncAppSettingsUi() {
     }
     if (pdfRendererEl) {
       pdfRendererEl.value = lastAppConfig.pdfRenderer;
+    }
+    if (themeEl) {
+      themeEl.value = lastAppConfig.theme;
     }
     if (configPathEl) {
       configPathEl.innerHTML = `Config file: <code>${lastAppConfig.configPath}</code>`;
@@ -2069,6 +2085,7 @@ async function loadThirdPartyLicenses() {
 
 async function loadAppConfig() {
   lastAppConfig = await invoke<AppConfigPayload>("load_app_config");
+  applyAppTheme(normalizeAppTheme(lastAppConfig.theme));
   if (!lastAppConfig.configExists) {
     viewerState.isAppSettingsOpen = true;
     setAppSettingsStatus("Choose at least one library folder to get started.");
@@ -2081,6 +2098,7 @@ async function saveAppSettingsFromForm() {
     "#config-excluded-patterns",
   );
   const pdfRendererEl = document.querySelector<HTMLSelectElement>("#config-pdf-renderer");
+  const themeEl = document.querySelector<HTMLSelectElement>("#config-theme");
   const kindleEnabledEl = document.querySelector<HTMLInputElement>("#config-kindle-enabled");
 
   const libraryRoots = [...(lastAppConfig?.libraryRoots ?? [])];
@@ -2099,12 +2117,14 @@ async function saveAppSettingsFromForm() {
           libraryRoots,
           excludedPatternsEl?.value ?? "",
           pdfRendererEl?.value,
+          themeEl?.value,
           enabledExternalSources,
         ),
       },
     });
 
     lastAppConfig = payload;
+    applyAppTheme(payload.theme);
     const snapshot = await invoke<LibrarySnapshot>("library_snapshot");
     lastSnapshot = snapshot;
     viewerState.books = snapshot.books;
@@ -4586,6 +4606,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         libraryRoots: currentRoots,
         excludedPatterns: lastAppConfig?.excludedPatterns ?? [],
         pdfRenderer: lastAppConfig?.pdfRenderer ?? "native",
+        theme: lastAppConfig?.theme ?? "default",
         enabledExternalSources: lastAppConfig?.enabledExternalSources ?? ["kindle"],
       };
       syncAppSettingsUi();

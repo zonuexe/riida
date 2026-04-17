@@ -1464,7 +1464,11 @@ h1 {
   height: 102px;
   border-radius: 4px;
   object-fit: cover;
-  background: linear-gradient(180deg, rgb(var(--surface-rgb) / 0.95), rgb(var(--panel-gradient-end-rgb) / 0.9));
+  background: linear-gradient(
+    180deg,
+    rgb(var(--surface-rgb) / 0.95),
+    rgb(var(--panel-gradient-end-rgb) / 0.9)
+  );
   box-shadow: 0 10px 24px rgb(var(--shadow-rgb) / 0.12);
 }
 

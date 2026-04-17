@@ -31,13 +31,9 @@ describe("addLibraryRoot", () => {
 describe("buildAppConfigDraft", () => {
   test("builds a normalized draft from form values", () => {
     expect(
-      buildAppConfigDraft(
-        ["~/Books"],
-        " *.bak.pdf \n prefix_*\n",
-        "pdfjs",
-        "night-city",
-        ["kindle"],
-      ),
+      buildAppConfigDraft(["~/Books"], " *.bak.pdf \n prefix_*\n", "pdfjs", "night-city", [
+        "kindle",
+      ]),
     ).toEqual({
       libraryRoots: ["~/Books"],
       excludedPatterns: ["*.bak.pdf", "prefix_*"],

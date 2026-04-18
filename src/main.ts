@@ -3738,7 +3738,6 @@ async function renderCurrentPage() {
         height: "100%",
         spread,
         flow,
-        script: "/epub-link-bridge.js",
       });
 
       rendition.themes.default({

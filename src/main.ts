@@ -150,12 +150,7 @@ type AppConfigPayload = {
 };
 
 type ViewerSourceType = "pdf" | "epub";
-type ViewerBackgroundMode =
-  | "inherit-theme"
-  | "default"
-  | "snow-white"
-  | "night-city"
-  | "navy-blue";
+type ViewerBackgroundMode = "inherit-theme" | "default" | "snow-white" | "night-city" | "navy-blue";
 type ViewerColorPalette = {
   background: string;
   foreground: string;
@@ -419,7 +414,9 @@ function currentViewerSettingsSourceType(): ViewerSourceType | null {
   return normalizeViewerSourceType(currentBook.sourceType);
 }
 
-function resolveViewerThemeMode(backgroundMode: ViewerBackgroundMode): Exclude<ViewerBackgroundMode, "inherit-theme"> {
+function resolveViewerThemeMode(
+  backgroundMode: ViewerBackgroundMode,
+): Exclude<ViewerBackgroundMode, "inherit-theme"> {
   if (backgroundMode !== "inherit-theme") {
     return backgroundMode;
   }
@@ -767,6 +764,28 @@ async function loadEpubJs() {
 }
 
 const EPUB_PREVIEW_NOTICE_STORAGE_KEY = "riida.epub.previewNoticeShown";
+
+function epubLocationsStorageKey(filePath: string, fileSize: number): string {
+  return `riida:epub-locations:${fileSize}:${filePath}`;
+}
+
+function loadCachedEpubLocations(filePath: string, fileSize: number): string | null {
+  if (!filePath || !Number.isFinite(fileSize) || fileSize <= 0) return null;
+  try {
+    return window.localStorage.getItem(epubLocationsStorageKey(filePath, fileSize));
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedEpubLocations(filePath: string, fileSize: number, serialized: string) {
+  if (!filePath || !Number.isFinite(fileSize) || fileSize <= 0 || !serialized) return;
+  try {
+    window.localStorage.setItem(epubLocationsStorageKey(filePath, fileSize), serialized);
+  } catch {
+    // localStorage full or unavailable — skip caching.
+  }
+}
 
 async function maybeShowEpubPreviewNotice(): Promise<void> {
   try {
@@ -2414,8 +2433,7 @@ function syncViewerSettingsUi() {
 
   if (metadataOpenEl) {
     metadataOpenEl.hidden =
-      !viewerState.currentBook ||
-      (isViewerSettingsAvailable && !viewerSettings.isSettingsOpen);
+      !viewerState.currentBook || (isViewerSettingsAvailable && !viewerSettings.isSettingsOpen);
   }
 
   if (settingsPanelEl) {
@@ -3684,6 +3702,17 @@ async function renderCurrentPage() {
     pdfjsViewerEl.dataset.filePath = "";
     epubViewerEl.hidden = false;
     epubViewerEl.dataset.filePath = viewerState.currentBook.filePath;
+    epubViewerEl.innerHTML = "";
+    const epubLoadingEl = document.createElement("div");
+    epubLoadingEl.className = "epub-loading";
+    const epubLoadingSpinnerEl = document.createElement("div");
+    epubLoadingSpinnerEl.className = "epub-loading-spinner";
+    epubLoadingEl.appendChild(epubLoadingSpinnerEl);
+    const epubLoadingLabelEl = document.createElement("div");
+    epubLoadingLabelEl.className = "epub-loading-label";
+    epubLoadingLabelEl.textContent = "Loading EPUB...";
+    epubLoadingEl.appendChild(epubLoadingLabelEl);
+    epubViewerEl.appendChild(epubLoadingEl);
 
     epubRenderToken += 1;
     const currentToken = epubRenderToken;
@@ -3697,9 +3726,22 @@ async function renderCurrentPage() {
       activeEpubBook = book;
       await book.ready;
       if (currentToken !== epubRenderToken) return;
-      await book.locations.generate(1200);
-      if (currentToken !== epubRenderToken) return;
-      activeEpubTotalPages = Math.max(book.locations.length(), 1);
+
+      // Fast path: reuse previously-generated locations when the file
+      // hasn't changed. Falls back to background generation after display.
+      const locationsFilePath = viewerState.currentBook.filePath;
+      const locationsFileSize = viewerState.currentBook.fileSize;
+      const cachedLocations = loadCachedEpubLocations(locationsFilePath, locationsFileSize);
+      let locationsReady = false;
+      if (cachedLocations) {
+        try {
+          book.locations.load(cachedLocations);
+          activeEpubTotalPages = Math.max(book.locations.length(), 1);
+          locationsReady = true;
+        } catch (err) {
+          console.warn("[riida] failed to load cached EPUB locations:", err);
+        }
+      }
       syncViewerPageJumpUi();
 
       // Detect page-progression-direction for correct key mapping.
@@ -3733,6 +3775,18 @@ async function renderCurrentPage() {
         );
         doc.documentElement?.setAttribute("data-riida-section-index", String(section.index));
       });
+
+      // Ensure the viewer element has actually been laid out before
+      // creating the rendition. WKWebView occasionally reports 0 for
+      // clientWidth/clientHeight on the first frame after show; epub.js
+      // then locks the stage to 0x0 and never recovers. Poll up to ~20
+      // frames for a non-zero size so the stage starts at the right size.
+      for (let attempts = 0; attempts < 20; attempts += 1) {
+        if (epubViewerEl.clientWidth > 0 && epubViewerEl.clientHeight > 0) break;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        if (currentToken !== epubRenderToken) return;
+      }
+
       const rendition = book.renderTo(epubViewerEl, {
         width: "100%",
         height: "100%",
@@ -3823,7 +3877,43 @@ async function renderCurrentPage() {
       activeEpubRendition = rendition;
       applyViewerVerticalGapMode(viewerSettings.verticalGapMode);
       applyEpubViewerColors(viewerSettings.backgroundMode);
+
+      // Safety net: if the initial render ended up at zero dimensions
+      // (WKWebView can report 0 clientWidth/Height on first attach),
+      // force resize + redisplay before hiding the spinner. epub.js's
+      // own onResized only re-displays when rendition.location is set,
+      // which can fail to happen after a 0x0 initial render.
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (currentToken !== epubRenderToken) return;
+      const iframeEl = epubViewerEl.querySelector<HTMLIFrameElement>("iframe");
+      if (!iframeEl || iframeEl.clientWidth === 0 || iframeEl.clientHeight === 0) {
+        resizeEpubRendition();
+        try {
+          await rendition.display(restoreCfi);
+        } catch (err) {
+          console.warn("[riida] epub redisplay after resize failed:", err);
+        }
+        if (currentToken !== epubRenderToken) return;
+      }
+
       syncEpubLinkOverlays(rendition, book, epubViewerEl);
+      epubLoadingEl.remove();
+
+      // Slow path: compute pagination in the background so the first
+      // page renders immediately. Result is cached for next open.
+      if (!locationsReady) {
+        void (async () => {
+          try {
+            await book.locations.generate(1200);
+            if (currentToken !== epubRenderToken) return;
+            activeEpubTotalPages = Math.max(book.locations.length(), 1);
+            saveCachedEpubLocations(locationsFilePath, locationsFileSize, book.locations.save());
+            syncViewerPageJumpUi();
+          } catch (err) {
+            console.warn("[riida] failed to generate EPUB locations:", err);
+          }
+        })();
+      }
 
       rendition.on("relocated", (location: import("epubjs").Location) => {
         const cfi = location.start.cfi;
@@ -4689,8 +4779,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     "#viewer-vertical-gap-mode",
   );
   const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
-  const viewerBackgroundInheritEl =
-    document.querySelector<HTMLInputElement>("#viewer-background-inherit");
+  const viewerBackgroundInheritEl = document.querySelector<HTMLInputElement>(
+    "#viewer-background-inherit",
+  );
   const tagDirectOnlyEl = document.querySelector<HTMLInputElement>("#tag-direct-only");
   const noteDragHandleEl = document.querySelector<HTMLElement>("#note-drag-handle");
   const noteResizeEls = document.querySelectorAll<HTMLElement>(".note-resize-handle");
@@ -5057,11 +5148,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const rerenderPdfJs = () => {
     const sourceType = currentViewerSettingsSourceType();
     syncViewerSettingsUi();
-    if (
-      sourceType === "pdf" &&
-      lastSnapshot?.pdfRenderer === "pdfjs" &&
-      viewerState.currentBook
-    ) {
+    if (sourceType === "pdf" && lastSnapshot?.pdfRenderer === "pdfjs" && viewerState.currentBook) {
       void renderCurrentPage();
     }
   };
@@ -5158,13 +5245,16 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   viewerVerticalGapModeEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.verticalGapMode =
-          viewerVerticalGapModeEl.value as ViewerSettings["verticalGapMode"];
-      });
-      syncImmediateViewerLayoutPreview();
-    }, { rerenderPdf: false });
+    updateViewerSettings(
+      () => {
+        mutateEditingViewerSettings((preferences) => {
+          preferences.verticalGapMode =
+            viewerVerticalGapModeEl.value as ViewerSettings["verticalGapMode"];
+        });
+        syncImmediateViewerLayoutPreview();
+      },
+      { rerenderPdf: false },
+    );
   });
 
   viewerCoverModeEl?.addEventListener("change", () => {
@@ -5176,21 +5266,27 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   bindViewerBackgroundOptionGroup("viewer-background-mode", (value) => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.backgroundMode = value;
-      });
-    }, { rerenderPdf: false });
+    updateViewerSettings(
+      () => {
+        mutateEditingViewerSettings((preferences) => {
+          preferences.backgroundMode = value;
+        });
+      },
+      { rerenderPdf: false },
+    );
   });
 
   viewerBackgroundInheritEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.backgroundMode = viewerBackgroundInheritEl.checked
-          ? "inherit-theme"
-          : preferredExplicitViewerBackgroundMode(preferences.backgroundMode);
-      });
-    }, { rerenderPdf: false });
+    updateViewerSettings(
+      () => {
+        mutateEditingViewerSettings((preferences) => {
+          preferences.backgroundMode = viewerBackgroundInheritEl.checked
+            ? "inherit-theme"
+            : preferredExplicitViewerBackgroundMode(preferences.backgroundMode);
+        });
+      },
+      { rerenderPdf: false },
+    );
   });
 
   noteToggleEl?.addEventListener("click", () => {

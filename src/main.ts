@@ -513,9 +513,9 @@ function applyViewerVerticalGapMode(mode: ViewerSettings["verticalGapMode"]) {
   const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
   if (epubViewerEl) {
     epubViewerEl.dataset.verticalGap = mode;
-    epubViewerEl.style.setProperty("--viewer-extra-vertical-gap", `${extraGap}px`);
+    epubViewerEl.style.setProperty("--epub-vertical-gap", `${extraGap}px`);
     if (activeEpubRendition) {
-      resizeEpubRendition();
+      requestAnimationFrame(() => resizeEpubRendition());
     }
   }
 }

@@ -3738,6 +3738,7 @@ async function renderCurrentPage() {
         height: "100%",
         spread,
         flow,
+        allowScriptedContent: true,
       });
 
       rendition.themes.default({

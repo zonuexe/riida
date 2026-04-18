@@ -3198,9 +3198,12 @@ mod tests {
         )
         .expect("file preferences should save");
 
-        let payload =
-            load_viewer_preferences_payload(&connection, Some("/tmp/book.pdf"), VIEWER_SOURCE_TYPE_PDF)
-                .expect("payload should load");
+        let payload = load_viewer_preferences_payload(
+            &connection,
+            Some("/tmp/book.pdf"),
+            VIEWER_SOURCE_TYPE_PDF,
+        )
+        .expect("payload should load");
 
         assert_eq!(payload.global.binding_direction, "left");
         assert!(payload.uses_file_override);
@@ -3287,12 +3290,18 @@ mod tests {
         )
         .expect("epub preferences should save");
 
-        let pdf_payload =
-            load_viewer_preferences_payload(&connection, Some("/tmp/book.pdf"), VIEWER_SOURCE_TYPE_PDF)
-                .expect("pdf payload should load");
-        let epub_payload =
-            load_viewer_preferences_payload(&connection, Some("/tmp/book.epub"), VIEWER_SOURCE_TYPE_EPUB)
-                .expect("epub payload should load");
+        let pdf_payload = load_viewer_preferences_payload(
+            &connection,
+            Some("/tmp/book.pdf"),
+            VIEWER_SOURCE_TYPE_PDF,
+        )
+        .expect("pdf payload should load");
+        let epub_payload = load_viewer_preferences_payload(
+            &connection,
+            Some("/tmp/book.epub"),
+            VIEWER_SOURCE_TYPE_EPUB,
+        )
+        .expect("epub payload should load");
 
         assert_eq!(pdf_payload.global.background_mode, "default");
         assert_eq!(epub_payload.global.background_mode, "inherit-theme");

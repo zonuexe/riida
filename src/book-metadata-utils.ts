@@ -1,3 +1,5 @@
+import { Temporal } from "temporal-polyfill-lite";
+
 export type BookMetadataDraft = {
   title: string;
   authorsText: string;
@@ -58,6 +60,57 @@ export function joinMetadataAuthors(authors: string[]): string {
 
 function isLeapYear(year: number) {
   return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+// Supported input patterns beyond YYYY-MM-DD:
+// - Japanese: 2020年8月10日, 2020年08月10日
+// - slash/dot separators: 2020/08/10, 2020.08.10
+// - spaces around the value are trimmed
+// - anything else is attempted via Date.parse (local date parts used to avoid
+//   timezone shifts for inputs without an explicit offset)
+export function normalizeReleaseDateInput(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+
+  // Already valid YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+  // Try to extract year/month/day from known patterns, then let Temporal
+  // validate and format them (rejects out-of-range values like month 13).
+  const tryFromParts = (y: number, m: number, d: number): string | null => {
+    try {
+      return Temporal.PlainDate.from({ year: y, month: m, day: d }).toString();
+    } catch {
+      return null;
+    }
+  };
+
+  // Japanese date: 2020年8月10日
+  const jpMatch = /^(\d{4})年(\d{1,2})月(\d{1,2})日?$/.exec(trimmed);
+  if (jpMatch) {
+    return tryFromParts(Number(jpMatch[1]), Number(jpMatch[2]), Number(jpMatch[3])) ?? trimmed;
+  }
+
+  // Slash or dot separators: 2020/08/10, 2020.08.10
+  const sepMatch = /^(\d{4})[/.](\d{1,2})[/.](\d{1,2})$/.exec(trimmed);
+  if (sepMatch) {
+    return tryFromParts(Number(sepMatch[1]), Number(sepMatch[2]), Number(sepMatch[3])) ?? trimmed;
+  }
+
+  // Fallback: try Date.parse and extract local date parts if valid.
+  // Local parts are used because inputs without an explicit timezone (e.g.
+  // "Aug 10, 2020") are parsed as local midnight; UTC extraction would shift
+  // the date backwards in timezones east of UTC.
+  const ts = Date.parse(trimmed);
+  if (!Number.isNaN(ts)) {
+    const dt = new Date(ts);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const d = String(dt.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  return trimmed;
 }
 
 export function isValidMetadataReleaseDate(value: string): boolean {

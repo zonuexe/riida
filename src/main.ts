@@ -21,6 +21,7 @@ import {
   isBookMetadataDraftEmpty,
   joinMetadataAuthors,
   normalizeMetadataAuthorsText,
+  normalizeReleaseDateInput,
   parseBookMetadataImport,
   validateBookMetadataDraft,
 } from "./book-metadata-utils";
@@ -2078,11 +2079,7 @@ async function openBookMetadataEditor(book: BookSummary) {
     syncBookMetadataEditorUi();
 
     // Auto-import OPF metadata when the book has no saved title or authors.
-    if (
-      book.sourceType === "epub" &&
-      !payload.title.trim() &&
-      payload.authors.length === 0
-    ) {
+    if (book.sourceType === "epub" && !payload.title.trim() && payload.authors.length === 0) {
       await importMetadataFromEpub(book.filePath, loadToken);
     }
   } catch (error) {
@@ -5269,6 +5266,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
   bookMetadataReleaseDateEl?.addEventListener("input", () => {
     bookMetadataEditorState.releaseDate = bookMetadataReleaseDateEl.value;
+  });
+  bookMetadataReleaseDateEl?.addEventListener("blur", () => {
+    const normalized = normalizeReleaseDateInput(bookMetadataReleaseDateEl.value);
+    if (normalized !== bookMetadataReleaseDateEl.value) {
+      bookMetadataReleaseDateEl.value = normalized;
+      bookMetadataEditorState.releaseDate = normalized;
+    }
   });
   bookMetadataLanguageEl?.addEventListener("input", () => {
     bookMetadataEditorState.language = bookMetadataLanguageEl.value;

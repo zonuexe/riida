@@ -6,6 +6,7 @@ import {
   isValidMetadataReleaseDate,
   joinMetadataAuthors,
   normalizeMetadataAuthorsText,
+  normalizeReleaseDateInput,
   parseBookMetadataImport,
   validateBookMetadataDraft,
 } from "./book-metadata-utils";
@@ -23,6 +24,45 @@ describe("normalizeMetadataAuthorsText", () => {
 describe("joinMetadataAuthors", () => {
   test("joins authors using newlines", () => {
     expect(joinMetadataAuthors(["Alice", "Bob"])).toBe("Alice\nBob");
+  });
+});
+
+describe("normalizeReleaseDateInput", () => {
+  test("returns empty string unchanged", () => {
+    expect(normalizeReleaseDateInput("")).toBe("");
+    expect(normalizeReleaseDateInput("  ")).toBe("");
+  });
+
+  test("trims whitespace around a valid YYYY-MM-DD value", () => {
+    expect(normalizeReleaseDateInput("  2020-08-10  ")).toBe("2020-08-10");
+  });
+
+  test("leaves already-valid YYYY-MM-DD unchanged", () => {
+    expect(normalizeReleaseDateInput("2020-08-10")).toBe("2020-08-10");
+  });
+
+  test("converts Japanese date format", () => {
+    expect(normalizeReleaseDateInput("2020年8月10日")).toBe("2020-08-10");
+    expect(normalizeReleaseDateInput("2020年08月10日")).toBe("2020-08-10");
+    expect(normalizeReleaseDateInput("2020年8月10")).toBe("2020-08-10");
+  });
+
+  test("converts slash-separated date", () => {
+    expect(normalizeReleaseDateInput("2020/8/10")).toBe("2020-08-10");
+    expect(normalizeReleaseDateInput("2020/08/10")).toBe("2020-08-10");
+  });
+
+  test("converts dot-separated date", () => {
+    expect(normalizeReleaseDateInput("2020.08.10")).toBe("2020-08-10");
+  });
+
+  test("falls back to Date.parse for other recognizable formats", () => {
+    expect(normalizeReleaseDateInput("Aug 10, 2020")).toBe("2020-08-10");
+    expect(normalizeReleaseDateInput("2020-08-10T00:00:00Z")).toBe("2020-08-10");
+  });
+
+  test("returns unrecognized input trimmed but otherwise unchanged", () => {
+    expect(normalizeReleaseDateInput("  hello  ")).toBe("hello");
   });
 });
 

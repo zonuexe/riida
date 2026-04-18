@@ -6,11 +6,11 @@
 
 ### 高優先度
 
-- [ ] 内部 `#anchor` リンクをページ番号ジャンプへ置換してレイアウト破壊を回避
+- [x] 内部 `#anchor` リンクをページ番号ジャンプへ置換してレイアウト破壊を回避
   - `book.locations.cfiFromHref(href)` で CFI を取得し `rendition.display(cfi)` に置き換える
   - epub.js の `replaceLinks` より前に処理する必要あり
 - [x] 固定レイアウト (pre-paginated) を OPF から検出して `flow`/`spread` を切り替え
-- [ ] 外部リンク (`https://`, `mailto:`) を Tauri Rust 側の `on_navigation` ハンドラで開く
+- [x] 外部リンク (`https://`, `mailto:`) を Tauri Rust 側の `on_navigation` ハンドラで開く
   - クロスフレーム JS では解決できないことが確認済み（AGENTS.md 参照）
 
 ### 中優先度

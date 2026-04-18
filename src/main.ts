@@ -188,6 +188,7 @@ type ViewerSettingsState = ViewerSettings & {
 type NavigationState = {
   historyIndex: number;
   bookFilePath: string | null;
+  epubCfi?: string | null;
   activeDirectory: string | null;
   activeTag: string | null;
   activeExternalSource: string | null;
@@ -2861,6 +2862,7 @@ function currentNavigationState(): NavigationState {
   return {
     historyIndex: navigationHistoryIndex,
     bookFilePath: viewerState.currentBook?.filePath ?? null,
+    epubCfi: activeReadingPosition?.cfi ?? null,
     activeDirectory: viewerState.activeDirectory,
     activeTag: viewerState.activeTag,
     activeExternalSource: viewerState.activeExternalSource,
@@ -2963,6 +2965,18 @@ async function applyNavigationState(state: NavigationState) {
   ensureExpandedTag(state.activeTag);
 
   if (nextBook) {
+    // Fast path: same EPUB book already rendered — jump directly via CFI
+    // to avoid destroying and re-creating the rendition.
+    if (
+      state.epubCfi &&
+      nextBook.filePath === viewerState.currentBook?.filePath &&
+      nextBook.sourceType === "epub" &&
+      activeEpubRendition
+    ) {
+      await activeEpubRendition.display(state.epubCfi);
+      return;
+    }
+
     await openBook(nextBook, { updateHistory: "none" });
     return;
   }
@@ -3593,6 +3607,42 @@ function installEpubLinkBridge(contents: import("epubjs").Contents, filePath: st
   doc.documentElement.dataset.riidaSectionIndex = String(contents.sectionIndex);
 }
 
+function captureEpubCfiForHistory(rendition: import("epubjs").Rendition) {
+  try {
+    const loc = rendition.location as { start?: { cfi?: string } } | null;
+    const cfi = loc?.start?.cfi;
+    if (cfi && activeReadingPosition) {
+      activeReadingPosition = { ...activeReadingPosition, cfi };
+    }
+  } catch {
+    // rendition may not have a location yet; skip silently
+  }
+}
+
+async function epubDisplayHref(
+  book: import("epubjs").Book,
+  rendition: import("epubjs").Rendition,
+  target: string,
+) {
+  // Prefer CFI-based navigation to avoid paginated-layout breakage on anchor
+  // jumps. epub.js's rendition.display(href) can reset the paginator to a
+  // single-page view when the href contains a fragment; going through CFI
+  // preserves the spread/paginated flow.
+  try {
+    const bookLocations = book.locations as unknown as {
+      cfiFromHref?: (href: string) => string | null;
+    };
+    const cfi = bookLocations.cfiFromHref?.(target);
+    if (cfi) {
+      await rendition.display(cfi);
+      return;
+    }
+  } catch {
+    // fall through to plain href display
+  }
+  await rendition.display(target);
+}
+
 function syncEpubLinkOverlays(
   rendition: import("epubjs").Rendition,
   book: import("epubjs").Book,
@@ -3657,7 +3707,9 @@ function syncEpubLinkOverlays(
           void openUrl(action.target);
           return;
         }
-        void rendition.display(action.target);
+        captureEpubCfiForHistory(rendition);
+        syncNavigationHistory("push");
+        void epubDisplayHref(book, rendition, action.target);
       });
       overlayRoot.appendChild(overlay);
     }
@@ -3866,7 +3918,9 @@ async function renderCurrentPage() {
           return;
         }
 
-        void rendition.display(action.target);
+        captureEpubCfiForHistory(rendition);
+        syncNavigationHistory("push");
+        void epubDisplayHref(book, rendition, action.target);
       };
       window.addEventListener("message", activeEpubLinkMessageHandler);
 

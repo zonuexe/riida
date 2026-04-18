@@ -1,6 +1,7 @@
 export type NavigationStateLike = {
   historyIndex: number;
   bookFilePath: string | null;
+  epubCfi?: string | null;
   activeDirectory: string | null;
   activeTag: string | null;
   activeExternalSource: string | null;
@@ -11,6 +12,7 @@ export type NavigationStateLike = {
 export function navigationStateSignature(state: NavigationStateLike) {
   return JSON.stringify({
     bookFilePath: state.bookFilePath,
+    epubCfi: state.epubCfi ?? null,
     activeDirectory: state.activeDirectory,
     activeTag: state.activeTag,
     activeExternalSource: state.activeExternalSource,

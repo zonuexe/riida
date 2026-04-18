@@ -43,6 +43,10 @@ For macOS builds, the current default is ad-hoc signing via
 This is intended for local verification and CI smoke testing only.
 Public distribution still requires proper Apple signing and notarization.
 
+## Design System
+
+UI implementation references [DESIGN.md](DESIGN.md) for visual language, color roles, typography, and component patterns.
+
 ## Architecture
 
 `riida` is a Tauri v2 desktop app with:

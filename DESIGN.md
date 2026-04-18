@@ -1,0 +1,441 @@
+# riida DESIGN.md
+
+This file documents the current visual design system and UI language for `riida`.
+
+It is intentionally design-facing, not architecture-facing. The previous repository document named `DESIGN.md` now lives at [docs/design-doc.md](docs/design-doc.md).
+
+## Overview
+
+`riida` is a desktop reading and library-management app with a warm, editorial visual language. The default appearance should feel closer to a paper-and-wood reading room than to a generic productivity dashboard.
+
+The UI is built around:
+
+- a two-pane shell with a persistent sidebar and a document-focused main stage
+- translucent panels layered over a themed atmospheric background
+- soft serif typography for the app chrome
+- rounded controls with gentle blur and shadow
+- subdued, tactile interaction states instead of loud high-contrast marketing styling
+
+When generating new screens or extending the interface, preserve the sense that the app is for reading first and administration second.
+
+## Design Principles
+
+### 1. Reading-first calm
+
+Even utility screens should support a contemplative reading mood. Prefer restrained motion, soft surfaces, and generous padding over dense dashboard layouts.
+
+### 2. Editorial, not corporate
+
+The app shell uses serif typography and warm materials. Avoid generic SaaS visual language, harsh grids, or overly technical-looking chrome.
+
+### 3. Floating glass over material background
+
+Most surfaces are translucent or semi-translucent panels on top of a rich background gradient. New primary containers should usually feel like frosted cards, pills, or sheets rather than flat rectangles.
+
+### 4. Rounded, touch-friendly geometry
+
+Controls are highly rounded. Circular and pill-shaped actions are preferred for overlays and navigation. Large panels use softer radii with subtle depth.
+
+### 5. Theme-driven consistency
+
+The same component rules apply across all themes. Themes should change mood and material, not layout logic or hierarchy.
+
+## Theme System
+
+The app currently supports four themes. New UI should consume semantic theme roles, not hard-code colors.
+
+### Theme names and symbols
+
+- `default`
+- `snow-white`
+- `night-city`
+- `navy-blue`
+
+### Theme application rules
+
+- Persist the selected theme in config and mirror it to `localStorage` under `riida.appTheme`.
+- Apply the cached theme before the main stylesheet-driven UI becomes visible.
+- Use `color-scheme: light` for `default` and `snow-white`.
+- Use `color-scheme: dark` for `night-city` and `navy-blue`.
+
+### Default theme
+
+Creative direction: warm library, parchment, sepia, late-afternoon sunlight.
+
+Core colors:
+
+- Background start: `#f5ecd7`
+- Background mid: `#efe2c4`
+- Background end: `#e3d0aa`
+- Background glow: `rgb(255 244 214)`
+- Primary ink: `rgb(31 27 22)`
+- Accent: `rgb(125 78 33)`
+- Accent soft: `rgb(183 121 61)`
+- Border: `rgb(96 70 33)`
+- Panel: `rgb(255 250 240)`
+- Surface: `rgb(255 255 255)`
+- Sidebar material: `rgb(246 233 203)`
+- Shadow: `rgb(74 44 18)`
+- Danger: `rgb(161 62 43)`
+- Success: `rgb(46 107 66)`
+- Focus selection: `rgb(0 90 255)`
+
+### Snow White theme
+
+Creative direction: macOS-inspired paper white, soft silver, quiet blue emphasis.
+
+Core colors:
+
+- Background start: `#f5f5f7`
+- Background mid: `#ececf1`
+- Background end: `#e1e3ea`
+- Primary ink: `rgb(34 34 38)`
+- Accent: `rgb(0 122 255)`
+- Accent soft: `rgb(87 168 255)`
+- Border: `rgb(60 60 67)`
+- Panel and surface: `rgb(255 255 255)`
+- Sidebar material: `rgb(245 245 247)`
+- Shadow: `rgb(24 24 28)`
+
+### Night City theme
+
+Creative direction: macOS-inspired dark mode, graphite glass, electric blue highlights.
+
+Core colors:
+
+- Background start: `#1c1c1e`
+- Background mid: `#151618`
+- Background end: `#101114`
+- Background glow: `rgb(53 84 140)`
+- Primary ink: `rgb(242 242 247)`
+- Accent: `rgb(10 132 255)`
+- Accent soft: `rgb(94 178 255)`
+- Border: `rgb(99 99 102)`
+- Panel: `rgb(44 44 46)`
+- Surface: `rgb(58 58 60)`
+- Sidebar material: `rgb(32 32 34)`
+- Shadow/backdrop: near-black
+
+### Navy Blue theme
+
+Creative direction: deep blue study, maritime night, luminous blue accents.
+
+Core colors:
+
+- Background start: `#0d1b2a`
+- Background mid: `#10233a`
+- Background end: `#18314f`
+- Background glow: `rgb(57 89 135)`
+- Primary ink: `rgb(229 237 247)`
+- Accent: `rgb(118 171 255)`
+- Accent soft: `rgb(164 200 255)`
+- Border: `rgb(77 107 145)`
+- Panel: `rgb(18 31 49)`
+- Surface: `rgb(28 43 63)`
+- Sidebar material: `rgb(16 29 46)`
+- Shadow/backdrop: `rgb(4 10 20)` and `rgb(3 8 18)`
+
+## Semantic Color Roles
+
+Use these roles when describing or implementing new UI:
+
+- `ink`: primary text and icon color
+- `accent`: primary interactive emphasis, selected actions, links, large stats
+- `accent-soft`: softer brand highlight when a lighter accent is needed
+- `border`: outlines, separators, control strokes
+- `panel`: frosted cards, sheets, pills, overlay containers
+- `surface`: denser input and content surfaces inside panels
+- `sidebar`: the left navigation material
+- `backdrop`: modal scrim and heavy shadow color
+- `danger`: destructive actions and validation errors
+- `success`: success messages
+- `focus`: selection and text selection highlight
+
+## Typography
+
+### Primary family
+
+Use:
+
+- `"Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif`
+
+This is the default shell typeface and should remain the primary voice for headings, navigation, labels, and interface copy unless a very strong reason exists to do otherwise.
+
+### Monospace family
+
+Use:
+
+- `"SF Mono", "Menlo", "Monaco", monospace`
+
+Apply to code snippets, path displays, raw license text, and machine-like content.
+
+### Type scale
+
+Current recurring sizes:
+
+- App brand / hero title: `clamp(2rem, 4vw, 3.2rem)`, tight line height, negative letter spacing
+- Major modal title: `1.8rem`
+- Large stat number: `clamp(2.5rem, 6vw, 4rem)`, bold
+- Section titles: around `1.1rem`
+- Default body: browser base `16px`
+- Small utility copy: `0.88rem` to `0.95rem`
+- Kicker / eyebrow labels: `0.78rem` to `0.82rem`, uppercase, wide tracking
+- Tiny metadata / tags / overlays: `0.72rem` to `0.84rem`
+
+### Typography rules
+
+- Prefer weight and spacing changes over multiple font families.
+- Use uppercase tracked labels sparingly for chrome, not for long-form content.
+- Avoid condensed all-caps headings for the main reading experience.
+- Preserve generous line-height for prose-like or explanatory UI copy.
+
+## Layout and Spacing
+
+### App shell
+
+- Two-column layout
+- Sidebar width: `280px`
+- Main pane padding: `20px 28px 32px`
+- Sidebar padding: `32px 20px 24px`
+
+### Grid and spacing rhythm
+
+Frequent spacing values:
+
+- `4px`, `6px`, `8px`, `10px`, `12px`, `14px`, `16px`, `18px`, `20px`, `24px`, `28px`, `32px`
+
+Use these as the core spacing scale. New custom gaps should be rare.
+
+### Responsive behavior
+
+- At narrower widths, the two-pane layout collapses to a single column.
+- Metadata editor grids collapse from two columns to one.
+- Tag editor add rows collapse vertically on small screens.
+
+## Radius, Blur, and Depth
+
+### Radius system
+
+- Tiny controls: `4px` to `8px`
+- Inputs and small chips: `12px` to `14px`
+- Cards and rows: `16px` to `24px`
+- Pills and floating action controls: `999px`
+- Modals: `26px`
+
+### Blur
+
+Blur is part of the design language.
+
+- Primary panels: around `blur(10px)`
+- Modals: around `blur(6px)` scrim plus translucent dialog background
+- Floating note panel: heavier blur around `18px`
+
+### Shadows
+
+Shadows should feel soft and material, not harsh or high-contrast.
+
+Common levels:
+
+- Small floating controls: `0 8px 18px`
+- Primary panels: `0 20px 40px`
+- Floating note sheet: `0 24px 56px`
+- Modal dialog: `0 28px 80px`
+
+## Core Components
+
+### Sidebar
+
+Pattern:
+
+- Semi-translucent material panel
+- Vertical stack of brand, actions, search, and tree navigation
+- Rounded utility buttons
+- Nested directory or section rows with subtle indentation
+
+Behavior:
+
+- Collapses by sliding away rather than hard disappearing
+- Active rows use a translucent accent fill
+- Search is pill-shaped and embedded in the sidebar tool stack
+
+### Panels
+
+Pattern:
+
+- Frosted card with `24px` radius
+- Semi-transparent panel background
+- 1px soft border
+- Medium atmospheric shadow
+
+Use for:
+
+- Home stats
+- Main library container
+- Any new summary or settings-like content block
+
+### Buttons
+
+Primary button:
+
+- Pill shape
+- Strong accent fill
+- Light text
+- Used for confirm / save / done actions
+
+Secondary button:
+
+- Pill shape
+- Bordered translucent panel fill
+- Neutral or ink-colored text
+- Used for cancel, add, alternate actions
+
+Danger button:
+
+- Pill shape
+- Light danger tint with danger text and border
+- Use only for destructive actions
+
+Icon buttons:
+
+- Circular or capsule floating chrome
+- Semi-translucent panel fill
+- Used for viewer overlay actions, nav arrows, sidebar collapse
+
+### Inputs
+
+Pattern:
+
+- Rounded `12px` to `14px`
+- 1px border
+- Surface fill
+- Typography inherits from the app shell
+
+Search fields:
+
+- Usually pill-shaped for global or library search
+- Compact rectangular capsule for PDF in-document search
+
+### Modal dialogs
+
+Pattern:
+
+- Centered frosted sheet with heavy radius
+- Backdrop blur + dim scrim
+- Clear header / scrollable body / footer action bar
+
+Voice:
+
+- Feels like a desktop sheet, not a web marketing modal
+
+### Viewer overlay controls
+
+Pattern:
+
+- Float above the reading stage
+- Keep compact and unobtrusive
+- Use pills for labeled actions, circles for utility toggles
+
+### Viewer settings panel
+
+Pattern:
+
+- Small floating settings sheet on the reading stage
+- Grid layout
+- Two tabs for global vs file scope
+- File scope uses a stronger tinted background
+
+### Library rows
+
+Pattern:
+
+- Book thumbnail on the left, metadata stack on the right
+- Rounded row hit target
+- Bottom divider between rows
+- Title shifts to accent on hover/focus
+- Selected row uses a subtle accent wash
+
+Thumbnail rules:
+
+- `72 × 102`
+- `4px` radius
+- Paper-like gradient if no real cover is visible
+
+### Tags and chips
+
+Pattern:
+
+- Small rounded capsules
+- Accent-tinted fill
+- Ink-colored text
+- Low visual weight compared with primary actions
+
+### Floating notes
+
+Pattern:
+
+- Draggable, resizable, translucent floating sheet
+- Low-opacity resting state, high-opacity on hover/focus
+- Feels like a lightweight desktop note window rather than a rigid side panel
+
+### Reading stage
+
+Pattern:
+
+- Large soft container with muted tinted background
+- Main content centered and elevated
+- PDF pages and search UI should sit inside this frame without breaking its calm visual hierarchy
+
+## Motion and Interaction
+
+- Use short, quiet transitions, typically around `120ms` to `180ms`
+- Favor opacity, transform, background-color, border-color, and shadow changes
+- Avoid springy or decorative motion
+- Motion should help the UI feel alive but never distract from reading
+
+## States
+
+### Hover
+
+- Usually lighten panel opacity or increase accent emphasis
+- Keep hover subtle
+
+### Active / selected
+
+- Use soft accent tints instead of solid fills where possible
+- Selected items should feel highlighted, not button-pressed
+
+### Disabled
+
+- Lower opacity rather than inventing a new palette
+
+### Error / success
+
+- Use semantic colors directly
+- Keep status messages understated and inline when possible
+
+## Do
+
+- Describe styles with both mood and exact values
+- Reuse the semantic color roles above
+- Keep panels translucent and rounded
+- Preserve serif-driven editorial tone in the app shell
+- Keep reader overlays compact and respectful of content
+- Use pills, circles, and soft rectangles instead of sharp boxes
+- Design new features so they feel like part of a desktop reading tool, not a generic admin app
+
+## Don’t
+
+- Don’t introduce default system sans-serif as the main shell voice
+- Don’t flatten the app into plain white rectangles
+- Don’t use overly saturated destructive reds or neon accents
+- Don’t replace blur-and-material layering with hard opaque slabs unless the component truly needs it
+- Don’t make primary actions square-cornered
+- Don’t crowd the reading stage with persistent heavy chrome
+- Don’t create a new visual language per theme; themes should stay structurally identical
+
+## Implementation Notes
+
+- The current source of truth for visual tokens is [src/styles.css](/Users/megurine/repo/rust/riida/src/styles.css).
+- The shell structure and major component regions live in [index.html](/Users/megurine/repo/rust/riida/index.html).
+- Theme persistence and early application behavior live in [src/main.ts](/Users/megurine/repo/rust/riida/src/main.ts).
+- When updating the visual language, update this file alongside token or component changes so AI and humans stay aligned.

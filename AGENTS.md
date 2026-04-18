@@ -226,9 +226,9 @@ If and when this is picked up again, worth trying in order:
 - Re-evaluate whether a different EPUB library (e.g. `foliate-js`)
   behaves better in WKWebView.
 
-Do not use Claude Preview tools (`mcp__Claude_Preview__*`) to verify
-link behavior — a plain browser preview does not reproduce the Tauri
-runtime environment where these failures occur.
+Refer to CLAUDE.md: Claude Preview does not reflect the Tauri runtime
+environment. Link behavior verification requires testing in the actual
+Tauri app.
 
 ## Navigation Notes
 

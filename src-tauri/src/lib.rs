@@ -1918,6 +1918,137 @@ fn epub_cover_item_path(
         .ok_or_else(|| "no cover image found in OPF manifest".to_string())
 }
 
+/// Extracted Dublin Core metadata from an OPF manifest.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EpubMetadataPayload {
+    title: String,
+    authors: Vec<String>,
+    description: String,
+    publisher: String,
+    release_date: String,
+    language: String,
+}
+
+/// Parse OPF Dublin Core metadata from an EPUB archive.
+///
+/// Authors are collected from `<dc:creator>` elements where the `opf:role`
+/// attribute is absent or equal to `aut`. Other roles (illustrator, editor,
+/// translator, …) are skipped so that the authors list reflects only the
+/// book's primary authorship.
+fn epub_extract_opf_metadata(
+    archive: &mut ZipArchive<fs::File>,
+    opf_path: &str,
+) -> Result<EpubMetadataPayload, String> {
+    let bytes = read_zip_entry(archive, opf_path)?;
+    let xml = String::from_utf8_lossy(&bytes);
+    let mut reader = XmlReader::from_str(xml.as_ref());
+    reader.config_mut().trim_text(true);
+
+    let mut title = String::new();
+    let mut authors: Vec<String> = Vec::new();
+    let mut description = String::new();
+    let mut publisher = String::new();
+    let mut release_date = String::new();
+    let mut language = String::new();
+
+    // State machine: track which DC element we are inside.
+    #[derive(PartialEq)]
+    enum State {
+        None,
+        Title,
+        Creator { role: Option<String> },
+        Description,
+        Publisher,
+        Date,
+        Language,
+    }
+    let mut state = State::None;
+
+    loop {
+        match reader.read_event() {
+            Ok(XmlEvent::Start(ref e)) => {
+                let local = e.local_name();
+                match local.as_ref() {
+                    b"title" if state == State::None => state = State::Title,
+                    b"creator" if state == State::None => {
+                        // opf:role or role attribute decides authorship.
+                        let role = e.attributes().flatten().find_map(|attr| {
+                            let key = attr.key.local_name();
+                            if key.as_ref() == b"role" {
+                                Some(String::from_utf8_lossy(&attr.value).into_owned())
+                            } else {
+                                None
+                            }
+                        });
+                        state = State::Creator { role };
+                    }
+                    b"description" if state == State::None => state = State::Description,
+                    b"publisher" if state == State::None => state = State::Publisher,
+                    b"date" if state == State::None => state = State::Date,
+                    b"language" if state == State::None => state = State::Language,
+                    _ => {}
+                }
+            }
+            Ok(XmlEvent::Text(ref e)) => {
+                let text = String::from_utf8_lossy(e.as_ref()).trim().to_string();
+                if text.is_empty() {
+                    continue;
+                }
+                match &state {
+                    State::Title => {
+                        if title.is_empty() {
+                            title = text;
+                        }
+                    }
+                    State::Creator { role } => {
+                        let role_str = role.as_deref().unwrap_or("").to_ascii_lowercase();
+                        if role_str.is_empty() || role_str == "aut" {
+                            authors.push(text);
+                        }
+                    }
+                    State::Description => {
+                        if description.is_empty() {
+                            description = text;
+                        }
+                    }
+                    State::Publisher => {
+                        if publisher.is_empty() {
+                            publisher = text;
+                        }
+                    }
+                    State::Date => {
+                        if release_date.is_empty() {
+                            // Normalize to YYYY-MM-DD when possible.
+                            release_date = text.get(..10).unwrap_or(&text).to_string();
+                        }
+                    }
+                    State::Language => {
+                        if language.is_empty() {
+                            language = text;
+                        }
+                    }
+                    State::None => {}
+                }
+            }
+            Ok(XmlEvent::End(_)) => {
+                state = State::None;
+            }
+            Ok(XmlEvent::Eof) | Err(_) => break,
+            _ => {}
+        }
+    }
+
+    Ok(EpubMetadataPayload {
+        title,
+        authors,
+        description,
+        publisher,
+        release_date,
+        language,
+    })
+}
+
 /// Extract the cover image from an EPUB file and write it to `output_dir` as
 /// `thumbnail.jpg`. PNG and other non-JPEG formats are converted via `sips`
 /// (macOS). Returns the path of the written thumbnail.
@@ -2259,6 +2390,18 @@ fn save_book_tags(file_path: String, tags: Vec<String>) -> Result<BookTagsPayloa
         file_path,
         tags: normalized,
     })
+}
+
+#[tauri::command]
+fn extract_epub_metadata(file_path: String) -> Result<EpubMetadataPayload, String> {
+    let epub_path = PathBuf::from(&file_path);
+    if !is_epub_file(&epub_path) {
+        return Err("not an EPUB file".to_string());
+    }
+    let file = fs::File::open(&epub_path).map_err(|e| e.to_string())?;
+    let mut archive = ZipArchive::new(file).map_err(|e| e.to_string())?;
+    let opf_path = epub_opf_path(&mut archive)?;
+    epub_extract_opf_metadata(&mut archive, &opf_path)
 }
 
 #[tauri::command]
@@ -2824,6 +2967,7 @@ pub fn run() {
             load_note,
             save_note,
             save_book_tags,
+            extract_epub_metadata,
             load_book_metadata,
             save_book_metadata,
             delete_book_metadata,

@@ -587,7 +587,18 @@
           </button>
         </div>
         <div class="app-settings-body">
-          <p id="book-metadata-book" class="app-settings-path"></p>
+          <div class="metadata-book-row">
+            <p id="book-metadata-book" class="app-settings-path"></p>
+            <button
+              id="book-metadata-epub-import"
+              class="app-settings-secondary metadata-epub-import-btn"
+              type="button"
+              hidden
+            >
+              <i class="fa-solid fa-file-import" aria-hidden="true"></i>
+              Import from EPUB
+            </button>
+          </div>
           <label class="app-settings-field">
             <span>Title</span>
             <input id="book-metadata-title" type="text" maxlength="300" />

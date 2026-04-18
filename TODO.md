@@ -23,7 +23,7 @@
 
 ### 低優先度
 
-- [ ] EPUB メタデータ自動取込（複数 `<dc:creator>` + `opf:role` 対応）
+- [x] EPUB メタデータ自動取込（複数 `<dc:creator>` + `opf:role` 対応）
 - [ ] 画像タップでオーバーレイ拡大表示（EPUB / PDF 両対応）
 - [ ] EPUB 内 WebP 画像のキャッシュ・処理パイプライン対応
 

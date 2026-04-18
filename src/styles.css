@@ -1847,6 +1847,24 @@ h1 {
   color: var(--accent);
 }
 
+.metadata-book-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.metadata-book-row .app-settings-path {
+  flex: 1;
+  min-width: 0;
+}
+
+.metadata-epub-import-btn {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  padding: 5px 12px;
+}
+
 .metadata-editor-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

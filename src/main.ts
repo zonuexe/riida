@@ -1857,6 +1857,7 @@ function syncBookMetadataEditorUi() {
   const importEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-import");
   const exampleEl = document.querySelector<HTMLElement>("#book-metadata-import-example");
   const deleteEl = document.querySelector<HTMLButtonElement>("#book-metadata-delete");
+  const epubImportEl = document.querySelector<HTMLButtonElement>("#book-metadata-epub-import");
 
   if (modalEl) {
     modalEl.hidden = !bookMetadataEditorState.isOpen;
@@ -1903,6 +1904,9 @@ function syncBookMetadataEditorUi() {
     deleteEl.textContent =
       bookMetadataEditorState.sourceType === "pdf" ? "Clear metadata" : "Delete book";
   }
+  if (epubImportEl) {
+    epubImportEl.hidden = bookMetadataEditorState.sourceType !== "epub";
+  }
 }
 
 function updateBookTagsInState(filePath: string, tags: string[]) {
@@ -1941,6 +1945,53 @@ function populateBookMetadataEditor(book: BookSummary, metadata: BookMetadataPay
   bookMetadataEditorState.url = metadata.url;
   bookMetadataEditorState.asin = metadata.asin;
   bookMetadataEditorState.coverUrl = metadata.coverUrl;
+}
+
+type EpubMetadataPayload = {
+  title: string;
+  authors: string[];
+  description: string;
+  publisher: string;
+  releaseDate: string;
+  language: string;
+};
+
+async function importMetadataFromEpub(
+  filePath: string,
+  loadToken: number,
+  { overwriteNonEmpty = false } = {},
+) {
+  setBookMetadataStatus("Importing from EPUB...");
+  syncBookMetadataEditorUi();
+  try {
+    const epub = await invoke<EpubMetadataPayload>("extract_epub_metadata", { filePath });
+    if (bookMetadataEditorState.loadToken !== loadToken) return;
+
+    const draft = buildBookMetadataDraftFromForm();
+    if (epub.title && (overwriteNonEmpty || !draft.title.trim())) {
+      bookMetadataEditorState.title = epub.title;
+    }
+    if (epub.authors.length > 0 && (overwriteNonEmpty || !draft.authorsText.trim())) {
+      bookMetadataEditorState.authorsText = joinMetadataAuthors(epub.authors);
+    }
+    if (epub.description && (overwriteNonEmpty || !draft.description.trim())) {
+      bookMetadataEditorState.description = epub.description;
+    }
+    if (epub.publisher && (overwriteNonEmpty || !draft.publisher.trim())) {
+      bookMetadataEditorState.publisher = epub.publisher;
+    }
+    if (epub.releaseDate && (overwriteNonEmpty || !draft.releaseDate.trim())) {
+      bookMetadataEditorState.releaseDate = epub.releaseDate;
+    }
+    if (epub.language && (overwriteNonEmpty || !draft.language.trim())) {
+      bookMetadataEditorState.language = epub.language;
+    }
+    setBookMetadataStatus("");
+    syncBookMetadataEditorUi();
+  } catch (err) {
+    if (bookMetadataEditorState.loadToken !== loadToken) return;
+    setBookMetadataStatus(`EPUB import failed: ${String(err)}`, "error");
+  }
 }
 
 function openNewKindleBookEditor() {
@@ -2025,6 +2076,15 @@ async function openBookMetadataEditor(book: BookSummary) {
     populateBookMetadataEditor(book, payload);
     setBookMetadataStatus("");
     syncBookMetadataEditorUi();
+
+    // Auto-import OPF metadata when the book has no saved title or authors.
+    if (
+      book.sourceType === "epub" &&
+      !payload.title.trim() &&
+      payload.authors.length === 0
+    ) {
+      await importMetadataFromEpub(book.filePath, loadToken);
+    }
   } catch (error) {
     if (bookMetadataEditorState.loadToken !== loadToken) {
       return;
@@ -5184,6 +5244,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   bookMetadataDeleteEl?.addEventListener("click", () => {
     void deleteBookMetadataChanges();
   });
+  document
+    .querySelector<HTMLButtonElement>("#book-metadata-epub-import")
+    ?.addEventListener("click", () => {
+      const { filePath, loadToken } = bookMetadataEditorState;
+      if (!filePath) return;
+      void importMetadataFromEpub(filePath, loadToken, { overwriteNonEmpty: true });
+    });
   bookMetadataImportApplyEl?.addEventListener("click", importBookMetadataFromJson);
   bookMetadataImportEl?.addEventListener("input", () => {
     bookMetadataEditorState.importText = bookMetadataImportEl.value;

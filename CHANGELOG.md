@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-18
+
+### Added
+
+- Viewer background colors: inherit the app theme or pick explicit palettes for reading (PDF.js and EPUB).
+- EPUB viewer vertical gap mode (wide, compact, or none), aligned with PDF.js layout options.
+- Faster EPUB reopening by caching pagination metadata locally, plus a loading indicator while the book prepares.
+
+### Changed
+
+- Viewer colors apply to the EPUB reading surface; EPUB reader chrome was refined alongside background settings.
+
+### Fixed
+
+- EPUB vertical gap now respects the reader inset reliably.
+- EPUB reading is more stable on macOS WebKit (initial viewport sizing and iframe sandbox compatibility with epub.js).
+
 ## [0.2.5] - 2026-04-18
 
 ### Added
@@ -201,7 +218,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/zonuexe/riida/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/zonuexe/riida/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/zonuexe/riida/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/zonuexe/riida/compare/v0.2.2...v0.2.3

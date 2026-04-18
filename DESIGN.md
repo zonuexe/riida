@@ -18,6 +18,14 @@ The UI is built around:
 
 When generating new screens or extending the interface, preserve the sense that the app is for reading first and administration second.
 
+Important context:
+
+- Parts of the current visual language originated from early AI-assisted implementation rather than from a formally designed system.
+- Some choices that now feel characteristic were originally accidental or emergent.
+- This file should therefore distinguish between:
+  - traits worth preserving because they work well in practice
+  - traits that happen to exist today but are open to refinement
+
 ## Design Principles
 
 ### 1. Reading-first calm
@@ -40,6 +48,10 @@ Controls are highly rounded. Circular and pill-shaped actions are preferred for 
 
 The same component rules apply across all themes. Themes should change mood and material, not layout logic or hierarchy.
 
+### 6. Desktop-first, not browser-first
+
+When there is a choice between web-app conventions and native desktop-app conventions, prefer the desktop side. The UI should feel closer to a native reading tool than to a responsive SaaS dashboard in a browser tab.
+
 ## Theme System
 
 The app currently supports four themes. New UI should consume semantic theme roles, not hard-code colors.
@@ -57,10 +69,17 @@ The app currently supports four themes. New UI should consume semantic theme rol
 - Apply the cached theme before the main stylesheet-driven UI becomes visible.
 - Use `color-scheme: light` for `default` and `snow-white`.
 - Use `color-scheme: dark` for `night-city` and `navy-blue`.
+- Treat all four themes as peer options. `default` is not the canonical design source for the others; it is simply the theme selected by default on install.
 
 ### Default theme
 
 Creative direction: warm library, parchment, sepia, late-afternoon sunlight.
+
+Historical note:
+
+- This theme originated from the initial AI-assisted implementation, not from a deliberate human-designed brand system.
+- It is still worth preserving because the warm palette works well and is liked in practice.
+- Do not treat it as the root theme that all others must derive from.
 
 Core colors:
 
@@ -161,6 +180,12 @@ Use:
 
 This is the default shell typeface and should remain the primary voice for headings, navigation, labels, and interface copy unless a very strong reason exists to do otherwise.
 
+Important caveat:
+
+- This serif-heavy direction also originated partly from AI inference around the reading context, not from a strongly intentional typographic system.
+- It is acceptable, and often desirable, to replace some UI controls with more readable OS-style UI fonts where clarity matters more than atmosphere.
+- Search inputs, utility fields, dense controls, and other highly interactive widgets are especially good candidates for a more neutral system UI font treatment in future refinements.
+
 ### Monospace family
 
 Use:
@@ -188,6 +213,8 @@ Current recurring sizes:
 - Use uppercase tracked labels sparingly for chrome, not for long-form content.
 - Avoid condensed all-caps headings for the main reading experience.
 - Preserve generous line-height for prose-like or explanatory UI copy.
+- Prefer readability over atmosphere for high-frequency interactive controls.
+- It is acceptable for form controls and search-heavy widgets to diverge from the serif shell voice when that improves legibility.
 
 ## Layout and Spacing
 
@@ -392,6 +419,11 @@ Pattern:
 - Avoid springy or decorative motion
 - Motion should help the UI feel alive but never distract from reading
 
+Practical note:
+
+- `riida` is not expected to generate heavy volumes of notifications or constantly changing attention-grabbing UI while reading.
+- "Reading-first" should therefore be interpreted mostly as avoiding noisy chrome, excessive overlays, and visual interruption, rather than as a detailed notification policy.
+
 ## States
 
 ### Hover
@@ -413,6 +445,25 @@ Pattern:
 - Use semantic colors directly
 - Keep status messages understated and inline when possible
 
+## Accessibility
+
+Follow broadly accepted desktop and web accessibility practices, even when the visual language is soft or atmospheric.
+
+### Accessibility rules
+
+- Maintain clear contrast between text and its background in every supported theme.
+- Ensure interactive controls remain identifiable even when panels are translucent.
+- Keep keyboard focus visibly distinct; do not rely on hover alone.
+- Preserve readable sizing for utility text and never shrink important interaction text below practical readability.
+- Avoid conveying meaning by color alone; destructive, success, selected, and disabled states should also be distinguishable through placement, labeling, border treatment, or opacity.
+- Motion should remain subtle and non-essential. If a behavior can work without animation, prefer that approach.
+- Reader overlays and floating controls should remain discoverable and usable with keyboard navigation.
+
+### Accessibility intent
+
+- The app may have a crafted, atmospheric appearance, but readability and operability take precedence over decorative purity.
+- When a stylistic choice conflicts with clarity, clarity wins.
+
 ## Do
 
 - Describe styles with both mood and exact values
@@ -432,6 +483,10 @@ Pattern:
 - Don’t make primary actions square-cornered
 - Don’t crowd the reading stage with persistent heavy chrome
 - Don’t create a new visual language per theme; themes should stay structurally identical
+- Don’t make the app feel like a browser-based analytics dashboard.
+- Don’t force serif styling into compact, search-heavy, or utility-first controls when readability suffers.
+- Don’t depend on low-contrast elegance if it makes text, focus, or action hierarchy hard to perceive.
+- Don’t introduce large banners, toast storms, or other attention-seeking UI patterns into the reading flow unless the feature absolutely requires them.
 
 ## Implementation Notes
 

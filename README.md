@@ -56,6 +56,39 @@ pdf_renderer = "pdfjs"
 
 For development, copy [`riida.toml.example`](riida.toml.example) to `riida.toml` and edit it locally.
 
+## MCP server
+
+riida comes with an MCP (Model Context Protocol) server that lets Claude Code update book metadata directly from a conversation.
+
+```bash
+cd mcp-server
+npm install
+```
+
+Add to your Claude Code project config (`.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "riida": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "riida-mcp"]
+    }
+  }
+}
+```
+
+Once connected, you can ask Claude to fill in missing metadata:
+
+```
+メタデータが入っていない本を一覧して、PDFの冒頭を読んでタイトルと著者を推定し、まとめて書き込んで
+```
+
+You can also combine it with [techbook-mcp](https://github.com/zonuexe/techbook-mcp) to search Japanese technical book databases and bulk-fill metadata across your library.
+
+For full tool reference and the techbook-mcp integration guide, see [mcp-server/README.md](mcp-server/README.md).
+
 ## Amazon.co.jp metadata bookmarklet
 
 On a Kindle Store / ebook product page on **Amazon.co.jp**, you can use this bookmarklet to scrape visible product details and copy a JSON object to the clipboard. The shape matches what `riida` expects when you paste into the book metadata editor’s JSON import (title, authors, description, publisher, release date, language, ASIN, cover URL).

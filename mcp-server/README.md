@@ -120,6 +120,49 @@ the metadata for all of them.
 
 Claude will call `list_books_needing_metadata`, then `read_pdf_pages` for each book, and finally `update_books_metadata` to write everything in one transaction.
 
+## Combining with techbook-mcp
+
+[techbook-mcp](https://github.com/zonuexe/techbook-mcp) is a companion MCP server that searches Japanese technical book metadata across multiple publishers (技術評論社, 達人出版会, 技術書典, etc.).
+
+When both MCP servers are active in Claude Code, you can ask Claude to fill missing metadata by cross-referencing techbook-mcp search results:
+
+```
+list_books_needing_metadata でメタデータ不足の本を一覧して、
+techbook-mcp で書名検索し、一致した書誌情報を update_books_metadata で書き込んで
+```
+
+Claude will:
+1. Call `list_books_needing_metadata` to find books missing title or authors
+2. For each identifiable book, call `techbook-mcp:search_books` with the title (inferred from filename or PDF content)
+3. Confirm the match and call `update_books_metadata` to write the title, authors, publisher, and release date in a single transaction
+
+### Setup
+
+Add both servers to your Claude Code project config (`.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "riida": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "riida-mcp"]
+    },
+    "techbook-mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "techbook-mcp"]
+    }
+  }
+}
+```
+
+### Tips
+
+- techbook-mcp covers Japanese technical publishers. For books not indexed there, use `read_pdf_pages` to extract metadata directly from the PDF content.
+- BOOKSCAN-style filenames (`書名 著者名 ページ数_ISBN.pdf`) often contain enough information to fill title and authors without any search.
+- Magazine split-files (e.g. Software Design 総集編) can be batch-updated from the directory path alone — no search needed.
+
 ## Database path
 
 The server automatically connects to the riida database:

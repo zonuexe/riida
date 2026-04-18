@@ -156,6 +156,11 @@ type ViewerBackgroundMode =
   | "snow-white"
   | "night-city"
   | "navy-blue";
+type ViewerColorPalette = {
+  background: string;
+  foreground: string;
+  link: string;
+};
 
 type ViewerSettings = {
   pageMode: "single" | "spread";
@@ -414,36 +419,103 @@ function currentViewerSettingsSourceType(): ViewerSourceType | null {
   return normalizeViewerSourceType(currentBook.sourceType);
 }
 
+function resolveViewerThemeMode(backgroundMode: ViewerBackgroundMode): Exclude<ViewerBackgroundMode, "inherit-theme"> {
+  if (backgroundMode !== "inherit-theme") {
+    return backgroundMode;
+  }
+
+  return normalizeAppTheme(lastAppConfig?.theme ?? "default");
+}
+
+function viewerColorPaletteForMode(backgroundMode: ViewerBackgroundMode): ViewerColorPalette {
+  switch (resolveViewerThemeMode(backgroundMode)) {
+    case "snow-white":
+      return {
+        background: "#f5f5f7",
+        foreground: "#222226",
+        link: "#006ee6",
+      };
+    case "night-city":
+      return {
+        background: "#101114",
+        foreground: "#f2f2f7",
+        link: "#5db2ff",
+      };
+    case "navy-blue":
+      return {
+        background: "#18314f",
+        foreground: "#e5edf7",
+        link: "#9fc5ff",
+      };
+    default:
+      return {
+        background: "rgb(244 234 212)",
+        foreground: "#2b2118",
+        link: "#7d4e21",
+      };
+  }
+}
+
 function applyPdfViewerBackground(backgroundMode: ViewerBackgroundMode) {
-  const resolvedBackground = (() => {
-    switch (backgroundMode) {
-      case "default":
-        return "rgb(244 234 212)";
-      case "snow-white":
-        return "#f5f5f7";
-      case "night-city":
-        return "#101114";
-      case "navy-blue":
-        return "#18314f";
-      default:
-        return "";
-    }
-  })();
+  const palette = viewerColorPaletteForMode(backgroundMode);
 
   const applyBackgroundStyles = (el: HTMLElement | null) => {
     if (!el) {
       return;
     }
 
-    if (resolvedBackground) {
-      el.style.backgroundColor = resolvedBackground;
-    } else {
-      el.style.backgroundColor = "";
-    }
+    el.style.backgroundColor = palette.background;
   };
 
   const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
+  if (backgroundMode === "inherit-theme") {
+    mainPaneEl?.style.removeProperty("background-color");
+    return;
+  }
+
   applyBackgroundStyles(mainPaneEl);
+}
+
+function applyEpubColorsToDocument(doc: Document, palette: ViewerColorPalette) {
+  const root = doc.documentElement;
+  const body = doc.body;
+
+  root?.style.setProperty("background-color", palette.background, "important");
+  root?.style.setProperty("color", palette.foreground, "important");
+  body?.style.setProperty("background-color", palette.background, "important");
+  body?.style.setProperty("color", palette.foreground, "important");
+
+  const linkEls = doc.querySelectorAll<HTMLAnchorElement>("a[href]");
+  for (const linkEl of linkEls) {
+    linkEl.style.setProperty("color", palette.link, "important");
+  }
+}
+
+function applyEpubViewerColors(backgroundMode: ViewerBackgroundMode) {
+  const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
+  const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
+  const palette = viewerColorPaletteForMode(backgroundMode);
+
+  if (backgroundMode === "inherit-theme") {
+    mainPaneEl?.style.removeProperty("background-color");
+    epubViewerEl?.style.removeProperty("background-color");
+  } else {
+    if (mainPaneEl) {
+      mainPaneEl.style.backgroundColor = palette.background;
+    }
+    if (epubViewerEl) {
+      epubViewerEl.style.backgroundColor = palette.background;
+    }
+  }
+
+  const contentsList = activeEpubRendition
+    ? ((activeEpubRendition.getContents() as unknown as import("epubjs").Contents[]) ?? [])
+    : [];
+  for (const contents of contentsList) {
+    if (contents.document) {
+      applyEpubColorsToDocument(contents.document, palette);
+    }
+  }
 }
 
 function setCheckedViewerBackgroundOption(groupName: string, value: ViewerBackgroundMode) {
@@ -458,11 +530,7 @@ function setCheckedViewerBackgroundOption(groupName: string, value: ViewerBackgr
 function preferredExplicitViewerBackgroundMode(
   backgroundMode: ViewerBackgroundMode,
 ): Exclude<ViewerBackgroundMode, "inherit-theme"> {
-  if (backgroundMode !== "inherit-theme") {
-    return backgroundMode;
-  }
-
-  return normalizeAppTheme(lastAppConfig?.theme ?? "default");
+  return resolveViewerThemeMode(backgroundMode);
 }
 
 function syncViewerBackgroundControls(
@@ -485,11 +553,15 @@ function syncViewerBackgroundControls(
 
 function syncImmediatePdfBackgroundPreview() {
   const sourceType = currentViewerSettingsSourceType();
-  if (sourceType !== "pdf" || lastSnapshot?.pdfRenderer !== "pdfjs") {
+  if (sourceType === "pdf" && lastSnapshot?.pdfRenderer === "pdfjs") {
+    applyPdfViewerBackground(currentViewerPreferences().backgroundMode);
     return;
   }
 
-  applyPdfViewerBackground(currentViewerPreferences().backgroundMode);
+  if (sourceType === "epub") {
+    applyEpubViewerColors(currentViewerPreferences().backgroundMode);
+    return;
+  }
 }
 
 function bindViewerBackgroundOptionGroup(
@@ -2278,8 +2350,7 @@ function syncViewerSettingsUi() {
   const scopeGlobalEl = document.querySelector<HTMLButtonElement>("#viewer-settings-scope-global");
   const scopeFileEl = document.querySelector<HTMLButtonElement>("#viewer-settings-scope-file");
   const sourceLabelEl = document.querySelector<HTMLElement>("#viewer-settings-source-label");
-  const pdfFieldsEl = document.querySelector<HTMLElement>("#viewer-settings-pdf-fields");
-  const epubFieldsEl = document.querySelector<HTMLElement>("#viewer-settings-epub-fields");
+  const readerFieldsEl = document.querySelector<HTMLElement>("#viewer-settings-reader-fields");
   const pageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
   const bindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
   const zoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
@@ -2322,11 +2393,8 @@ function syncViewerSettingsUi() {
   if (sourceLabelEl) {
     sourceLabelEl.textContent = sourceType === "epub" ? "EPUB" : "PDF";
   }
-  if (pdfFieldsEl) {
-    pdfFieldsEl.hidden = !isPdfViewerSettingsAvailable;
-  }
-  if (epubFieldsEl) {
-    epubFieldsEl.hidden = !isEpubViewerSettingsAvailable;
+  if (readerFieldsEl) {
+    readerFieldsEl.hidden = !isViewerSettingsAvailable;
   }
 
   if (pageModeEl) {
@@ -2354,13 +2422,8 @@ function syncViewerSettingsUi() {
   }
 
   syncViewerBackgroundControls(
-    "viewer-pdf-background-mode",
-    "viewer-pdf-background-inherit",
-    editingPreferences.backgroundMode,
-  );
-  syncViewerBackgroundControls(
-    "viewer-epub-background-mode",
-    "viewer-epub-background-inherit",
+    "viewer-background-mode",
+    "viewer-background-inherit",
     editingPreferences.backgroundMode,
   );
 }
@@ -3571,7 +3634,7 @@ async function renderCurrentPage() {
   const sourceUrl = convertFileSrc(viewerState.currentBook.filePath);
 
   if (viewerState.currentBook.sourceType === "epub") {
-    applyPdfViewerBackground("inherit-theme");
+    applyEpubViewerColors(viewerSettings.backgroundMode);
     await maybeShowEpubPreviewNotice();
     destroyEpubBook();
     activePdfRenderSession = null;
@@ -3641,11 +3704,20 @@ async function renderCurrentPage() {
       });
 
       rendition.themes.default({
+        html: {
+          "background-color": `${viewerColorPaletteForMode(viewerSettings.backgroundMode).background} !important`,
+          color: `${viewerColorPaletteForMode(viewerSettings.backgroundMode).foreground} !important`,
+        },
         // DPFJ guide §ページメディアの余白: RS should not add its own margins to body.
         // epub.js injects padding by default; suppress it so the book's own CSS controls spacing.
         body: {
+          "background-color": `${viewerColorPaletteForMode(viewerSettings.backgroundMode).background} !important`,
+          color: `${viewerColorPaletteForMode(viewerSettings.backgroundMode).foreground} !important`,
           padding: "0 !important",
           margin: "0 !important",
+        },
+        a: {
+          color: `${viewerColorPaletteForMode(viewerSettings.backgroundMode).link} !important`,
         },
         pre: {
           "white-space": "pre-wrap !important",
@@ -3666,6 +3738,12 @@ async function renderCurrentPage() {
       rendition.hooks.content.register((contents: import("epubjs").Contents) => {
         try {
           installEpubLinkBridge(contents, viewerState.currentBook?.filePath ?? "");
+          if (contents.document) {
+            applyEpubColorsToDocument(
+              contents.document,
+              viewerColorPaletteForMode(viewerSettings.backgroundMode),
+            );
+          }
         } catch (err) {
           console.error("[riida] epub link hook failed:", err);
         }
@@ -3705,6 +3783,7 @@ async function renderCurrentPage() {
       if (currentToken !== epubRenderToken) return;
 
       activeEpubRendition = rendition;
+      applyEpubViewerColors(viewerSettings.backgroundMode);
       syncEpubLinkOverlays(rendition, book, epubViewerEl);
 
       rendition.on("relocated", (location: import("epubjs").Location) => {
@@ -3742,6 +3821,7 @@ async function renderCurrentPage() {
   destroyEpubBook();
 
   if (snapshot.pdfRenderer === "pdfjs") {
+    applyEpubViewerColors("inherit-theme");
     applyPdfViewerBackground(viewerSettings.backgroundMode);
     activePdfRenderSession = null;
     frame.hidden = true;
@@ -3897,6 +3977,7 @@ async function renderCurrentPage() {
   closePdfSearch();
   pdfRenderToken += 1;
   activePdfRenderSession = null;
+  applyEpubViewerColors("inherit-theme");
   applyPdfViewerBackground("inherit-theme");
   pdfjsViewerEl.hidden = true;
   pdfjsViewerEl.innerHTML = "";
@@ -4569,12 +4650,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     "#viewer-vertical-gap-mode",
   );
   const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
-  const viewerPdfBackgroundInheritEl = document.querySelector<HTMLInputElement>(
-    "#viewer-pdf-background-inherit",
-  );
-  const viewerEpubBackgroundInheritEl = document.querySelector<HTMLInputElement>(
-    "#viewer-epub-background-inherit",
-  );
+  const viewerBackgroundInheritEl =
+    document.querySelector<HTMLInputElement>("#viewer-background-inherit");
   const tagDirectOnlyEl = document.querySelector<HTMLInputElement>("#tag-direct-only");
   const noteDragHandleEl = document.querySelector<HTMLElement>("#note-drag-handle");
   const noteResizeEls = document.querySelectorAll<HTMLElement>(".note-resize-handle");
@@ -5058,7 +5135,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  bindViewerBackgroundOptionGroup("viewer-pdf-background-mode", (value) => {
+  bindViewerBackgroundOptionGroup("viewer-background-mode", (value) => {
     updateViewerSettings(() => {
       mutateEditingViewerSettings((preferences) => {
         preferences.backgroundMode = value;
@@ -5066,28 +5143,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     }, { rerenderPdf: false });
   });
 
-  bindViewerBackgroundOptionGroup("viewer-epub-background-mode", (value) => {
+  viewerBackgroundInheritEl?.addEventListener("change", () => {
     updateViewerSettings(() => {
       mutateEditingViewerSettings((preferences) => {
-        preferences.backgroundMode = value;
-      });
-    }, { rerenderPdf: false });
-  });
-
-  viewerPdfBackgroundInheritEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.backgroundMode = viewerPdfBackgroundInheritEl.checked
-          ? "inherit-theme"
-          : preferredExplicitViewerBackgroundMode(preferences.backgroundMode);
-      });
-    }, { rerenderPdf: false });
-  });
-
-  viewerEpubBackgroundInheritEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.backgroundMode = viewerEpubBackgroundInheritEl.checked
+        preferences.backgroundMode = viewerBackgroundInheritEl.checked
           ? "inherit-theme"
           : preferredExplicitViewerBackgroundMode(preferences.backgroundMode);
       });

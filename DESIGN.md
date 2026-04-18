@@ -438,7 +438,9 @@ Viewer background guidance:
 
 - Independent viewer background choice should remain visually subordinate to the app-wide theme.
 - For PDF, the effective implementation applies the selected background color to `section.main-pane`; this is the intended reading-surface target for empty viewer space.
-- EPUB currently exposes the same settings UI but does not yet apply the chosen background color visually.
+- For EPUB, the selected viewer color preset should apply both background color and a matching body text color inside the reader document.
+- `default` and `snow-white` should use dark reading text; `night-city` and `navy-blue` should use light reading text.
+- EPUB should expose the same viewer-settings controls as PDF, even if some of those controls currently have a stronger effect in PDF.js than in epub.js.
 - The background-color controls should be visually separated from layout and cover settings by a clearer divider or section boundary.
 
 ## Motion and Interaction

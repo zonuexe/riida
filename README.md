@@ -126,5 +126,5 @@ cargo check --manifest-path src-tauri/Cargo.toml
 ## Contributing
 
 - Minimum contributor workflow: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Architecture and system design notes: [DESIGN.md](DESIGN.md)
+- Architecture and system design notes: [docs/design-doc.md](docs/design-doc.md)
 - Development details and implementation notes: [AGENTS.md](AGENTS.md)

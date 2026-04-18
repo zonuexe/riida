@@ -4,7 +4,7 @@
 
 This file records implementation details and operational context that are useful during development but do not belong in the user-facing README.
 
-For a higher-level architecture and responsibility map, see [DESIGN.md](DESIGN.md).
+For a higher-level architecture and responsibility map, see [docs/design-doc.md](docs/design-doc.md).
 
 ## Release And Licensing
 

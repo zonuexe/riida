@@ -31,6 +31,8 @@ toml = "0.8"
 walkdir = "2"
 globset = "0.4"
 unicode-normalization = "0.1"
+quick-xml = "0.39.2"
+zip = { version = "8.5.1", default-features = false, features = ["deflate-flate2"] }
 
 [dev-dependencies]
 proptest = "1"

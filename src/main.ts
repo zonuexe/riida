@@ -489,6 +489,52 @@ function applyEpubColorsToDocument(doc: Document, palette: ViewerColorPalette) {
   }
 }
 
+// WKWebView does not recognize the -epub-writing-mode vendor prefix, so
+// vertical-text EPUBs render horizontally. Scan each section's stylesheets and
+// inject a companion <style> that mirrors every -epub-writing-mode declaration
+// as a standard writing-mode declaration, which WKWebView does understand.
+function injectEpubWritingModeCSS(doc: Document) {
+  const EPUB_PROP = "-epub-writing-mode";
+  const STD_PROP = "writing-mode";
+
+  let extraRules = "";
+
+  for (const styleEl of Array.from(doc.querySelectorAll("style"))) {
+    const sheet = styleEl.sheet;
+    if (!sheet) continue;
+    let rules: CSSRuleList;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    for (const rule of Array.from(rules)) {
+      if (!(rule instanceof CSSStyleRule)) continue;
+      const epubVal = rule.style.getPropertyValue(EPUB_PROP).trim();
+      if (!epubVal) continue;
+      // Only add writing-mode if not already declared by the book's CSS.
+      const alreadyHasStd = rule.style.getPropertyValue(STD_PROP).trim() !== "";
+      if (alreadyHasStd) continue;
+      extraRules += `${rule.selectorText}{${STD_PROP}:${epubVal}}\n`;
+    }
+  }
+
+  // Also handle inline styles.
+  for (const el of Array.from(doc.querySelectorAll<HTMLElement>("[style]"))) {
+    const epubVal = el.style.getPropertyValue(EPUB_PROP).trim();
+    if (!epubVal) continue;
+    if (el.style.getPropertyValue(STD_PROP).trim() !== "") continue;
+    el.style.setProperty(STD_PROP, epubVal);
+  }
+
+  if (extraRules) {
+    const injected = doc.createElement("style");
+    injected.dataset.riidaInjected = "writing-mode";
+    injected.textContent = extraRules;
+    (doc.head ?? doc.documentElement)?.appendChild(injected);
+  }
+}
+
 function viewerExtraVerticalGap(mode: ViewerSettings["verticalGapMode"]): number {
   switch (mode) {
     case "wide":
@@ -3887,6 +3933,7 @@ async function renderCurrentPage() {
               contents.document,
               viewerColorPaletteForMode(viewerSettings.backgroundMode),
             );
+            injectEpubWritingModeCSS(contents.document);
           }
         } catch (err) {
           console.error("[riida] epub link hook failed:", err);

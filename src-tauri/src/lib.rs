@@ -1,12 +1,15 @@
 use directories::ProjectDirs;
 use globset::{Glob, GlobMatcher};
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use quick_xml::events::Event as XmlEvent;
+use quick_xml::reader::Reader as XmlReader;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
     fs,
     hash::{Hash, Hasher},
+    io::Read as _,
     path::{Path, PathBuf},
     process::Command,
     sync::{mpsc, Arc, Mutex, OnceLock},
@@ -17,6 +20,7 @@ use tauri::{AppHandle, Emitter, Manager, State, Url};
 use tauri_plugin_opener::OpenerExt;
 use unicode_normalization::UnicodeNormalization;
 use walkdir::WalkDir;
+use zip::ZipArchive;
 
 const CONFIG_FILE: &str = "riida.toml";
 const DEFAULT_EXCLUDED_PATTERNS: &[&str] = &["**/backup/**", "*.bak.pdf"];
@@ -1790,6 +1794,178 @@ fn generate_thumbnail(file_path: &Path, output_dir: &Path) -> Result<PathBuf, St
     Ok(thumbnail_path)
 }
 
+/// Read all bytes of a named entry from a zip archive.
+fn read_zip_entry(archive: &mut ZipArchive<fs::File>, name: &str) -> Result<Vec<u8>, String> {
+    let mut entry = archive
+        .by_name(name)
+        .map_err(|e| format!("zip entry '{name}' not found: {e}"))?;
+    let mut buf = Vec::new();
+    entry.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    Ok(buf)
+}
+
+/// Parse META-INF/container.xml and return the OPF rootfile path.
+fn epub_opf_path(archive: &mut ZipArchive<fs::File>) -> Result<String, String> {
+    let bytes = read_zip_entry(archive, "META-INF/container.xml")?;
+    let xml = String::from_utf8_lossy(&bytes);
+    let mut reader = XmlReader::from_str(xml.as_ref());
+    reader.config_mut().trim_text(true);
+
+    loop {
+        match reader.read_event() {
+            Ok(XmlEvent::Empty(ref e)) | Ok(XmlEvent::Start(ref e))
+                if e.local_name().as_ref() == b"rootfile" =>
+            {
+                for attr in e.attributes().flatten() {
+                    if attr.key.local_name().as_ref() == b"full-path" {
+                        return Ok(String::from_utf8_lossy(&attr.value).into_owned());
+                    }
+                }
+            }
+            Ok(XmlEvent::Eof) | Err(_) => break,
+            _ => {}
+        }
+    }
+    Err("rootfile/@full-path not found in container.xml".to_string())
+}
+
+/// Parse an OPF manifest and return the archive-relative path of the cover
+/// image. Priority: `properties="cover-image"` → `id="cover-image"` →
+/// item href matching `cover.(jpg|jpeg|png|webp|gif)` → first image/* item.
+fn epub_cover_item_path(
+    archive: &mut ZipArchive<fs::File>,
+    opf_path: &str,
+) -> Result<String, String> {
+    let opf_dir = Path::new(opf_path)
+        .parent()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
+
+    let bytes = read_zip_entry(archive, opf_path)?;
+    let xml = String::from_utf8_lossy(&bytes);
+    let mut reader = XmlReader::from_str(xml.as_ref());
+    reader.config_mut().trim_text(true);
+
+    // Candidates in priority order:
+    // 0: properties="cover-image"
+    // 1: id="cover-image" or id="cover"
+    // 2: href matching cover.*
+    // 3: first image/* item
+    let mut candidates: [Option<String>; 4] = [None, None, None, None];
+
+    loop {
+        match reader.read_event() {
+            Ok(XmlEvent::Empty(ref e)) | Ok(XmlEvent::Start(ref e))
+                if e.local_name().as_ref() == b"item" =>
+            {
+                let mut href = String::new();
+                let mut id = String::new();
+                let mut properties = String::new();
+                let mut media_type = String::new();
+
+                for attr in e.attributes().flatten() {
+                    match attr.key.local_name().as_ref() {
+                        b"href" => href = String::from_utf8_lossy(&attr.value).into_owned(),
+                        b"id" => id = String::from_utf8_lossy(&attr.value).into_owned(),
+                        b"properties" => {
+                            properties = String::from_utf8_lossy(&attr.value).into_owned()
+                        }
+                        b"media-type" => {
+                            media_type = String::from_utf8_lossy(&attr.value).into_owned()
+                        }
+                        _ => {}
+                    }
+                }
+
+                if href.is_empty() || !media_type.starts_with("image/") {
+                    continue;
+                }
+
+                let archive_href = if opf_dir.is_empty() {
+                    href.clone()
+                } else {
+                    format!("{opf_dir}/{href}")
+                };
+
+                if properties.split_whitespace().any(|p| p == "cover-image") {
+                    candidates[0] = Some(archive_href.clone());
+                }
+                let id_lower = id.to_ascii_lowercase();
+                if candidates[1].is_none() && (id_lower == "cover-image" || id_lower == "cover") {
+                    candidates[1] = Some(archive_href.clone());
+                }
+                let href_lower = href.to_ascii_lowercase();
+                let stem = Path::new(&href_lower)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("");
+                if candidates[2].is_none() && stem == "cover" {
+                    candidates[2] = Some(archive_href.clone());
+                }
+                if candidates[3].is_none() {
+                    candidates[3] = Some(archive_href);
+                }
+            }
+            Ok(XmlEvent::Eof) | Err(_) => break,
+            _ => {}
+        }
+    }
+
+    candidates
+        .into_iter()
+        .flatten()
+        .next()
+        .ok_or_else(|| "no cover image found in OPF manifest".to_string())
+}
+
+/// Extract the cover image from an EPUB file and write it to `output_dir` as
+/// `thumbnail.jpg`. PNG and other non-JPEG formats are converted via `sips`
+/// (macOS). Returns the path of the written thumbnail.
+fn generate_epub_cover(epub_path: &Path, output_dir: &Path) -> Result<PathBuf, String> {
+    fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
+
+    let file = fs::File::open(epub_path).map_err(|e| e.to_string())?;
+    let mut archive = ZipArchive::new(file).map_err(|e| e.to_string())?;
+
+    let opf_path = epub_opf_path(&mut archive)?;
+    let cover_item_path = epub_cover_item_path(&mut archive, &opf_path)?;
+
+    let cover_bytes = read_zip_entry(&mut archive, &cover_item_path)?;
+
+    let cover_ext = Path::new(&cover_item_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("jpg")
+        .to_ascii_lowercase();
+
+    let thumbnail_path = output_dir.join("thumbnail.jpg");
+
+    if cover_ext == "jpg" || cover_ext == "jpeg" {
+        fs::write(&thumbnail_path, &cover_bytes).map_err(|e| e.to_string())?;
+        return Ok(thumbnail_path);
+    }
+
+    // Non-JPEG: write to a temp file and convert via sips (macOS).
+    let temp_path = output_dir.join(format!("cover.{cover_ext}"));
+    fs::write(&temp_path, &cover_bytes).map_err(|e| e.to_string())?;
+
+    let status = Command::new("/usr/bin/sips")
+        .args(["-s", "format", "jpeg"])
+        .arg(&temp_path)
+        .args(["--out"])
+        .arg(&thumbnail_path)
+        .status()
+        .map_err(|e| e.to_string())?;
+
+    let _ = fs::remove_file(&temp_path);
+
+    if !status.success() {
+        return Err(format!("sips failed with status: {status}"));
+    }
+
+    Ok(thumbnail_path)
+}
+
 fn start_thumbnail_worker(app: AppHandle) -> ThumbnailQueue {
     let (tx, rx) = mpsc::channel::<String>();
     let pending = Arc::new(Mutex::new(HashSet::<String>::new()));
@@ -1797,9 +1973,13 @@ fn start_thumbnail_worker(app: AppHandle) -> ThumbnailQueue {
 
     thread::spawn(move || {
         while let Ok(file_path) = rx.recv() {
-            let pdf_path = PathBuf::from(&file_path);
+            let book_path = PathBuf::from(&file_path);
             let output_dir = thumbnail_cache_dir(&file_path);
-            let result = generate_thumbnail(&pdf_path, &output_dir);
+            let result = if is_epub_file(&book_path) {
+                generate_epub_cover(&book_path, &output_dir)
+            } else {
+                generate_thumbnail(&book_path, &output_dir)
+            };
 
             if let Ok(thumbnail_path) = result {
                 let _ = app.emit(

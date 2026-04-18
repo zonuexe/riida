@@ -15,9 +15,9 @@
 
 ### 中優先度
 
-- [ ] EPUB カバー画像をサムネイルとして抽出・表示
+- [x] EPUB カバー画像をサムネイルとして抽出・表示
   - OPF `<item properties="cover-image">` → `cover.jpg` → fallback の順で探す
-- [ ] `-epub-writing-mode` 優先の注入 CSS（WKWebView の `-webkit-` 上書き対策）
+- [x] `-epub-writing-mode` 優先の注入 CSS（WKWebView の `-webkit-` 上書き対策）
 - [x] body `padding`/`margin` をゼロにリセット（epub.js のデフォルト注入抑制）
 - [x] `page-progression-direction` を読んで RTL 書籍の左右キーを反転
 

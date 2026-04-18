@@ -414,7 +414,7 @@ function currentViewerSettingsSourceType(): ViewerSourceType | null {
   return normalizeViewerSourceType(currentBook.sourceType);
 }
 
-function applyPdfViewerBackground(stageEl: HTMLElement | null, backgroundMode: ViewerBackgroundMode) {
+function applyPdfViewerBackground(backgroundMode: ViewerBackgroundMode) {
   const resolvedBackground = (() => {
     switch (backgroundMode) {
       case "default":
@@ -430,38 +430,20 @@ function applyPdfViewerBackground(stageEl: HTMLElement | null, backgroundMode: V
     }
   })();
 
-  const applyBackgroundStyles = (el: HTMLElement | null, clearImage = false) => {
+  const applyBackgroundStyles = (el: HTMLElement | null) => {
     if (!el) {
       return;
     }
 
     if (resolvedBackground) {
       el.style.backgroundColor = resolvedBackground;
-      if (clearImage) {
-        el.style.backgroundImage = "none";
-      }
     } else {
       el.style.backgroundColor = "";
-      if (clearImage) {
-        el.style.backgroundImage = "";
-      }
     }
   };
 
   const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
   applyBackgroundStyles(mainPaneEl);
-
-  if (!stageEl) {
-    return;
-  }
-
-  stageEl.dataset.pdfBackgroundMode = backgroundMode;
-  applyBackgroundStyles(stageEl, true);
-  const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
-  if (pdfjsViewerEl) {
-    pdfjsViewerEl.dataset.backgroundMode = backgroundMode;
-    applyBackgroundStyles(pdfjsViewerEl);
-  }
 }
 
 function setCheckedViewerBackgroundOption(groupName: string, value: ViewerBackgroundMode) {
@@ -507,7 +489,7 @@ function syncImmediatePdfBackgroundPreview() {
     return;
   }
 
-  applyPdfViewerBackground(currentViewerStage(), currentViewerPreferences().backgroundMode);
+  applyPdfViewerBackground(currentViewerPreferences().backgroundMode);
 }
 
 function bindViewerBackgroundOptionGroup(
@@ -2432,7 +2414,7 @@ async function loadViewerSettingsForCurrentBook() {
   const currentSourceType = currentViewerSettingsSourceType() ?? "pdf";
 
   if (!currentBook) {
-    applyPdfViewerBackground(currentViewerStage(), "inherit-theme");
+    applyPdfViewerBackground("inherit-theme");
     applyViewerPreferences(DEFAULT_VIEWER_SETTINGS, "global", false, currentSourceType);
     viewerSettings.globalDraft = { ...DEFAULT_VIEWER_SETTINGS };
     viewerSettings.fileDraft = { ...DEFAULT_VIEWER_SETTINGS };
@@ -2459,7 +2441,7 @@ async function loadViewerSettingsForCurrentBook() {
     applyViewerSettingsPayload(payload, currentSourceType);
     syncViewerSettingsUi();
   } catch (error) {
-    applyPdfViewerBackground(currentViewerStage(), "inherit-theme");
+    applyPdfViewerBackground("inherit-theme");
     applyViewerPreferences(DEFAULT_VIEWER_SETTINGS, "global", false, currentSourceType);
     viewerSettings.globalDraft = { ...DEFAULT_VIEWER_SETTINGS };
     viewerSettings.fileDraft = { ...DEFAULT_VIEWER_SETTINGS };
@@ -2592,7 +2574,7 @@ async function clearCurrentBookSelection() {
   noteState.savedContent = "";
   noteState.statusMessage = "Notes are saved automatically.";
   viewerState.currentBook = null;
-  applyPdfViewerBackground(currentViewerStage(), "inherit-theme");
+  applyPdfViewerBackground("inherit-theme");
   applyViewerPreferences(DEFAULT_VIEWER_SETTINGS, "global", false, "pdf");
   viewerSettings.globalDraft = { ...DEFAULT_VIEWER_SETTINGS };
   viewerSettings.fileDraft = { ...DEFAULT_VIEWER_SETTINGS };
@@ -3589,7 +3571,7 @@ async function renderCurrentPage() {
   const sourceUrl = convertFileSrc(viewerState.currentBook.filePath);
 
   if (viewerState.currentBook.sourceType === "epub") {
-    applyPdfViewerBackground(viewerStageEl, "inherit-theme");
+    applyPdfViewerBackground("inherit-theme");
     await maybeShowEpubPreviewNotice();
     destroyEpubBook();
     activePdfRenderSession = null;
@@ -3760,7 +3742,7 @@ async function renderCurrentPage() {
   destroyEpubBook();
 
   if (snapshot.pdfRenderer === "pdfjs") {
-    applyPdfViewerBackground(viewerStageEl, viewerSettings.backgroundMode);
+    applyPdfViewerBackground(viewerSettings.backgroundMode);
     activePdfRenderSession = null;
     frame.hidden = true;
     frame.src = "about:blank";
@@ -3915,7 +3897,7 @@ async function renderCurrentPage() {
   closePdfSearch();
   pdfRenderToken += 1;
   activePdfRenderSession = null;
-  applyPdfViewerBackground(viewerStageEl, "inherit-theme");
+  applyPdfViewerBackground("inherit-theme");
   pdfjsViewerEl.hidden = true;
   pdfjsViewerEl.innerHTML = "";
   pdfjsViewerEl.dataset.filePath = "";

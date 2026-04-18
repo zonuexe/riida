@@ -77,17 +77,21 @@ App-wide themes and document-viewer background styles should be treated as separ
 
 - App-wide themes define the chrome, panels, sidebar, overlays, and overall atmosphere.
 - Viewer background styles define the reading surface behind PDF or EPUB content.
-- Viewer background names should feel like paper, light, or reading-surface materials rather than like room names or whole-app mood names.
+- Viewer background selection currently reuses the four app theme names rather than introducing a separate paper-material naming system.
 
-Current preferred viewer background label:
+Current viewer background options:
 
-- `Warm Paper`
+- `Default`
+- `Snow White`
+- `Night City`
+- `Navy Blue`
+- `Inherit app setting`
 
 Intent:
 
-- `Warm Paper` is a natural English label for a reading surface.
-- It fits PDF and EPUB viewer contexts better than names like `Reading Room` or `Sunlit Library`, which describe an environment rather than a page background.
-- It should evoke a soft warm off-white paper tone rather than a strong yellow or sepia cast.
+- Reusing theme names keeps the option set understandable and compact.
+- `Inherit app setting` is the default and should behave as a standard checkbox rather than as a fifth swatch.
+- Color selection swatches should be unlabeled circular chips, visually similar to Kindle's page-color chooser, with the explanatory text reserved for the inheritance checkbox.
 
 ### Default theme
 
@@ -432,9 +436,10 @@ Pattern:
 
 Viewer background guidance:
 
-- If the PDF or EPUB viewer supports independent reading-surface color selection, that choice should remain visually subordinate to the app-wide theme.
-- A viewer background such as `Warm Paper` should feel like the page or canvas beneath the document, not like a second competing app theme.
-- Prefer subtle paper-like warmth over saturated color treatments for reader backgrounds.
+- Independent viewer background choice should remain visually subordinate to the app-wide theme.
+- For PDF, the effective implementation applies the selected background color to `section.main-pane`; this is the intended reading-surface target for empty viewer space.
+- EPUB currently exposes the same settings UI but does not yet apply the chosen background color visually.
+- The background-color controls should be visually separated from layout and cover settings by a clearer divider or section boundary.
 
 ## Motion and Interaction
 

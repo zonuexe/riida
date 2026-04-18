@@ -1,0 +1,39 @@
+# Build artifacts
+src-tauri/target/
+target/
+dist/
+dist-ssr/
+mcp-server/dist/
+
+# Dependencies
+node_modules/
+mcp-server/node_modules/
+
+# Nix environment
+.direnv/
+result
+result-*
+
+# User data and cache
+data/
+cache/
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# System files
+.DS_Store
+.idea
+*.local
+
+# Large generated files
+THIRD-PARTY-LICENSES-*.md
+package-lock.json
+mcp-server/package-lock.json
+
+# Development
+.envrc

@@ -491,6 +491,35 @@ function applyEpubColorsToDocument(doc: Document, palette: ViewerColorPalette) {
   }
 }
 
+function viewerExtraVerticalGap(mode: ViewerSettings["verticalGapMode"]): number {
+  switch (mode) {
+    case "wide":
+      return 40;
+    case "compact":
+      return 16;
+    default:
+      return 0;
+  }
+}
+
+function applyViewerVerticalGapMode(mode: ViewerSettings["verticalGapMode"]) {
+  const extraGap = viewerExtraVerticalGap(mode);
+  const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
+  if (pdfjsViewerEl) {
+    pdfjsViewerEl.dataset.verticalGap = mode;
+    pdfjsViewerEl.style.setProperty("--viewer-extra-vertical-gap", `${extraGap}px`);
+  }
+
+  const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
+  if (epubViewerEl) {
+    epubViewerEl.dataset.verticalGap = mode;
+    epubViewerEl.style.setProperty("--viewer-extra-vertical-gap", `${extraGap}px`);
+    if (activeEpubRendition) {
+      resizeEpubRendition();
+    }
+  }
+}
+
 function applyEpubViewerColors(backgroundMode: ViewerBackgroundMode) {
   const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
   const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
@@ -562,6 +591,15 @@ function syncImmediatePdfBackgroundPreview() {
     applyEpubViewerColors(currentViewerPreferences().backgroundMode);
     return;
   }
+}
+
+function syncImmediateViewerLayoutPreview() {
+  const sourceType = currentViewerSettingsSourceType();
+  if (sourceType !== "pdf" && sourceType !== "epub") {
+    return;
+  }
+
+  applyViewerVerticalGapMode(currentViewerPreferences().verticalGapMode);
 }
 
 function bindViewerBackgroundOptionGroup(
@@ -3783,6 +3821,7 @@ async function renderCurrentPage() {
       if (currentToken !== epubRenderToken) return;
 
       activeEpubRendition = rendition;
+      applyViewerVerticalGapMode(viewerSettings.verticalGapMode);
       applyEpubViewerColors(viewerSettings.backgroundMode);
       syncEpubLinkOverlays(rendition, book, epubViewerEl);
 
@@ -3831,7 +3870,7 @@ async function renderCurrentPage() {
     pdfjsViewerEl.innerHTML = "";
     pdfjsViewerEl.dataset.filePath = viewerState.currentBook.filePath;
     pdfjsViewerEl.dataset.position = viewerSettings.alignMode;
-    pdfjsViewerEl.dataset.verticalGap = viewerSettings.verticalGapMode;
+    applyViewerVerticalGapMode(viewerSettings.verticalGapMode);
 
     closePdfSearch();
     pdfRenderToken += 1;
@@ -5124,7 +5163,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         preferences.verticalGapMode =
           viewerVerticalGapModeEl.value as ViewerSettings["verticalGapMode"];
       });
-    });
+      syncImmediateViewerLayoutPreview();
+    }, { rerenderPdf: false });
   });
 
   viewerCoverModeEl?.addEventListener("change", () => {

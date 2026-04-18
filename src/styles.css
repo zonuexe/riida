@@ -1285,10 +1285,14 @@ h1 {
   background: white;
 }
 
+/* EPUB Viewer Layout */
 .epub-viewer {
   position: absolute;
   inset: 0;
   overflow: hidden;
+  box-sizing: border-box;
+  padding-top: var(--viewer-extra-vertical-gap, 0px);
+  padding-bottom: var(--viewer-extra-vertical-gap, 0px);
 }
 
 .epub-viewer iframe {
@@ -1312,10 +1316,12 @@ h1 {
   cursor: pointer;
 }
 
+/* PDF Viewer Layout */
 .pdfjs-viewer {
   width: 100%;
   min-height: 100%;
-  padding: 20px 0 40px;
+  padding: calc(20px + var(--viewer-extra-vertical-gap, 0px)) 0
+    calc(40px + var(--viewer-extra-vertical-gap, 0px));
   box-sizing: border-box;
   --scale-factor: 1;
   display: flex;
@@ -1329,14 +1335,6 @@ h1 {
 
 .pdfjs-viewer[data-position="right"] {
   align-items: flex-end;
-}
-
-.pdfjs-viewer[data-vertical-gap="compact"] .pdfjs-spread + .pdfjs-spread {
-  margin-top: 16px;
-}
-
-.pdfjs-viewer[data-vertical-gap="none"] .pdfjs-spread + .pdfjs-spread {
-  margin-top: 0;
 }
 
 .pdfjs-spread {
@@ -1362,7 +1360,7 @@ h1 {
 }
 
 .pdfjs-spread + .pdfjs-spread {
-  margin-top: 36px;
+  margin-top: calc(36px + var(--viewer-extra-vertical-gap, 0px));
 }
 
 .pdfjs-page {

@@ -49,7 +49,7 @@
         <nav class="sidebar-nav" id="sidebar-nav"></nav>
       </aside>
 
-      <section class="main-pane">
+      <section id="main-pane" class="main-pane">
         <button
           id="sidebar-toggle"
           class="sidebar-edge-toggle"
@@ -159,48 +159,189 @@
               ファイル
             </button>
           </div>
-          <label class="viewer-setting">
-            <span>ページ表示</span>
-            <select id="viewer-page-mode">
-              <option value="spread">2ページ</option>
-              <option value="single">単ページ</option>
-            </select>
-          </label>
-          <label class="viewer-setting">
-            <span>綴じ方向</span>
-            <select id="viewer-binding-direction">
-              <option value="left">左綴じ</option>
-              <option value="right">右綴じ</option>
-            </select>
-          </label>
-          <label class="viewer-setting">
-            <span>ズーム</span>
-            <select id="viewer-zoom-mode">
-              <option value="fit-width">幅に合わせる</option>
-              <option value="fit-height">高さに合わせる</option>
-              <option value="original">オリジナル</option>
-            </select>
-          </label>
-          <label class="viewer-setting">
-            <span>表示位置</span>
-            <select id="viewer-align-mode">
-              <option value="left">左寄せ</option>
-              <option value="center">中央</option>
-              <option value="right">右寄せ</option>
-            </select>
-          </label>
-          <label class="viewer-setting">
-            <span>上下余白</span>
-            <select id="viewer-vertical-gap-mode">
-              <option value="wide">広い</option>
-              <option value="compact">狭い</option>
-              <option value="none">ゼロ</option>
-            </select>
-          </label>
-          <label class="viewer-setting viewer-checkbox">
-            <input id="viewer-cover-mode" type="checkbox" checked />
-            <span>1ページ目を表紙にする</span>
-          </label>
+          <p id="viewer-settings-source-label" class="viewer-settings-source-label">PDF</p>
+          <div id="viewer-settings-pdf-fields">
+            <label class="viewer-setting">
+              <span>ページ表示</span>
+              <select id="viewer-page-mode">
+                <option value="spread">2ページ</option>
+                <option value="single">単ページ</option>
+              </select>
+            </label>
+            <label class="viewer-setting">
+              <span>綴じ方向</span>
+              <select id="viewer-binding-direction">
+                <option value="left">左綴じ</option>
+                <option value="right">右綴じ</option>
+              </select>
+            </label>
+            <label class="viewer-setting">
+              <span>ズーム</span>
+              <select id="viewer-zoom-mode">
+                <option value="fit-width">幅に合わせる</option>
+                <option value="fit-height">高さに合わせる</option>
+                <option value="original">オリジナル</option>
+              </select>
+            </label>
+            <label class="viewer-setting">
+              <span>表示位置</span>
+              <select id="viewer-align-mode">
+                <option value="left">左寄せ</option>
+                <option value="center">中央</option>
+                <option value="right">右寄せ</option>
+              </select>
+            </label>
+            <label class="viewer-setting">
+              <span>上下余白</span>
+              <select id="viewer-vertical-gap-mode">
+                <option value="wide">広い</option>
+                <option value="compact">狭い</option>
+                <option value="none">ゼロ</option>
+              </select>
+            </label>
+            <section class="viewer-setting viewer-setting-swatches">
+              <span>背景色</span>
+              <div
+                id="viewer-pdf-background-mode"
+                class="viewer-background-swatches"
+                role="radiogroup"
+                aria-label="PDF background color"
+              >
+                <label class="viewer-background-option">
+                  <input
+                    type="radio"
+                    name="viewer-pdf-background-mode"
+                    value="default"
+                    aria-label="Default"
+                  />
+                  <span
+                    class="viewer-background-swatch"
+                    data-background-mode="default"
+                    aria-hidden="true"
+                  ></span>
+                </label>
+                <label class="viewer-background-option">
+                  <input
+                    type="radio"
+                    name="viewer-pdf-background-mode"
+                    value="snow-white"
+                    aria-label="Snow White"
+                  />
+                  <span
+                    class="viewer-background-swatch"
+                    data-background-mode="snow-white"
+                    aria-hidden="true"
+                  ></span>
+                </label>
+                <label class="viewer-background-option">
+                  <input
+                    type="radio"
+                    name="viewer-pdf-background-mode"
+                    value="night-city"
+                    aria-label="Night City"
+                  />
+                  <span
+                    class="viewer-background-swatch"
+                    data-background-mode="night-city"
+                    aria-hidden="true"
+                  ></span>
+                </label>
+                <label class="viewer-background-option">
+                  <input
+                    type="radio"
+                    name="viewer-pdf-background-mode"
+                    value="navy-blue"
+                    aria-label="Navy Blue"
+                  />
+                  <span
+                    class="viewer-background-swatch"
+                    data-background-mode="navy-blue"
+                    aria-hidden="true"
+                  ></span>
+                </label>
+              </div>
+              <label class="viewer-background-inherit">
+                <input id="viewer-pdf-background-inherit" type="checkbox" />
+                <span>アプリケーション設定を反映</span>
+              </label>
+            </section>
+            <div class="viewer-settings-divider" aria-hidden="true"></div>
+            <label class="viewer-setting viewer-checkbox">
+              <input id="viewer-cover-mode" type="checkbox" checked />
+              <span>1ページ目を表紙にする</span>
+            </label>
+          </div>
+          <div id="viewer-settings-epub-fields" hidden>
+            <section class="viewer-setting viewer-setting-swatches">
+              <span>背景色</span>
+              <div
+                id="viewer-epub-background-mode"
+                class="viewer-background-swatches"
+                role="radiogroup"
+                aria-label="EPUB background color"
+              >
+                <label class="viewer-background-option">
+                  <input
+                    type="radio"
+                    name="viewer-epub-background-mode"
+                    value="default"
+                    aria-label="Default"
+                  />
+                  <span
+                    class="viewer-background-swatch"
+                    data-background-mode="default"
+                    aria-hidden="true"
+                  ></span>
+                </label>
+                <label class="viewer-background-option">
+                  <input
+                    type="radio"
+                    name="viewer-epub-background-mode"
+                    value="snow-white"
+                    aria-label="Snow White"
+                  />
+                  <span
+                    class="viewer-background-swatch"
+                    data-background-mode="snow-white"
+                    aria-hidden="true"
+                  ></span>
+                </label>
+                <label class="viewer-background-option">
+                  <input
+                    type="radio"
+                    name="viewer-epub-background-mode"
+                    value="night-city"
+                    aria-label="Night City"
+                  />
+                  <span
+                    class="viewer-background-swatch"
+                    data-background-mode="night-city"
+                    aria-hidden="true"
+                  ></span>
+                </label>
+                <label class="viewer-background-option">
+                  <input
+                    type="radio"
+                    name="viewer-epub-background-mode"
+                    value="navy-blue"
+                    aria-label="Navy Blue"
+                  />
+                  <span
+                    class="viewer-background-swatch"
+                    data-background-mode="navy-blue"
+                    aria-hidden="true"
+                  ></span>
+                </label>
+              </div>
+              <label class="viewer-background-inherit">
+                <input id="viewer-epub-background-inherit" type="checkbox" />
+                <span>アプリケーション設定を反映</span>
+              </label>
+            </section>
+            <p class="viewer-settings-note">
+              EPUB の背景色は今回の段階では保存のみで、表示への反映はまだ行いません。
+            </p>
+          </div>
         </section>
 
         <section id="pdf-view" class="pdf-view" hidden>

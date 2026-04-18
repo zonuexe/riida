@@ -71,6 +71,24 @@ The app currently supports four themes. New UI should consume semantic theme rol
 - Use `color-scheme: dark` for `night-city` and `navy-blue`.
 - Treat all four themes as peer options. `default` is not the canonical design source for the others; it is simply the theme selected by default on install.
 
+### Viewer background naming
+
+App-wide themes and document-viewer background styles should be treated as separate concepts.
+
+- App-wide themes define the chrome, panels, sidebar, overlays, and overall atmosphere.
+- Viewer background styles define the reading surface behind PDF or EPUB content.
+- Viewer background names should feel like paper, light, or reading-surface materials rather than like room names or whole-app mood names.
+
+Current preferred viewer background label:
+
+- `Warm Paper`
+
+Intent:
+
+- `Warm Paper` is a natural English label for a reading surface.
+- It fits PDF and EPUB viewer contexts better than names like `Reading Room` or `Sunlit Library`, which describe an environment rather than a page background.
+- It should evoke a soft warm off-white paper tone rather than a strong yellow or sepia cast.
+
 ### Default theme
 
 Creative direction: warm library, parchment, sepia, late-afternoon sunlight.
@@ -411,6 +429,12 @@ Pattern:
 - Large soft container with muted tinted background
 - Main content centered and elevated
 - PDF pages and search UI should sit inside this frame without breaking its calm visual hierarchy
+
+Viewer background guidance:
+
+- If the PDF or EPUB viewer supports independent reading-surface color selection, that choice should remain visually subordinate to the app-wide theme.
+- A viewer background such as `Warm Paper` should feel like the page or canvas beneath the document, not like a second competing app theme.
+- Prefer subtle paper-like warmth over saturated color treatments for reader backgrounds.
 
 ## Motion and Interaction
 

@@ -5,6 +5,12 @@ export type ViewerSettings = {
   alignMode: "left" | "center" | "right";
   verticalGapMode: "wide" | "compact" | "none";
   treatFirstPageAsCover: boolean;
+  backgroundMode:
+    | "inherit-theme"
+    | "default"
+    | "snow-white"
+    | "night-city"
+    | "navy-blue";
 };
 
 export type ViewerSettingsScope = "global" | "file";
@@ -53,6 +59,7 @@ export function switchViewerSettingsScopeInState(
         alignMode: state.alignMode,
         verticalGapMode: state.verticalGapMode,
         treatFirstPageAsCover: state.treatFirstPageAsCover,
+        backgroundMode: state.backgroundMode,
       },
     };
   }

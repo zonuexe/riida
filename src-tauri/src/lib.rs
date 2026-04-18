@@ -23,12 +23,19 @@ const DEFAULT_EXCLUDED_PATTERNS: &[&str] = &["**/backup/**", "*.bak.pdf"];
 const DEFAULT_PDF_RENDERER: &str = "native";
 const DEFAULT_THEME: &str = "default";
 const VIEWER_DEFAULT_SCOPE_KEY: &str = "__default__";
+const VIEWER_SOURCE_TYPE_PDF: &str = "pdf";
+const VIEWER_SOURCE_TYPE_EPUB: &str = "epub";
 const DEFAULT_VIEWER_PAGE_MODE: &str = "spread";
 const DEFAULT_VIEWER_BINDING_DIRECTION: &str = "left";
 const DEFAULT_VIEWER_ZOOM_MODE: &str = "fit-height";
 const DEFAULT_VIEWER_ALIGN_MODE: &str = "center";
 const DEFAULT_VIEWER_VERTICAL_GAP_MODE: &str = "compact";
 const DEFAULT_VIEWER_TREAT_FIRST_PAGE_AS_COVER: bool = true;
+const DEFAULT_VIEWER_BACKGROUND_MODE: &str = "inherit-theme";
+const DEFAULT_THEME_VIEWER_BACKGROUND_MODE: &str = "default";
+const SNOW_WHITE_VIEWER_BACKGROUND_MODE: &str = "snow-white";
+const NIGHT_CITY_VIEWER_BACKGROUND_MODE: &str = "night-city";
+const NAVY_BLUE_VIEWER_BACKGROUND_MODE: &str = "navy-blue";
 
 static APP_PATHS: OnceLock<AppPaths> = OnceLock::new();
 
@@ -225,6 +232,7 @@ struct ViewerPreferences {
     align_mode: String,
     vertical_gap_mode: String,
     treat_first_page_as_cover: bool,
+    background_mode: String,
 }
 
 #[derive(Serialize)]
@@ -732,12 +740,14 @@ fn open_database() -> Result<Connection, String> {
             CREATE TABLE IF NOT EXISTS viewer_preferences (
               scope_key TEXT PRIMARY KEY,
               file_path TEXT UNIQUE,
+              source_type TEXT NOT NULL DEFAULT 'pdf',
               page_mode TEXT NOT NULL,
               binding_direction TEXT NOT NULL,
               zoom_mode TEXT NOT NULL,
               align_mode TEXT NOT NULL,
               vertical_gap_mode TEXT NOT NULL,
               treat_first_page_as_cover INTEGER NOT NULL,
+              background_mode TEXT NOT NULL DEFAULT 'inherit-theme',
               updated_at INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS reading_positions (
@@ -803,6 +813,14 @@ fn open_database() -> Result<Connection, String> {
         [],
     );
     let _ = connection.execute("ALTER TABLE reading_positions ADD COLUMN cfi TEXT", []);
+    let _ = connection.execute(
+        "ALTER TABLE viewer_preferences ADD COLUMN source_type TEXT NOT NULL DEFAULT 'pdf'",
+        [],
+    );
+    let _ = connection.execute(
+        "ALTER TABLE viewer_preferences ADD COLUMN background_mode TEXT NOT NULL DEFAULT 'inherit-theme'",
+        [],
+    );
 
     migrate_paths_to_nfc(&connection).map_err(|error| error.to_string())?;
 
@@ -861,10 +879,27 @@ fn migrate_paths_to_nfc(connection: &Connection) -> Result<(), rusqlite::Error> 
                     params![nfd],
                 )?;
             } else {
-                connection.execute(
-                    &format!("UPDATE {table} SET file_path = ?1 WHERE file_path = ?2"),
-                    params![nfc, nfd],
-                )?;
+                if *table == "viewer_preferences" {
+                    let scope_keys: Vec<String> = {
+                        let mut stmt = connection.prepare(
+                            "SELECT scope_key FROM viewer_preferences WHERE file_path = ?1",
+                        )?;
+                        let rows = stmt.query_map(params![&nfd], |row| row.get(0))?;
+                        rows.filter_map(|r| r.ok()).collect()
+                    };
+                    for scope_key in scope_keys {
+                        let next_scope_key = scope_key.replacen(&nfd, &nfc, 1);
+                        connection.execute(
+                            "UPDATE viewer_preferences SET file_path = ?1, scope_key = ?2 WHERE scope_key = ?3",
+                            params![&nfc, &next_scope_key, &scope_key],
+                        )?;
+                    }
+                } else {
+                    connection.execute(
+                        &format!("UPDATE {table} SET file_path = ?1 WHERE file_path = ?2"),
+                        params![nfc, nfd],
+                    )?;
+                }
             }
         }
     }
@@ -1094,7 +1129,23 @@ fn default_viewer_preferences() -> ViewerPreferences {
         align_mode: DEFAULT_VIEWER_ALIGN_MODE.to_string(),
         vertical_gap_mode: DEFAULT_VIEWER_VERTICAL_GAP_MODE.to_string(),
         treat_first_page_as_cover: DEFAULT_VIEWER_TREAT_FIRST_PAGE_AS_COVER,
+        background_mode: DEFAULT_VIEWER_BACKGROUND_MODE.to_string(),
     }
+}
+
+fn normalize_viewer_source_type(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
+        VIEWER_SOURCE_TYPE_EPUB => VIEWER_SOURCE_TYPE_EPUB.to_string(),
+        _ => VIEWER_SOURCE_TYPE_PDF.to_string(),
+    }
+}
+
+fn viewer_global_scope_key(source_type: &str) -> String {
+    format!("{VIEWER_DEFAULT_SCOPE_KEY}:{source_type}")
+}
+
+fn viewer_file_scope_key(file_path: &str, source_type: &str) -> String {
+    format!("{file_path}::{source_type}")
 }
 
 fn normalize_page_mode(value: &str) -> String {
@@ -1135,6 +1186,16 @@ fn normalize_vertical_gap_mode(value: &str) -> String {
     }
 }
 
+fn normalize_background_mode(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
+        DEFAULT_THEME_VIEWER_BACKGROUND_MODE => DEFAULT_THEME_VIEWER_BACKGROUND_MODE.to_string(),
+        SNOW_WHITE_VIEWER_BACKGROUND_MODE => SNOW_WHITE_VIEWER_BACKGROUND_MODE.to_string(),
+        NIGHT_CITY_VIEWER_BACKGROUND_MODE => NIGHT_CITY_VIEWER_BACKGROUND_MODE.to_string(),
+        NAVY_BLUE_VIEWER_BACKGROUND_MODE => NAVY_BLUE_VIEWER_BACKGROUND_MODE.to_string(),
+        _ => DEFAULT_VIEWER_BACKGROUND_MODE.to_string(),
+    }
+}
+
 fn normalize_viewer_preferences(preferences: ViewerPreferences) -> ViewerPreferences {
     ViewerPreferences {
         page_mode: normalize_page_mode(&preferences.page_mode),
@@ -1143,6 +1204,7 @@ fn normalize_viewer_preferences(preferences: ViewerPreferences) -> ViewerPrefere
         align_mode: normalize_align_mode(&preferences.align_mode),
         vertical_gap_mode: normalize_vertical_gap_mode(&preferences.vertical_gap_mode),
         treat_first_page_as_cover: preferences.treat_first_page_as_cover,
+        background_mode: normalize_background_mode(&preferences.background_mode),
     }
 }
 
@@ -1159,7 +1221,8 @@ fn load_saved_viewer_preferences(
               zoom_mode,
               align_mode,
               vertical_gap_mode,
-              treat_first_page_as_cover
+              treat_first_page_as_cover,
+              background_mode
             FROM viewer_preferences
             WHERE scope_key = ?1
             ",
@@ -1174,6 +1237,7 @@ fn load_saved_viewer_preferences(
             align_mode: row.get(3)?,
             vertical_gap_mode: row.get(4)?,
             treat_first_page_as_cover: row.get::<_, i64>(5)? != 0,
+            background_mode: row.get(6)?,
         })
     });
 
@@ -1211,6 +1275,11 @@ fn merge_file_viewer_preferences(
             normalize_vertical_gap_mode(&file.vertical_gap_mode)
         },
         treat_first_page_as_cover: file.treat_first_page_as_cover,
+        background_mode: if file.background_mode.trim().is_empty() {
+            global.background_mode.clone()
+        } else {
+            normalize_background_mode(&file.background_mode)
+        },
     }
 }
 
@@ -1241,6 +1310,11 @@ fn build_file_viewer_preferences_for_storage(
             normalized.vertical_gap_mode
         },
         treat_first_page_as_cover: normalized.treat_first_page_as_cover,
+        background_mode: if normalized.background_mode == global.background_mode {
+            String::new()
+        } else {
+            normalized.background_mode
+        },
     }
 }
 
@@ -1248,9 +1322,11 @@ fn save_viewer_preferences_record(
     connection: &Connection,
     scope_key: &str,
     file_path: Option<&str>,
+    source_type: &str,
     preferences: ViewerPreferences,
 ) -> Result<ViewerPreferences, String> {
     let normalized = normalize_viewer_preferences(preferences);
+    let normalized_source_type = normalize_viewer_source_type(source_type);
     let updated_at = std::time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| error.to_string())?
@@ -1262,28 +1338,33 @@ fn save_viewer_preferences_record(
             INSERT INTO viewer_preferences (
               scope_key,
               file_path,
+              source_type,
               page_mode,
               binding_direction,
               zoom_mode,
               align_mode,
               vertical_gap_mode,
               treat_first_page_as_cover,
+              background_mode,
               updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
             ON CONFLICT(scope_key) DO UPDATE SET
               file_path = excluded.file_path,
+              source_type = excluded.source_type,
               page_mode = excluded.page_mode,
               binding_direction = excluded.binding_direction,
               zoom_mode = excluded.zoom_mode,
               align_mode = excluded.align_mode,
               vertical_gap_mode = excluded.vertical_gap_mode,
               treat_first_page_as_cover = excluded.treat_first_page_as_cover,
+              background_mode = excluded.background_mode,
               updated_at = excluded.updated_at
             ",
             params![
                 scope_key,
                 file_path,
+                normalized_source_type,
                 normalized.page_mode,
                 normalized.binding_direction,
                 normalized.zoom_mode,
@@ -1294,6 +1375,7 @@ fn save_viewer_preferences_record(
                 } else {
                     0
                 },
+                normalized.background_mode,
                 updated_at
             ],
         )
@@ -1305,12 +1387,16 @@ fn save_viewer_preferences_record(
 fn load_viewer_preferences_payload(
     connection: &Connection,
     file_path: Option<&str>,
+    source_type: &str,
 ) -> Result<ViewerPreferencesPayload, String> {
-    let global = load_saved_viewer_preferences(connection, VIEWER_DEFAULT_SCOPE_KEY)?
+    let normalized_source_type = normalize_viewer_source_type(source_type);
+    let global_scope_key = viewer_global_scope_key(&normalized_source_type);
+    let global = load_saved_viewer_preferences(connection, &global_scope_key)?
         .map(normalize_viewer_preferences)
         .unwrap_or_else(default_viewer_preferences);
     let file_raw = if let Some(file_path) = file_path {
-        load_saved_viewer_preferences(connection, file_path)?
+        let file_scope_key = viewer_file_scope_key(file_path, &normalized_source_type);
+        load_saved_viewer_preferences(connection, &file_scope_key)?
     } else {
         None
     };
@@ -2396,51 +2482,77 @@ fn normalize_page_offset_ratio(page_offset_ratio: f64) -> f64 {
 }
 
 #[tauri::command]
-fn load_viewer_preferences(file_path: String) -> Result<ViewerPreferencesPayload, String> {
+fn load_viewer_preferences(
+    file_path: String,
+    source_type: String,
+) -> Result<ViewerPreferencesPayload, String> {
     let connection = open_database()?;
-    load_viewer_preferences_payload(&connection, Some(&file_path))
+    load_viewer_preferences_payload(&connection, Some(&file_path), &source_type)
 }
 
 #[tauri::command]
 fn save_default_viewer_preferences(
     current_file_path: Option<String>,
+    source_type: String,
     preferences: ViewerPreferences,
 ) -> Result<ViewerPreferencesPayload, String> {
     let connection = open_database()?;
-    save_viewer_preferences_record(&connection, VIEWER_DEFAULT_SCOPE_KEY, None, preferences)?;
-    load_viewer_preferences_payload(&connection, current_file_path.as_deref())
+    let normalized_source_type = normalize_viewer_source_type(&source_type);
+    let global_scope_key = viewer_global_scope_key(&normalized_source_type);
+    save_viewer_preferences_record(
+        &connection,
+        &global_scope_key,
+        None,
+        &normalized_source_type,
+        preferences,
+    )?;
+    load_viewer_preferences_payload(
+        &connection,
+        current_file_path.as_deref(),
+        &normalized_source_type,
+    )
 }
 
 #[tauri::command]
 fn save_file_viewer_preferences(
     file_path: String,
+    source_type: String,
     preferences: ViewerPreferences,
 ) -> Result<ViewerPreferencesPayload, String> {
     let connection = open_database()?;
-    let global = load_saved_viewer_preferences(&connection, VIEWER_DEFAULT_SCOPE_KEY)?
+    let normalized_source_type = normalize_viewer_source_type(&source_type);
+    let global_scope_key = viewer_global_scope_key(&normalized_source_type);
+    let global = load_saved_viewer_preferences(&connection, &global_scope_key)?
         .map(normalize_viewer_preferences)
         .unwrap_or_else(default_viewer_preferences);
     let normalized = normalize_viewer_preferences(preferences);
     let stored_preferences = build_file_viewer_preferences_for_storage(&global, normalized);
+    let file_scope_key = viewer_file_scope_key(&file_path, &normalized_source_type);
     save_viewer_preferences_record(
         &connection,
-        &file_path,
+        &file_scope_key,
         Some(&file_path),
+        &normalized_source_type,
         stored_preferences,
     )?;
-    load_viewer_preferences_payload(&connection, Some(&file_path))
+    load_viewer_preferences_payload(&connection, Some(&file_path), &normalized_source_type)
 }
 
 #[tauri::command]
-fn clear_file_viewer_preferences(file_path: String) -> Result<ViewerPreferencesPayload, String> {
+fn clear_file_viewer_preferences(
+    file_path: String,
+    source_type: String,
+) -> Result<ViewerPreferencesPayload, String> {
     let connection = open_database()?;
+    let normalized_source_type = normalize_viewer_source_type(&source_type);
+    let file_scope_key = viewer_file_scope_key(&file_path, &normalized_source_type);
     connection
         .execute(
             "DELETE FROM viewer_preferences WHERE scope_key = ?1",
-            params![&file_path],
+            params![&file_scope_key],
         )
         .map_err(|error| error.to_string())?;
-    load_viewer_preferences_payload(&connection, Some(&file_path))
+    load_viewer_preferences_payload(&connection, Some(&file_path), &normalized_source_type)
 }
 
 fn query_pdf_password(connection: &Connection, file_path: &str) -> Result<Option<String>, String> {
@@ -2568,12 +2680,14 @@ mod tests {
                 CREATE TABLE viewer_preferences (
                   scope_key TEXT PRIMARY KEY,
                   file_path TEXT UNIQUE,
+                  source_type TEXT NOT NULL DEFAULT 'pdf',
                   page_mode TEXT NOT NULL,
                   binding_direction TEXT NOT NULL,
                   zoom_mode TEXT NOT NULL,
                   align_mode TEXT NOT NULL,
                   vertical_gap_mode TEXT NOT NULL,
                   treat_first_page_as_cover INTEGER NOT NULL,
+                  background_mode TEXT NOT NULL DEFAULT 'inherit-theme',
                   updated_at INTEGER NOT NULL
                 );
                 ",
@@ -2589,6 +2703,7 @@ mod tests {
         align_mode: &str,
         vertical_gap_mode: &str,
         treat_first_page_as_cover: bool,
+        background_mode: &str,
     ) -> ViewerPreferences {
         ViewerPreferences {
             page_mode: page_mode.to_string(),
@@ -2597,6 +2712,7 @@ mod tests {
             align_mode: align_mode.to_string(),
             vertical_gap_mode: vertical_gap_mode.to_string(),
             treat_first_page_as_cover,
+            background_mode: background_mode.to_string(),
         }
     }
 
@@ -3011,6 +3127,7 @@ mod tests {
             "outer-space",
             "tight",
             false,
+            "glow",
         ));
 
         assert_eq!(normalized.page_mode, DEFAULT_VIEWER_PAGE_MODE);
@@ -3025,12 +3142,21 @@ mod tests {
             DEFAULT_VIEWER_VERTICAL_GAP_MODE
         );
         assert!(!normalized.treat_first_page_as_cover);
+        assert_eq!(normalized.background_mode, DEFAULT_VIEWER_BACKGROUND_MODE);
     }
 
     #[test]
     fn merge_file_viewer_preferences_inherits_blank_fields_from_global() {
-        let global = viewer_preferences("spread", "left", "fit-height", "center", "compact", true);
-        let file = viewer_preferences("", "right", "", "left", "", false);
+        let global = viewer_preferences(
+            "spread",
+            "left",
+            "fit-height",
+            "center",
+            "compact",
+            true,
+            "inherit-theme",
+        );
+        let file = viewer_preferences("", "right", "", "left", "", false, "");
 
         let merged = merge_file_viewer_preferences(&global, &file);
 
@@ -3040,6 +3166,7 @@ mod tests {
         assert_eq!(merged.align_mode, "left");
         assert_eq!(merged.vertical_gap_mode, "compact");
         assert!(!merged.treat_first_page_as_cover);
+        assert_eq!(merged.background_mode, "inherit-theme");
     }
 
     #[test]
@@ -3048,21 +3175,32 @@ mod tests {
 
         save_viewer_preferences_record(
             &connection,
-            VIEWER_DEFAULT_SCOPE_KEY,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF),
             None,
-            viewer_preferences("spread", "left", "fit-height", "center", "compact", true),
+            VIEWER_SOURCE_TYPE_PDF,
+            viewer_preferences(
+                "spread",
+                "left",
+                "fit-height",
+                "center",
+                "compact",
+                true,
+                "inherit-theme",
+            ),
         )
         .expect("global preferences should save");
         save_viewer_preferences_record(
             &connection,
-            "/tmp/book.pdf",
+            &viewer_file_scope_key("/tmp/book.pdf", VIEWER_SOURCE_TYPE_PDF),
             Some("/tmp/book.pdf"),
-            viewer_preferences("", "right", "original", "", "", false),
+            VIEWER_SOURCE_TYPE_PDF,
+            viewer_preferences("", "right", "original", "", "", false, "night-city"),
         )
         .expect("file preferences should save");
 
-        let payload = load_viewer_preferences_payload(&connection, Some("/tmp/book.pdf"))
-            .expect("payload should load");
+        let payload =
+            load_viewer_preferences_payload(&connection, Some("/tmp/book.pdf"), VIEWER_SOURCE_TYPE_PDF)
+                .expect("payload should load");
 
         assert_eq!(payload.global.binding_direction, "left");
         assert!(payload.uses_file_override);
@@ -3073,13 +3211,23 @@ mod tests {
         assert_eq!(file.align_mode, "center");
         assert_eq!(file.vertical_gap_mode, "compact");
         assert!(!file.treat_first_page_as_cover);
+        assert_eq!(file.background_mode, "night-city");
         assert_eq!(payload.effective.binding_direction, "right");
         assert_eq!(payload.effective.zoom_mode, "original");
+        assert_eq!(payload.effective.background_mode, "night-city");
     }
 
     #[test]
     fn file_viewer_preferences_store_only_non_global_overrides() {
-        let global = viewer_preferences("spread", "left", "fit-height", "center", "compact", true);
+        let global = viewer_preferences(
+            "spread",
+            "left",
+            "fit-height",
+            "center",
+            "compact",
+            true,
+            "inherit-theme",
+        );
         let stored = build_file_viewer_preferences_for_storage(
             &global,
             normalize_viewer_preferences(viewer_preferences(
@@ -3089,6 +3237,7 @@ mod tests {
                 "center",
                 "compact",
                 false,
+                "navy-blue",
             )),
         );
 
@@ -3098,6 +3247,55 @@ mod tests {
         assert_eq!(stored.align_mode, "");
         assert_eq!(stored.vertical_gap_mode, "");
         assert!(!stored.treat_first_page_as_cover);
+        assert_eq!(stored.background_mode, "navy-blue");
+    }
+
+    #[test]
+    fn viewer_preferences_are_scoped_by_source_type() {
+        let connection = test_connection();
+
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF),
+            None,
+            VIEWER_SOURCE_TYPE_PDF,
+            viewer_preferences(
+                "spread",
+                "left",
+                "fit-height",
+                "center",
+                "compact",
+                true,
+                "default",
+            ),
+        )
+        .expect("pdf preferences should save");
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_EPUB),
+            None,
+            VIEWER_SOURCE_TYPE_EPUB,
+            viewer_preferences(
+                "single",
+                "right",
+                "original",
+                "left",
+                "wide",
+                false,
+                "inherit-theme",
+            ),
+        )
+        .expect("epub preferences should save");
+
+        let pdf_payload =
+            load_viewer_preferences_payload(&connection, Some("/tmp/book.pdf"), VIEWER_SOURCE_TYPE_PDF)
+                .expect("pdf payload should load");
+        let epub_payload =
+            load_viewer_preferences_payload(&connection, Some("/tmp/book.epub"), VIEWER_SOURCE_TYPE_EPUB)
+                .expect("epub payload should load");
+
+        assert_eq!(pdf_payload.global.background_mode, "default");
+        assert_eq!(epub_payload.global.background_mode, "inherit-theme");
     }
 
     #[test]
@@ -3256,6 +3454,7 @@ mod tests {
             align_mode in ".*",
             vertical_gap_mode in ".*",
             treat_first_page_as_cover in any::<bool>(),
+            background_mode in ".*",
         ) -> ViewerPreferences {
             ViewerPreferences {
                 page_mode,
@@ -3264,6 +3463,7 @@ mod tests {
                 align_mode,
                 vertical_gap_mode,
                 treat_first_page_as_cover,
+                background_mode,
             }
         }
     }
@@ -3288,6 +3488,13 @@ mod tests {
                 Just("none".to_string())
             ],
             treat_first_page_as_cover in any::<bool>(),
+            background_mode in prop_oneof![
+                Just("inherit-theme".to_string()),
+                Just("default".to_string()),
+                Just("snow-white".to_string()),
+                Just("night-city".to_string()),
+                Just("navy-blue".to_string())
+            ],
         ) -> ViewerPreferences {
             ViewerPreferences {
                 page_mode,
@@ -3296,6 +3503,7 @@ mod tests {
                 align_mode,
                 vertical_gap_mode,
                 treat_first_page_as_cover,
+                background_mode,
             }
         }
     }
@@ -3317,6 +3525,10 @@ mod tests {
             prop_assert!(matches!(
                 normalized.vertical_gap_mode.as_str(),
                 "wide" | "compact" | "none"
+            ));
+            prop_assert!(matches!(
+                normalized.background_mode.as_str(),
+                "inherit-theme" | "default" | "snow-white" | "night-city" | "navy-blue"
             ));
         }
 
@@ -3352,6 +3564,7 @@ mod tests {
                 merged.treat_first_page_as_cover,
                 effective.treat_first_page_as_cover
             );
+            prop_assert_eq!(merged.background_mode, effective.background_mode);
         }
 
         #[test]

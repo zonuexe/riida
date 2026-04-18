@@ -12,6 +12,7 @@ const defaultSettings: ViewerSettings = {
   alignMode: "center",
   verticalGapMode: "compact",
   treatFirstPageAsCover: true,
+  backgroundMode: "inherit-theme",
 };
 
 describe("applyViewerSettingsPayloadToState", () => {
@@ -19,6 +20,7 @@ describe("applyViewerSettingsPayloadToState", () => {
     const fileOverride: ViewerSettings = {
       ...defaultSettings,
       bindingDirection: "right",
+      backgroundMode: "night-city",
     };
     const state = applyViewerSettingsPayloadToState({
       global: defaultSettings,
@@ -29,8 +31,11 @@ describe("applyViewerSettingsPayloadToState", () => {
 
     expect(state.scope).toBe("file");
     expect(state.bindingDirection).toBe("right");
+    expect(state.backgroundMode).toBe("night-city");
     expect(state.globalDraft.bindingDirection).toBe("left");
+    expect(state.globalDraft.backgroundMode).toBe("inherit-theme");
     expect(state.fileDraft.bindingDirection).toBe("right");
+    expect(state.fileDraft.backgroundMode).toBe("night-city");
     expect(state.hasFileOverride).toBe(true);
   });
 

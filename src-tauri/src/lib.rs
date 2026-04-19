@@ -36,6 +36,7 @@ const DEFAULT_VIEWER_ALIGN_MODE: &str = "center";
 const DEFAULT_VIEWER_VERTICAL_GAP_MODE: &str = "compact";
 const DEFAULT_VIEWER_TREAT_FIRST_PAGE_AS_COVER: bool = true;
 const DEFAULT_VIEWER_BACKGROUND_MODE: &str = "inherit-theme";
+const DEFAULT_VIEWER_SCROLL_MODE: &str = "paged";
 const DEFAULT_THEME_VIEWER_BACKGROUND_MODE: &str = "default";
 const SNOW_WHITE_VIEWER_BACKGROUND_MODE: &str = "snow-white";
 const NIGHT_CITY_VIEWER_BACKGROUND_MODE: &str = "night-city";
@@ -237,6 +238,7 @@ struct ViewerPreferences {
     vertical_gap_mode: String,
     treat_first_page_as_cover: bool,
     background_mode: String,
+    scroll_mode: String,
 }
 
 #[derive(Serialize)]
@@ -752,6 +754,7 @@ fn open_database() -> Result<Connection, String> {
               vertical_gap_mode TEXT NOT NULL,
               treat_first_page_as_cover INTEGER NOT NULL,
               background_mode TEXT NOT NULL DEFAULT 'inherit-theme',
+              scroll_mode TEXT NOT NULL DEFAULT 'paged',
               updated_at INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS reading_positions (
@@ -823,6 +826,10 @@ fn open_database() -> Result<Connection, String> {
     );
     let _ = connection.execute(
         "ALTER TABLE viewer_preferences ADD COLUMN background_mode TEXT NOT NULL DEFAULT 'inherit-theme'",
+        [],
+    );
+    let _ = connection.execute(
+        "ALTER TABLE viewer_preferences ADD COLUMN scroll_mode TEXT NOT NULL DEFAULT 'paged'",
         [],
     );
 
@@ -1134,6 +1141,7 @@ fn default_viewer_preferences() -> ViewerPreferences {
         vertical_gap_mode: DEFAULT_VIEWER_VERTICAL_GAP_MODE.to_string(),
         treat_first_page_as_cover: DEFAULT_VIEWER_TREAT_FIRST_PAGE_AS_COVER,
         background_mode: DEFAULT_VIEWER_BACKGROUND_MODE.to_string(),
+        scroll_mode: DEFAULT_VIEWER_SCROLL_MODE.to_string(),
     }
 }
 
@@ -1190,6 +1198,13 @@ fn normalize_vertical_gap_mode(value: &str) -> String {
     }
 }
 
+fn normalize_scroll_mode(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
+        "continuous" => "continuous".to_string(),
+        _ => DEFAULT_VIEWER_SCROLL_MODE.to_string(),
+    }
+}
+
 fn normalize_background_mode(value: &str) -> String {
     match value.trim().to_lowercase().as_str() {
         DEFAULT_THEME_VIEWER_BACKGROUND_MODE => DEFAULT_THEME_VIEWER_BACKGROUND_MODE.to_string(),
@@ -1209,6 +1224,7 @@ fn normalize_viewer_preferences(preferences: ViewerPreferences) -> ViewerPrefere
         vertical_gap_mode: normalize_vertical_gap_mode(&preferences.vertical_gap_mode),
         treat_first_page_as_cover: preferences.treat_first_page_as_cover,
         background_mode: normalize_background_mode(&preferences.background_mode),
+        scroll_mode: normalize_scroll_mode(&preferences.scroll_mode),
     }
 }
 
@@ -1226,7 +1242,8 @@ fn load_saved_viewer_preferences(
               align_mode,
               vertical_gap_mode,
               treat_first_page_as_cover,
-              background_mode
+              background_mode,
+              scroll_mode
             FROM viewer_preferences
             WHERE scope_key = ?1
             ",
@@ -1242,6 +1259,7 @@ fn load_saved_viewer_preferences(
             vertical_gap_mode: row.get(4)?,
             treat_first_page_as_cover: row.get::<_, i64>(5)? != 0,
             background_mode: row.get(6)?,
+            scroll_mode: row.get(7)?,
         })
     });
 
@@ -1284,6 +1302,11 @@ fn merge_file_viewer_preferences(
         } else {
             normalize_background_mode(&file.background_mode)
         },
+        scroll_mode: if file.scroll_mode.trim().is_empty() {
+            global.scroll_mode.clone()
+        } else {
+            normalize_scroll_mode(&file.scroll_mode)
+        },
     }
 }
 
@@ -1319,6 +1342,11 @@ fn build_file_viewer_preferences_for_storage(
         } else {
             normalized.background_mode
         },
+        scroll_mode: if normalized.scroll_mode == global.scroll_mode {
+            String::new()
+        } else {
+            normalized.scroll_mode
+        },
     }
 }
 
@@ -1350,9 +1378,10 @@ fn save_viewer_preferences_record(
               vertical_gap_mode,
               treat_first_page_as_cover,
               background_mode,
+              scroll_mode,
               updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
             ON CONFLICT(scope_key) DO UPDATE SET
               file_path = excluded.file_path,
               source_type = excluded.source_type,
@@ -1363,6 +1392,7 @@ fn save_viewer_preferences_record(
               vertical_gap_mode = excluded.vertical_gap_mode,
               treat_first_page_as_cover = excluded.treat_first_page_as_cover,
               background_mode = excluded.background_mode,
+              scroll_mode = excluded.scroll_mode,
               updated_at = excluded.updated_at
             ",
             params![
@@ -1380,6 +1410,7 @@ fn save_viewer_preferences_record(
                     0
                 },
                 normalized.background_mode,
+                normalized.scroll_mode,
                 updated_at
             ],
         )
@@ -3012,6 +3043,7 @@ mod tests {
                   vertical_gap_mode TEXT NOT NULL,
                   treat_first_page_as_cover INTEGER NOT NULL,
                   background_mode TEXT NOT NULL DEFAULT 'inherit-theme',
+                  scroll_mode TEXT NOT NULL DEFAULT 'paged',
                   updated_at INTEGER NOT NULL
                 );
                 ",
@@ -3037,6 +3069,7 @@ mod tests {
             vertical_gap_mode: vertical_gap_mode.to_string(),
             treat_first_page_as_cover,
             background_mode: background_mode.to_string(),
+            scroll_mode: String::new(),
         }
     }
 
@@ -3788,6 +3821,7 @@ mod tests {
             vertical_gap_mode in ".*",
             treat_first_page_as_cover in any::<bool>(),
             background_mode in ".*",
+            scroll_mode in ".*",
         ) -> ViewerPreferences {
             ViewerPreferences {
                 page_mode,
@@ -3797,6 +3831,7 @@ mod tests {
                 vertical_gap_mode,
                 treat_first_page_as_cover,
                 background_mode,
+                scroll_mode,
             }
         }
     }
@@ -3828,6 +3863,10 @@ mod tests {
                 Just("night-city".to_string()),
                 Just("navy-blue".to_string())
             ],
+            scroll_mode in prop_oneof![
+                Just("continuous".to_string()),
+                Just("paged".to_string())
+            ],
         ) -> ViewerPreferences {
             ViewerPreferences {
                 page_mode,
@@ -3837,6 +3876,7 @@ mod tests {
                 vertical_gap_mode,
                 treat_first_page_as_cover,
                 background_mode,
+                scroll_mode,
             }
         }
     }
@@ -3862,6 +3902,10 @@ mod tests {
             prop_assert!(matches!(
                 normalized.background_mode.as_str(),
                 "inherit-theme" | "default" | "snow-white" | "night-city" | "navy-blue"
+            ));
+            prop_assert!(matches!(
+                normalized.scroll_mode.as_str(),
+                "continuous" | "paged"
             ));
         }
 
@@ -3898,6 +3942,7 @@ mod tests {
                 effective.treat_first_page_as_cover
             );
             prop_assert_eq!(merged.background_mode, effective.background_mode);
+            prop_assert_eq!(merged.scroll_mode, effective.scroll_mode);
         }
 
         #[test]

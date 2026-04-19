@@ -1403,6 +1403,15 @@ h1 {
   margin-inline: auto;
 }
 
+.viewer-stage[data-scroll-mode="paged"] {
+  scroll-snap-type: y mandatory;
+}
+
+.viewer-stage[data-scroll-mode="paged"] .pdfjs-spread {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
 .pdfjs-viewer .page {
   --user-unit: 1;
   --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));

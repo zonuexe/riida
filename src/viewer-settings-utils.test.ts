@@ -13,6 +13,7 @@ const defaultSettings: ViewerSettings = {
   verticalGapMode: "compact",
   treatFirstPageAsCover: true,
   backgroundMode: "inherit-theme",
+  scrollMode: "continuous",
 };
 
 describe("applyViewerSettingsPayloadToState", () => {

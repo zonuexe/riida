@@ -166,6 +166,7 @@ type ViewerSettings = {
   verticalGapMode: "wide" | "compact" | "none";
   treatFirstPageAsCover: boolean;
   backgroundMode: ViewerBackgroundMode;
+  scrollMode: "continuous" | "paged";
 };
 
 type ViewerSettingsPayload = {
@@ -330,6 +331,7 @@ const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
   verticalGapMode: "compact",
   treatFirstPageAsCover: true,
   backgroundMode: "inherit-theme",
+  scrollMode: "paged",
 };
 
 const viewerSettings: ViewerSettingsState = {
@@ -2517,6 +2519,7 @@ function syncViewerSettingsUi() {
   const zoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
   const alignModeEl = document.querySelector<HTMLSelectElement>("#viewer-align-mode");
   const verticalGapModeEl = document.querySelector<HTMLSelectElement>("#viewer-vertical-gap-mode");
+  const scrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
   const coverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
   const sourceType = currentViewerSettingsSourceType();
   const isPdfViewerSettingsAvailable =
@@ -2577,6 +2580,10 @@ function syncViewerSettingsUi() {
     verticalGapModeEl.value = editingPreferences.verticalGapMode;
   }
 
+  if (scrollModeEl) {
+    scrollModeEl.value = editingPreferences.scrollMode;
+  }
+
   if (coverModeEl) {
     coverModeEl.checked = editingPreferences.treatFirstPageAsCover;
   }
@@ -2616,6 +2623,8 @@ function applyViewerPreferences(
   viewerSettings.verticalGapMode = preferences.verticalGapMode;
   viewerSettings.treatFirstPageAsCover = preferences.treatFirstPageAsCover;
   viewerSettings.backgroundMode = preferences.backgroundMode;
+  viewerSettings.scrollMode = preferences.scrollMode;
+  syncImmediatePdfScrollMode();
   viewerSettings.scope = scope;
   viewerSettings.hasFileOverride = hasFileOverride;
   viewerSettings.sourceType = sourceType;
@@ -3115,6 +3124,154 @@ function isEditableTarget(target: EventTarget | null) {
 
 function currentViewerStage() {
   return document.querySelector<HTMLElement>(".viewer-stage");
+}
+
+function syncImmediatePdfScrollMode() {
+  const stageEl = currentViewerStage();
+  if (!stageEl) {
+    return;
+  }
+  stageEl.dataset.scrollMode = viewerSettings.scrollMode;
+}
+
+function getPdfPageEls(): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>(".pdfjs-spread"));
+}
+
+function findActivePdfPageEl(stageEl: HTMLElement, pageEls: HTMLElement[]): HTMLElement | null {
+  if (pageEls.length === 0) {
+    return null;
+  }
+  const anchor = stageEl.scrollTop + stageEl.clientHeight * 0.3;
+  let active = pageEls[0];
+  for (const pageEl of pageEls) {
+    if (pageEl.offsetTop <= anchor) {
+      active = pageEl;
+    } else {
+      break;
+    }
+  }
+  return active;
+}
+
+function handlePdfPagedKey(event: KeyboardEvent): boolean {
+  if (viewerSettings.scrollMode !== "paged") {
+    return false;
+  }
+  if (viewerState.currentBook?.sourceType !== "pdf") {
+    return false;
+  }
+  if (lastSnapshot?.pdfRenderer !== "pdfjs") {
+    return false;
+  }
+  const stageEl = currentViewerStage();
+  if (!stageEl) {
+    return false;
+  }
+  const pageEls = getPdfPageEls();
+  const activeEl = findActivePdfPageEl(stageEl, pageEls);
+  if (!activeEl) {
+    return false;
+  }
+
+  const key = event.key;
+  const isArrowH = key === "ArrowLeft" || key === "ArrowRight";
+  const isArrowV = key === "ArrowUp" || key === "ArrowDown";
+  const isPage = key === "PageUp" || key === "PageDown";
+  if (!isArrowH && !isArrowV && !isPage) {
+    return false;
+  }
+
+  const rtl = viewerSettings.bindingDirection === "right";
+  const wantsNext =
+    key === "ArrowDown" ||
+    key === "PageDown" ||
+    (key === "ArrowRight" && !rtl) ||
+    (key === "ArrowLeft" && rtl);
+
+  const index = pageEls.indexOf(activeEl);
+  const adjacent = (dir: 1 | -1): HTMLElement | null => pageEls[index + dir] ?? null;
+
+  const scrollToPageTop = (pageEl: HTMLElement) => {
+    stageEl.scrollTo({ top: pageEl.offsetTop, left: stageEl.scrollLeft, behavior: "auto" });
+  };
+
+  if (isPage) {
+    event.preventDefault();
+    const target = wantsNext ? adjacent(1) : adjacent(-1);
+    if (target) {
+      scrollToPageTop(target);
+    }
+    return true;
+  }
+
+  const threshold = 2;
+  const pageTopInStage = activeEl.offsetTop - stageEl.scrollTop;
+  const pageBottomInStage = pageTopInStage + activeEl.offsetHeight;
+  const pageLeftInStage = activeEl.offsetLeft - stageEl.scrollLeft;
+  const pageRightInStage = pageLeftInStage + activeEl.offsetWidth;
+
+  if (isArrowV) {
+    event.preventDefault();
+    const step = Math.max(stageEl.clientHeight * 0.9, 40);
+    if (wantsNext) {
+      const bottomVisible = pageBottomInStage <= stageEl.clientHeight + threshold;
+      if (bottomVisible) {
+        const target = adjacent(1);
+        if (target) scrollToPageTop(target);
+      } else {
+        const maxTop = activeEl.offsetTop + activeEl.offsetHeight - stageEl.clientHeight;
+        stageEl.scrollTo({ top: Math.min(stageEl.scrollTop + step, maxTop), behavior: "auto" });
+      }
+    } else {
+      const topVisible = pageTopInStage >= -threshold;
+      if (topVisible) {
+        const target = adjacent(-1);
+        if (target) scrollToPageTop(target);
+      } else {
+        const minTop = activeEl.offsetTop;
+        stageEl.scrollTo({ top: Math.max(stageEl.scrollTop - step, minTop), behavior: "auto" });
+      }
+    }
+    return true;
+  }
+
+  if (isArrowH) {
+    event.preventDefault();
+    const step = Math.max(stageEl.clientWidth * 0.9, 40);
+    const movingRight = key === "ArrowRight";
+    const canScrollHorizontally = activeEl.offsetWidth > stageEl.clientWidth + threshold;
+    if (movingRight) {
+      const rightVisible = pageRightInStage <= stageEl.clientWidth + threshold;
+      if (!canScrollHorizontally || rightVisible) {
+        const target = wantsNext ? adjacent(1) : adjacent(-1);
+        if (target) scrollToPageTop(target);
+      } else {
+        const maxLeft = activeEl.offsetLeft + activeEl.offsetWidth - stageEl.clientWidth;
+        stageEl.scrollTo({
+          top: stageEl.scrollTop,
+          left: Math.min(stageEl.scrollLeft + step, maxLeft),
+          behavior: "auto",
+        });
+      }
+    } else {
+      const leftVisible = pageLeftInStage >= -threshold;
+      if (!canScrollHorizontally || leftVisible) {
+        const target = wantsNext ? adjacent(1) : adjacent(-1);
+        if (target) scrollToPageTop(target);
+      } else {
+        const minLeft = activeEl.offsetLeft;
+        stageEl.scrollTo({
+          top: stageEl.scrollTop,
+          left: Math.max(stageEl.scrollLeft - step, minLeft),
+          behavior: "auto",
+        });
+      }
+    }
+    return true;
+  }
+
+  return false;
 }
 
 function searchNormalize(str: string): string {
@@ -4110,6 +4267,7 @@ async function renderCurrentPage() {
   if (snapshot.pdfRenderer === "pdfjs") {
     applyEpubViewerColors("inherit-theme");
     applyPdfViewerBackground(viewerSettings.backgroundMode);
+    syncImmediatePdfScrollMode();
     activePdfRenderSession = null;
     frame.hidden = true;
     frame.src = "about:blank";
@@ -4936,6 +5094,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const viewerVerticalGapModeEl = document.querySelector<HTMLSelectElement>(
     "#viewer-vertical-gap-mode",
   );
+  const viewerScrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
   const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
   const viewerBackgroundInheritEl = document.querySelector<HTMLInputElement>(
     "#viewer-background-inherit",
@@ -5437,6 +5596,18 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
+  viewerScrollModeEl?.addEventListener("change", () => {
+    updateViewerSettings(
+      () => {
+        mutateEditingViewerSettings((preferences) => {
+          preferences.scrollMode = viewerScrollModeEl.value as ViewerSettings["scrollMode"];
+        });
+        syncImmediatePdfScrollMode();
+      },
+      { rerenderPdf: false },
+    );
+  });
+
   bindViewerBackgroundOptionGroup("viewer-background-mode", (value) => {
     updateViewerSettings(
       () => {
@@ -5596,6 +5767,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (wantsForward) {
       event.preventDefault();
       navigateForward();
+      return;
+    }
+
+    if (handlePdfPagedKey(event)) {
       return;
     }
 

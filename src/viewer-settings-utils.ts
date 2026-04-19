@@ -6,6 +6,7 @@ export type ViewerSettings = {
   verticalGapMode: "wide" | "compact" | "none";
   treatFirstPageAsCover: boolean;
   backgroundMode: "inherit-theme" | "default" | "snow-white" | "night-city" | "navy-blue";
+  scrollMode: "continuous" | "paged";
 };
 
 export type ViewerSettingsScope = "global" | "file";
@@ -55,6 +56,7 @@ export function switchViewerSettingsScopeInState(
         verticalGapMode: state.verticalGapMode,
         treatFirstPageAsCover: state.treatFirstPageAsCover,
         backgroundMode: state.backgroundMode,
+        scrollMode: state.scrollMode,
       },
     };
   }

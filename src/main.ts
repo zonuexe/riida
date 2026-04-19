@@ -57,6 +57,7 @@ import {
 } from "./note-window-utils";
 import { buildPageGroups, getVisualPageOrder } from "./viewer-layout-utils";
 import { buildPdfRenderWindowPlan } from "./pdf-render-window-utils";
+import { planPagedKeyAction } from "./pdf-paged-nav-utils";
 import {
   applyViewerSettingsPayloadToState,
   switchViewerSettingsScopeInState,
@@ -3175,103 +3176,45 @@ function handlePdfPagedKey(event: KeyboardEvent): boolean {
   }
 
   const key = event.key;
-  const isArrowH = key === "ArrowLeft" || key === "ArrowRight";
-  const isArrowV = key === "ArrowUp" || key === "ArrowDown";
-  const isPage = key === "PageUp" || key === "PageDown";
-  if (!isArrowH && !isArrowV && !isPage) {
+  if (
+    key !== "ArrowLeft" &&
+    key !== "ArrowRight" &&
+    key !== "ArrowUp" &&
+    key !== "ArrowDown" &&
+    key !== "PageUp" &&
+    key !== "PageDown"
+  ) {
     return false;
   }
 
-  const rtl = viewerSettings.bindingDirection === "right";
-  const wantsNext =
-    key === "ArrowDown" ||
-    key === "PageDown" ||
-    (key === "ArrowRight" && !rtl) ||
-    (key === "ArrowLeft" && rtl);
+  const action = planPagedKeyAction(
+    key,
+    {
+      scrollTop: stageEl.scrollTop,
+      scrollLeft: stageEl.scrollLeft,
+      clientHeight: stageEl.clientHeight,
+      clientWidth: stageEl.clientWidth,
+      pageOffsetTop: activeEl.offsetTop,
+      pageOffsetLeft: activeEl.offsetLeft,
+      pageHeight: activeEl.offsetHeight,
+      pageWidth: activeEl.offsetWidth,
+    },
+    viewerSettings.bindingDirection,
+  );
 
-  const index = pageEls.indexOf(activeEl);
-  const adjacent = (dir: 1 | -1): HTMLElement | null => pageEls[index + dir] ?? null;
+  event.preventDefault();
 
-  const scrollToPageTop = (pageEl: HTMLElement) => {
-    stageEl.scrollTo({ top: pageEl.offsetTop, left: stageEl.scrollLeft, behavior: "auto" });
-  };
-
-  if (isPage) {
-    event.preventDefault();
-    const target = wantsNext ? adjacent(1) : adjacent(-1);
+  if (action.kind === "jump-adjacent") {
+    const index = pageEls.indexOf(activeEl);
+    const target = pageEls[index + action.direction];
     if (target) {
-      scrollToPageTop(target);
+      stageEl.scrollTo({ top: target.offsetTop, left: stageEl.scrollLeft, behavior: "auto" });
     }
     return true;
   }
 
-  const threshold = 2;
-  const pageTopInStage = activeEl.offsetTop - stageEl.scrollTop;
-  const pageBottomInStage = pageTopInStage + activeEl.offsetHeight;
-  const pageLeftInStage = activeEl.offsetLeft - stageEl.scrollLeft;
-  const pageRightInStage = pageLeftInStage + activeEl.offsetWidth;
-
-  if (isArrowV) {
-    event.preventDefault();
-    const step = Math.max(stageEl.clientHeight * 0.9, 40);
-    if (wantsNext) {
-      const bottomVisible = pageBottomInStage <= stageEl.clientHeight + threshold;
-      if (bottomVisible) {
-        const target = adjacent(1);
-        if (target) scrollToPageTop(target);
-      } else {
-        const maxTop = activeEl.offsetTop + activeEl.offsetHeight - stageEl.clientHeight;
-        stageEl.scrollTo({ top: Math.min(stageEl.scrollTop + step, maxTop), behavior: "auto" });
-      }
-    } else {
-      const topVisible = pageTopInStage >= -threshold;
-      if (topVisible) {
-        const target = adjacent(-1);
-        if (target) scrollToPageTop(target);
-      } else {
-        const minTop = activeEl.offsetTop;
-        stageEl.scrollTo({ top: Math.max(stageEl.scrollTop - step, minTop), behavior: "auto" });
-      }
-    }
-    return true;
-  }
-
-  if (isArrowH) {
-    event.preventDefault();
-    const step = Math.max(stageEl.clientWidth * 0.9, 40);
-    const movingRight = key === "ArrowRight";
-    const canScrollHorizontally = activeEl.offsetWidth > stageEl.clientWidth + threshold;
-    if (movingRight) {
-      const rightVisible = pageRightInStage <= stageEl.clientWidth + threshold;
-      if (!canScrollHorizontally || rightVisible) {
-        const target = wantsNext ? adjacent(1) : adjacent(-1);
-        if (target) scrollToPageTop(target);
-      } else {
-        const maxLeft = activeEl.offsetLeft + activeEl.offsetWidth - stageEl.clientWidth;
-        stageEl.scrollTo({
-          top: stageEl.scrollTop,
-          left: Math.min(stageEl.scrollLeft + step, maxLeft),
-          behavior: "auto",
-        });
-      }
-    } else {
-      const leftVisible = pageLeftInStage >= -threshold;
-      if (!canScrollHorizontally || leftVisible) {
-        const target = wantsNext ? adjacent(1) : adjacent(-1);
-        if (target) scrollToPageTop(target);
-      } else {
-        const minLeft = activeEl.offsetLeft;
-        stageEl.scrollTo({
-          top: stageEl.scrollTop,
-          left: Math.max(stageEl.scrollLeft - step, minLeft),
-          behavior: "auto",
-        });
-      }
-    }
-    return true;
-  }
-
-  return false;
+  stageEl.scrollTo({ top: action.top, left: action.left, behavior: "auto" });
+  return true;
 }
 
 function searchNormalize(str: string): string {

@@ -19,3 +19,6 @@ data/*.db-*
 data/thumbnails/
 cache/
 riida.toml
+src-tauri/mutants.out/
+src-tauri/mutants.out.old/
+src-tauri/proptest-regressions/

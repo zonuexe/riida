@@ -110,6 +110,67 @@ describe("planPagedKeyAction", () => {
     });
   });
 
+  it("ArrowDown uses 40px minimum step when 0.9 * clientHeight is smaller", () => {
+    const tiny: PagedNavState = { ...baseState, clientHeight: 20, pageHeight: 400 };
+    expect(planPagedKeyAction("ArrowDown", tiny, "left")).toEqual({
+      kind: "scroll",
+      top: 40,
+      left: 0,
+    });
+  });
+
+  it("ArrowRight uses 40px minimum step when 0.9 * clientWidth is smaller", () => {
+    const tiny: PagedNavState = {
+      ...baseState,
+      clientWidth: 30,
+      pageWidth: 400,
+    };
+    expect(planPagedKeyAction("ArrowRight", tiny, "left")).toEqual({
+      kind: "scroll",
+      top: 0,
+      left: 40,
+    });
+  });
+
+  it("ArrowDown treats bottom edge as visible within the edge threshold", () => {
+    // pageBottomInStage = 1200 - scrollTop = 598; clientHeight = 600; within threshold.
+    const atEdge: PagedNavState = { ...baseState, scrollTop: 602 };
+    expect(planPagedKeyAction("ArrowDown", atEdge, "left")).toEqual({
+      kind: "jump-adjacent",
+      direction: 1,
+    });
+  });
+
+  it("ArrowDown still scrolls when bottom edge is just past the threshold", () => {
+    // pageBottomInStage = 1200 - 597 = 603 > clientHeight + 2 (602). Not visible yet.
+    const justBefore: PagedNavState = { ...baseState, scrollTop: 597 };
+    const action = planPagedKeyAction("ArrowDown", justBefore, "left");
+    expect(action.kind).toBe("scroll");
+  });
+
+  it("ArrowUp treats top edge as visible within the edge threshold", () => {
+    // pageTopInStage = 0 - 2 = -2, within -threshold.
+    const atEdge: PagedNavState = { ...baseState, scrollTop: 2 };
+    expect(planPagedKeyAction("ArrowUp", atEdge, "left")).toEqual({
+      kind: "jump-adjacent",
+      direction: -1,
+    });
+  });
+
+  it("ArrowUp still scrolls when top edge is just past the threshold", () => {
+    const justBefore: PagedNavState = { ...baseState, scrollTop: 3 };
+    const action = planPagedKeyAction("ArrowUp", justBefore, "left");
+    expect(action.kind).toBe("scroll");
+  });
+
+  it("treats page of exactly viewport width as non-overflowing (no horizontal scrolling)", () => {
+    const exact: PagedNavState = { ...baseState, pageWidth: 800, clientWidth: 800 };
+    expect(planPagedKeyAction("ArrowRight", exact, "left")).toEqual({
+      kind: "jump-adjacent",
+      direction: 1,
+    });
+  });
+
   it("ArrowDown clamps scroll to not exceed page bottom", () => {
     const nearBottom: PagedNavState = { ...baseState, scrollTop: 500, clientHeight: 600 };
     expect(planPagedKeyAction("ArrowDown", nearBottom, "left")).toEqual({

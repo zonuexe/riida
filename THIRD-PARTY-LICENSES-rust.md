@@ -8885,7 +8885,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### open 5.3.3
+### open 5.3.4
 
 - License: MIT
 - Authors: Sebastian Thiel <byronimo@gmail.com>
@@ -10888,7 +10888,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### rand 0.8.5
+### rand 0.8.6
 
 - License: MIT OR Apache-2.0
 - Authors: The Rand Project Developers, The Rust Project Developers
@@ -14331,7 +14331,7 @@ freely, subject to the following restrictions:
 3. This notice may not be removed or altered from any source distribution.
 ```
 
-### tokio 1.52.0
+### tokio 1.52.1
 
 - License: MIT
 - Authors: Tokio Contributors <team@tokio.rs>
@@ -14946,7 +14946,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### typenum 1.19.0
+### typenum 1.20.0
 
 - License: MIT OR Apache-2.0
 - Authors: Paho Lurie-Gregg <paho@paholg.com>, Andre Bogus <bogusandre@gmail.com>

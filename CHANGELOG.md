@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-20
+
+### Added
+
+- EPUB cover thumbnail extraction from manifest, with automatic format conversion to JPEG.
+- EPUB metadata auto-import directly from the OPF manifest (title, authors, publisher, language).
+- EPUB internal link history and CFI-based anchor navigation for smoother cross-section browsing.
+- Paged scroll mode for PDF.js viewer as an alternative to continuous scrolling.
+- CSS injection for EPUB vertical writing mode, fixing rendering of Japanese and other vertical-text publications.
+
+### Fixed
+
+- Release date input now normalizes on blur in the metadata editor.
+
 ## [0.3.0] - 2026-04-18
 
 ### Added
@@ -218,7 +232,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/zonuexe/riida/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/zonuexe/riida/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/zonuexe/riida/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/zonuexe/riida/compare/v0.2.3...v0.2.4

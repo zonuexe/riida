@@ -73,8 +73,7 @@ export function planPagedKeyAction(
   }
 
   // Horizontal keys — binding direction maps to next/prev for spread jumps.
-  const horizontalDirection: 1 | -1 =
-    key === "ArrowRight" ? (rtl ? -1 : 1) : rtl ? 1 : -1;
+  const horizontalDirection: 1 | -1 = key === "ArrowRight" ? (rtl ? -1 : 1) : rtl ? 1 : -1;
   const canScrollHorizontally = state.pageWidth > state.clientWidth + EDGE_THRESHOLD;
   const step = Math.max(state.clientWidth * 0.9, 40);
 

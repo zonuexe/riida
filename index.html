@@ -175,13 +175,27 @@
                 <option value="right">右綴じ</option>
               </select>
             </label>
-            <label class="viewer-setting">
+            <label class="viewer-setting pdf-only">
               <span>ズーム</span>
               <select id="viewer-zoom-mode">
                 <option value="fit-width">幅に合わせる</option>
                 <option value="fit-height">高さに合わせる</option>
                 <option value="original">オリジナル</option>
               </select>
+            </label>
+            <label class="viewer-setting epub-only">
+              <span>文字サイズ</span>
+              <div class="viewer-font-size-control">
+                <input
+                  type="range"
+                  id="viewer-epub-font-size"
+                  min="50"
+                  max="200"
+                  step="10"
+                  value="100"
+                />
+                <output id="viewer-epub-font-size-output" for="viewer-epub-font-size">100%</output>
+              </div>
             </label>
             <label class="viewer-setting">
               <span>表示位置</span>

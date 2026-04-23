@@ -37,6 +37,7 @@ const DEFAULT_VIEWER_VERTICAL_GAP_MODE: &str = "compact";
 const DEFAULT_VIEWER_TREAT_FIRST_PAGE_AS_COVER: bool = true;
 const DEFAULT_VIEWER_BACKGROUND_MODE: &str = "inherit-theme";
 const DEFAULT_VIEWER_SCROLL_MODE: &str = "paged";
+const DEFAULT_VIEWER_EPUB_FONT_SIZE: i64 = 100;
 const DEFAULT_THEME_VIEWER_BACKGROUND_MODE: &str = "default";
 const SNOW_WHITE_VIEWER_BACKGROUND_MODE: &str = "snow-white";
 const NIGHT_CITY_VIEWER_BACKGROUND_MODE: &str = "night-city";
@@ -239,6 +240,7 @@ struct ViewerPreferences {
     treat_first_page_as_cover: bool,
     background_mode: String,
     scroll_mode: String,
+    epub_font_size: i64,
 }
 
 #[derive(Serialize)]
@@ -832,6 +834,10 @@ fn open_database() -> Result<Connection, String> {
         "ALTER TABLE viewer_preferences ADD COLUMN scroll_mode TEXT NOT NULL DEFAULT 'paged'",
         [],
     );
+    let _ = connection.execute(
+        "ALTER TABLE viewer_preferences ADD COLUMN epub_font_size INTEGER NOT NULL DEFAULT 100",
+        [],
+    );
 
     migrate_paths_to_nfc(&connection).map_err(|error| error.to_string())?;
 
@@ -1142,7 +1148,12 @@ fn default_viewer_preferences() -> ViewerPreferences {
         treat_first_page_as_cover: DEFAULT_VIEWER_TREAT_FIRST_PAGE_AS_COVER,
         background_mode: DEFAULT_VIEWER_BACKGROUND_MODE.to_string(),
         scroll_mode: DEFAULT_VIEWER_SCROLL_MODE.to_string(),
+        epub_font_size: DEFAULT_VIEWER_EPUB_FONT_SIZE,
     }
+}
+
+fn normalize_epub_font_size(value: i64) -> i64 {
+    value.clamp(50, 200)
 }
 
 fn normalize_viewer_source_type(value: &str) -> String {
@@ -1225,6 +1236,7 @@ fn normalize_viewer_preferences(preferences: ViewerPreferences) -> ViewerPrefere
         treat_first_page_as_cover: preferences.treat_first_page_as_cover,
         background_mode: normalize_background_mode(&preferences.background_mode),
         scroll_mode: normalize_scroll_mode(&preferences.scroll_mode),
+        epub_font_size: normalize_epub_font_size(preferences.epub_font_size),
     }
 }
 
@@ -1243,7 +1255,8 @@ fn load_saved_viewer_preferences(
               vertical_gap_mode,
               treat_first_page_as_cover,
               background_mode,
-              scroll_mode
+              scroll_mode,
+              epub_font_size
             FROM viewer_preferences
             WHERE scope_key = ?1
             ",
@@ -1260,6 +1273,7 @@ fn load_saved_viewer_preferences(
             treat_first_page_as_cover: row.get::<_, i64>(5)? != 0,
             background_mode: row.get(6)?,
             scroll_mode: row.get(7)?,
+            epub_font_size: row.get::<_, i64>(8).unwrap_or(DEFAULT_VIEWER_EPUB_FONT_SIZE),
         })
     });
 
@@ -1307,6 +1321,11 @@ fn merge_file_viewer_preferences(
         } else {
             normalize_scroll_mode(&file.scroll_mode)
         },
+        epub_font_size: if file.epub_font_size == 0 {
+            global.epub_font_size
+        } else {
+            normalize_epub_font_size(file.epub_font_size)
+        },
     }
 }
 
@@ -1347,6 +1366,11 @@ fn build_file_viewer_preferences_for_storage(
         } else {
             normalized.scroll_mode
         },
+        epub_font_size: if normalized.epub_font_size == global.epub_font_size {
+            0
+        } else {
+            normalized.epub_font_size
+        },
     }
 }
 
@@ -1379,9 +1403,10 @@ fn save_viewer_preferences_record(
               treat_first_page_as_cover,
               background_mode,
               scroll_mode,
+              epub_font_size,
               updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             ON CONFLICT(scope_key) DO UPDATE SET
               file_path = excluded.file_path,
               source_type = excluded.source_type,
@@ -1393,6 +1418,7 @@ fn save_viewer_preferences_record(
               treat_first_page_as_cover = excluded.treat_first_page_as_cover,
               background_mode = excluded.background_mode,
               scroll_mode = excluded.scroll_mode,
+              epub_font_size = excluded.epub_font_size,
               updated_at = excluded.updated_at
             ",
             params![
@@ -1411,6 +1437,7 @@ fn save_viewer_preferences_record(
                 },
                 normalized.background_mode,
                 normalized.scroll_mode,
+                normalized.epub_font_size,
                 updated_at
             ],
         )
@@ -3044,6 +3071,7 @@ mod tests {
                   treat_first_page_as_cover INTEGER NOT NULL,
                   background_mode TEXT NOT NULL DEFAULT 'inherit-theme',
                   scroll_mode TEXT NOT NULL DEFAULT 'paged',
+                  epub_font_size INTEGER NOT NULL DEFAULT 100,
                   updated_at INTEGER NOT NULL
                 );
                 ",
@@ -3070,6 +3098,7 @@ mod tests {
             treat_first_page_as_cover,
             background_mode: background_mode.to_string(),
             scroll_mode: String::new(),
+            epub_font_size: 0,
         }
     }
 
@@ -3500,6 +3529,7 @@ mod tests {
         );
         assert!(!normalized.treat_first_page_as_cover);
         assert_eq!(normalized.background_mode, DEFAULT_VIEWER_BACKGROUND_MODE);
+        assert_eq!(normalized.epub_font_size, 50);
     }
 
     #[test]
@@ -3608,6 +3638,7 @@ mod tests {
         assert_eq!(stored.vertical_gap_mode, "");
         assert!(!stored.treat_first_page_as_cover);
         assert_eq!(stored.background_mode, "navy-blue");
+        assert_eq!(stored.epub_font_size, 0);
     }
 
     #[test]
@@ -3822,6 +3853,7 @@ mod tests {
             treat_first_page_as_cover in any::<bool>(),
             background_mode in ".*",
             scroll_mode in ".*",
+            epub_font_size in any::<i64>(),
         ) -> ViewerPreferences {
             ViewerPreferences {
                 page_mode,
@@ -3832,6 +3864,7 @@ mod tests {
                 treat_first_page_as_cover,
                 background_mode,
                 scroll_mode,
+                epub_font_size,
             }
         }
     }
@@ -3867,6 +3900,7 @@ mod tests {
                 Just("continuous".to_string()),
                 Just("paged".to_string())
             ],
+            epub_font_size in 50i64..=200i64,
         ) -> ViewerPreferences {
             ViewerPreferences {
                 page_mode,
@@ -3877,6 +3911,7 @@ mod tests {
                 treat_first_page_as_cover,
                 background_mode,
                 scroll_mode,
+                epub_font_size,
             }
         }
     }
@@ -3907,6 +3942,7 @@ mod tests {
                 normalized.scroll_mode.as_str(),
                 "continuous" | "paged"
             ));
+            prop_assert!((50..=200).contains(&normalized.epub_font_size));
         }
 
         #[test]
@@ -3943,6 +3979,7 @@ mod tests {
             );
             prop_assert_eq!(merged.background_mode, effective.background_mode);
             prop_assert_eq!(merged.scroll_mode, effective.scroll_mode);
+            prop_assert_eq!(merged.epub_font_size, effective.epub_font_size);
         }
 
         #[test]

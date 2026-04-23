@@ -1257,6 +1257,33 @@ h1 {
   padding: 8px 10px;
 }
 
+#viewer-settings-panel[data-source-type="epub"] .pdf-only {
+  display: none;
+}
+
+#viewer-settings-panel[data-source-type="pdf"] .epub-only {
+  display: none;
+}
+
+.viewer-font-size-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.viewer-font-size-control input[type="range"] {
+  flex: 1;
+  accent-color: rgb(var(--accent-rgb));
+  cursor: pointer;
+}
+
+.viewer-font-size-control output {
+  min-width: 3.2em;
+  text-align: right;
+  font-size: 0.88rem;
+  color: rgb(var(--ink-rgb) / 0.7);
+}
+
 .viewer-checkbox {
   grid-template-columns: 18px 1fr;
   align-items: center;

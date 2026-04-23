@@ -168,6 +168,7 @@ type ViewerSettings = {
   treatFirstPageAsCover: boolean;
   backgroundMode: ViewerBackgroundMode;
   scrollMode: "continuous" | "paged";
+  epubFontSize: number;
 };
 
 type ViewerSettingsPayload = {
@@ -333,6 +334,7 @@ const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
   treatFirstPageAsCover: true,
   backgroundMode: "inherit-theme",
   scrollMode: "paged",
+  epubFontSize: 100,
 };
 
 const viewerSettings: ViewerSettingsState = {
@@ -593,6 +595,11 @@ function applyEpubViewerColors(backgroundMode: ViewerBackgroundMode) {
       applyEpubColorsToDocument(contents.document, palette);
     }
   }
+}
+
+function applyEpubFontSize(fontSize: number) {
+  if (!activeEpubRendition) return;
+  activeEpubRendition.themes.fontSize(`${fontSize}%`);
 }
 
 function setCheckedViewerBackgroundOption(groupName: string, value: ViewerBackgroundMode) {
@@ -2522,6 +2529,10 @@ function syncViewerSettingsUi() {
   const verticalGapModeEl = document.querySelector<HTMLSelectElement>("#viewer-vertical-gap-mode");
   const scrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
   const coverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
+  const epubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
+  const epubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
+    "#viewer-epub-font-size-output",
+  );
   const sourceType = currentViewerSettingsSourceType();
   const isPdfViewerSettingsAvailable =
     sourceType === "pdf" && lastSnapshot?.pdfRenderer === "pdfjs";
@@ -2587,6 +2598,14 @@ function syncViewerSettingsUi() {
 
   if (coverModeEl) {
     coverModeEl.checked = editingPreferences.treatFirstPageAsCover;
+  }
+
+  if (epubFontSizeEl) {
+    epubFontSizeEl.value = String(editingPreferences.epubFontSize);
+  }
+
+  if (epubFontSizeOutputEl) {
+    epubFontSizeOutputEl.value = `${editingPreferences.epubFontSize}%`;
   }
 
   syncViewerBackgroundControls(
@@ -4135,6 +4154,7 @@ async function renderCurrentPage() {
       activeEpubRendition = rendition;
       applyViewerVerticalGapMode(viewerSettings.verticalGapMode);
       applyEpubViewerColors(viewerSettings.backgroundMode);
+      applyEpubFontSize(viewerSettings.epubFontSize);
 
       // Safety net: if the initial render ended up at zero dimensions
       // (WKWebView can report 0 clientWidth/Height on first attach),
@@ -5039,6 +5059,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   );
   const viewerScrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
   const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
+  const viewerEpubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
+  const viewerEpubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
+    "#viewer-epub-font-size-output",
+  );
   const viewerBackgroundInheritEl = document.querySelector<HTMLInputElement>(
     "#viewer-background-inherit",
   );
@@ -5546,6 +5570,28 @@ window.addEventListener("DOMContentLoaded", async () => {
           preferences.scrollMode = viewerScrollModeEl.value as ViewerSettings["scrollMode"];
         });
         syncImmediatePdfScrollMode();
+      },
+      { rerenderPdf: false },
+    );
+  });
+
+  viewerEpubFontSizeEl?.addEventListener("input", () => {
+    const fontSize = Number(viewerEpubFontSizeEl.value);
+    if (viewerEpubFontSizeOutputEl) {
+      viewerEpubFontSizeOutputEl.value = `${fontSize}%`;
+    }
+    mutateEditingViewerSettings((preferences) => {
+      preferences.epubFontSize = fontSize;
+    });
+    applyEpubFontSize(fontSize);
+  });
+
+  viewerEpubFontSizeEl?.addEventListener("change", () => {
+    updateViewerSettings(
+      () => {
+        mutateEditingViewerSettings((preferences) => {
+          preferences.epubFontSize = Number(viewerEpubFontSizeEl.value);
+        });
       },
       { rerenderPdf: false },
     );

@@ -541,6 +541,50 @@ function injectEpubWritingModeCSS(doc: Document) {
   }
 }
 
+// Overlay a full-bleed <img> on top of the epub viewer when the rendered
+// section is a cover page. This sidesteps epub.js's multi-column layout,
+// which constrains in-iframe images to a single column and makes them
+// impossible to scale reliably via CSS alone.
+function syncEpubCoverOverlay(epubViewerEl: HTMLElement) {
+  const iframes = epubViewerEl.querySelectorAll<HTMLIFrameElement>("iframe");
+  let coverSrc: string | null = null;
+  let coverAlt = "";
+
+  for (const iframe of iframes) {
+    const body = iframe.contentDocument?.body;
+    if (!body) continue;
+    const epubType = body.getAttribute("epub:type") ?? "";
+    const isCover = epubType.split(/\s+/).includes("cover") || body.classList.contains("coverimg");
+    if (!isCover) {
+      body.style.removeProperty("visibility");
+      continue;
+    }
+    body.style.setProperty("visibility", "hidden", "important");
+    const imgEl = body.querySelector<HTMLImageElement>("img");
+    if (imgEl?.src && !coverSrc) {
+      coverSrc = imgEl.src;
+      coverAlt = imgEl.alt;
+    }
+  }
+
+  let overlay = epubViewerEl.querySelector<HTMLImageElement>(":scope > .epub-cover-overlay");
+
+  if (!coverSrc) {
+    overlay?.remove();
+    return;
+  }
+
+  if (!overlay) {
+    overlay = document.createElement("img");
+    overlay.className = "epub-cover-overlay";
+    epubViewerEl.appendChild(overlay);
+  }
+  if (overlay.src !== coverSrc) {
+    overlay.src = coverSrc;
+  }
+  overlay.alt = coverAlt;
+}
+
 function viewerExtraVerticalGap(mode: ViewerSettings["verticalGapMode"]): number {
   switch (mode) {
     case "wide":
@@ -4213,6 +4257,7 @@ async function renderCurrentPage() {
 
       rendition.on("rendered", () => {
         syncEpubLinkOverlays(rendition, book, epubViewerEl);
+        syncEpubCoverOverlay(epubViewerEl);
       });
     } catch (error) {
       if (currentToken !== epubRenderToken) return;

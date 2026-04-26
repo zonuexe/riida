@@ -416,6 +416,23 @@ nix --extra-experimental-features 'nix-command flakes' develop --command npm run
 
 Project defaults live in [.cargo/mutants.toml](.cargo/mutants.toml), and currently focus on [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
 
+## Frontend Naming Conventions
+
+Interactive HTML elements that are referenced from both JavaScript and CSS
+use matching `id` and `class` names on the same element, for example:
+
+```html
+<button id="viewer-settings-toggle" class="viewer-settings-toggle">
+```
+
+The `id` is the JavaScript handle (`querySelector("#viewer-settings-toggle")`).
+The `class` is the CSS selector (`.viewer-settings-toggle { … }`).
+Keeping the two names identical makes the JS–CSS relationship obvious without
+introducing separate `data-*` attributes.
+
+This is the established pattern across the viewer overlay controls and viewer
+settings panel. Follow it when adding new singleton interactive elements.
+
 ## Frontend Linting And Formatting
 
 The frontend now uses the Oxc toolchain:

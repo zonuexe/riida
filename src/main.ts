@@ -287,6 +287,12 @@ type PdfSearchMatch = {
   normalizedEnd: number;
 };
 
+type PdfOutlineNode = {
+  title: string;
+  dest: string | unknown[] | null;
+  items: PdfOutlineNode[];
+};
+
 type PdfRenderSession = {
   token: number;
   pdfDocument: {
@@ -294,6 +300,7 @@ type PdfRenderSession = {
     getPage: (pageNumber: number) => Promise<any>;
     getDestination?: (destinationId: string) => Promise<unknown>;
     getPageIndex?: (pageRef: any) => Promise<number>;
+    getOutline?: () => Promise<PdfOutlineNode[] | null>;
   };
   viewerEl: HTMLElement;
   stageEl: HTMLElement;
@@ -366,7 +373,8 @@ let activeEpubTotalPages: number | null = null;
 // DPFJ guide §ページ進行方向の遵守: page direction is governed by OPF spine, not writing-mode.
 // In rtl books, ArrowLeft advances the reading order (next page) while ArrowRight goes back.
 let activeEpubIsRtl = false;
-let epubTocOpen = false;
+let tocPanelOpen = false;
+let activePdfOutline: PdfOutlineNode[] | null = null;
 let viewerSettingsLoadToken = 0;
 const pdfSearchState: {
   isOpen: boolean;
@@ -2574,8 +2582,8 @@ function buildEpubToc() {
       btn.dataset.depth = String(depth);
       btn.textContent = item.label.trim();
       btn.addEventListener("click", () => {
-        epubTocOpen = false;
-        syncEpubTocUi();
+        tocPanelOpen = false;
+        syncTocUi();
         if (activeEpubRendition) {
           void activeEpubRendition.display(item.href);
         }
@@ -2590,16 +2598,74 @@ function buildEpubToc() {
   appendItems(toc, 0);
 }
 
-function syncEpubTocUi() {
+function buildPdfToc() {
+  const listEl = document.querySelector<HTMLElement>("#epub-toc-list");
+  if (!listEl) return;
+  listEl.innerHTML = "";
+
+  const outline = activePdfOutline;
+  if (!outline || outline.length === 0) return;
+
+  const session = activePdfRenderSession;
+
+  function appendItems(items: PdfOutlineNode[], depth: number) {
+    for (const item of items) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "epub-toc-item";
+      btn.dataset.depth = String(depth);
+      btn.textContent = item.title;
+      btn.addEventListener("click", () => {
+        tocPanelOpen = false;
+        syncTocUi();
+        if (!session || item.dest === null) return;
+        const resolver = session.pdfDocument;
+        void (async () => {
+          let explicitDest: unknown = item.dest;
+          if (typeof item.dest === "string" && resolver.getDestination) {
+            explicitDest = await resolver.getDestination(item.dest);
+          }
+          if (!Array.isArray(explicitDest) || explicitDest.length === 0) return;
+          const [firstEntry] = explicitDest;
+          let pageNumber: number | null = null;
+          if (typeof firstEntry === "number" && Number.isFinite(firstEntry)) {
+            pageNumber = Math.min(Math.max(Math.trunc(firstEntry) + 1, 1), resolver.numPages);
+          } else if (firstEntry && typeof firstEntry === "object" && resolver.getPageIndex) {
+            const idx = await resolver.getPageIndex(firstEntry);
+            pageNumber = Math.min(Math.max(Math.trunc(idx) + 1, 1), resolver.numPages);
+          }
+          if (pageNumber !== null) {
+            navigateViewerToPage(pageNumber);
+          }
+        })();
+      });
+      listEl!.appendChild(btn);
+      if (item.items.length > 0) {
+        appendItems(item.items, depth + 1);
+      }
+    }
+  }
+
+  appendItems(outline, 0);
+}
+
+function syncTocUi() {
   const toggleEl = document.querySelector<HTMLButtonElement>("#epub-toc-toggle");
   const panelEl = document.querySelector<HTMLElement>("#epub-toc-panel");
-  const isEpub = currentViewerSettingsSourceType() === "epub";
+  const sourceType = currentViewerSettingsSourceType();
+  const isEpub = sourceType === "epub";
+  const isPdf =
+    sourceType === "pdf" &&
+    lastSnapshot?.pdfRenderer === "pdfjs" &&
+    activePdfOutline !== null &&
+    activePdfOutline.length > 0;
+  const hasToc = isEpub || isPdf;
   if (toggleEl) {
-    toggleEl.hidden = !isEpub;
-    toggleEl.setAttribute("aria-expanded", String(epubTocOpen));
+    toggleEl.hidden = !hasToc;
+    toggleEl.setAttribute("aria-expanded", String(tocPanelOpen));
   }
   if (panelEl) {
-    panelEl.hidden = !isEpub || !epubTocOpen;
+    panelEl.hidden = !hasToc || !tocPanelOpen;
   }
 }
 
@@ -2704,7 +2770,7 @@ function syncViewerSettingsUi() {
     editingPreferences.backgroundMode,
   );
 
-  syncEpubTocUi();
+  syncTocUi();
 }
 
 function currentViewerPreferences(): ViewerSettings {
@@ -3877,7 +3943,7 @@ function destroyEpubBook() {
   activeEpubTotalPages = null;
   activeEpubRendition = null;
   activeEpubIsRtl = false;
-  epubTocOpen = false;
+  tocPanelOpen = false;
   if (activeEpubBook) {
     activeEpubBook.destroy();
     activeEpubBook = null;
@@ -4061,6 +4127,7 @@ async function renderCurrentPage() {
     await maybeShowEpubPreviewNotice();
     destroyEpubBook();
     activePdfRenderSession = null;
+    activePdfOutline = null;
     frame.hidden = true;
     frame.src = "about:blank";
     frame.dataset.filePath = "";
@@ -4094,9 +4161,9 @@ async function renderCurrentPage() {
       await book.ready;
       if (currentToken !== epubRenderToken) return;
 
-      epubTocOpen = false;
+      tocPanelOpen = false;
       buildEpubToc();
-      syncEpubTocUi();
+      syncTocUi();
 
       // Fast path: reuse previously-generated locations when the file
       // hasn't changed. Falls back to background generation after display.
@@ -4330,6 +4397,7 @@ async function renderCurrentPage() {
     applyPdfViewerBackground(viewerSettings.backgroundMode);
     syncImmediatePdfScrollMode();
     activePdfRenderSession = null;
+    activePdfOutline = null;
     frame.hidden = true;
     frame.src = "about:blank";
     frame.dataset.filePath = "";
@@ -4460,6 +4528,19 @@ async function renderCurrentPage() {
       };
       activePdfRenderSession = session;
       schedulePdfRenderWindowUpdate(session, targetGroupIndex);
+
+      // Load PDF outline (TOC) asynchronously so it does not block rendering.
+      tocPanelOpen = false;
+      activePdfOutline = null;
+      syncTocUi();
+      if (pdfDocument.getOutline) {
+        void pdfDocument.getOutline().then((outline) => {
+          if (activePdfRenderSession?.token !== currentToken) return;
+          activePdfOutline = outline ?? null;
+          buildPdfToc();
+          syncTocUi();
+        });
+      }
     } catch (error) {
       if (passwordCancelled) {
         pdfjsViewerEl.innerHTML = "";
@@ -4483,6 +4564,7 @@ async function renderCurrentPage() {
   closePdfSearch();
   pdfRenderToken += 1;
   activePdfRenderSession = null;
+  activePdfOutline = null;
   applyEpubViewerColors("inherit-theme");
   applyPdfViewerBackground("inherit-theme");
   pdfjsViewerEl.hidden = true;
@@ -5542,8 +5624,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.querySelector<HTMLButtonElement>("#epub-toc-toggle")?.addEventListener("click", () => {
-    epubTocOpen = !epubTocOpen;
-    syncEpubTocUi();
+    tocPanelOpen = !tocPanelOpen;
+    syncTocUi();
   });
 
   const rerenderPdfJs = () => {

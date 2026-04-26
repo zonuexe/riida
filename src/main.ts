@@ -5355,10 +5355,12 @@ window.addEventListener("DOMContentLoaded", async () => {
       searchInput.selectionStart ?? searchInput.value.length,
       currentSuggestions[index],
     );
-    // Append a trailing space so the user can immediately type the next token.
-    const valueWithSpace = value.endsWith(" ") ? value : `${value} `;
-    searchInput.value = valueWithSpace;
-    searchInput.setSelectionRange(valueWithSpace.length, valueWithSpace.length);
+    // Field completions end with ":" — don't add a space so the user can type the value directly.
+    // Value completions end with the value itself — add a space to start the next token.
+    const isFieldCompletion = currentSuggestions[index].kind === "field";
+    const finalValue = isFieldCompletion || value.endsWith(" ") ? value : `${value} `;
+    searchInput.value = finalValue;
+    searchInput.setSelectionRange(finalValue.length, finalValue.length);
     closeSearchSuggestions();
     void navigateToState(
       {

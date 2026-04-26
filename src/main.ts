@@ -366,6 +366,7 @@ let activeEpubTotalPages: number | null = null;
 // DPFJ guide §ページ進行方向の遵守: page direction is governed by OPF spine, not writing-mode.
 // In rtl books, ArrowLeft advances the reading order (next page) while ArrowRight goes back.
 let activeEpubIsRtl = false;
+let epubTocOpen = false;
 let viewerSettingsLoadToken = 0;
 const pdfSearchState: {
   isOpen: boolean;
@@ -2557,6 +2558,51 @@ async function saveAppSettingsFromForm() {
   }
 }
 
+function buildEpubToc() {
+  const listEl = document.querySelector<HTMLElement>("#epub-toc-list");
+  if (!listEl || !activeEpubBook) return;
+  listEl.innerHTML = "";
+
+  type NavItem = { label: string; href: string; subitems?: NavItem[] };
+  const toc: NavItem[] = (activeEpubBook.navigation as unknown as { toc: NavItem[] }).toc ?? [];
+
+  function appendItems(items: NavItem[], depth: number) {
+    for (const item of items) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "epub-toc-item";
+      btn.dataset.depth = String(depth);
+      btn.textContent = item.label.trim();
+      btn.addEventListener("click", () => {
+        epubTocOpen = false;
+        syncEpubTocUi();
+        if (activeEpubRendition) {
+          void activeEpubRendition.display(item.href);
+        }
+      });
+      listEl!.appendChild(btn);
+      if (item.subitems && item.subitems.length > 0) {
+        appendItems(item.subitems, depth + 1);
+      }
+    }
+  }
+
+  appendItems(toc, 0);
+}
+
+function syncEpubTocUi() {
+  const toggleEl = document.querySelector<HTMLButtonElement>("#epub-toc-toggle");
+  const panelEl = document.querySelector<HTMLElement>("#epub-toc-panel");
+  const isEpub = currentViewerSettingsSourceType() === "epub";
+  if (toggleEl) {
+    toggleEl.hidden = !isEpub;
+    toggleEl.setAttribute("aria-expanded", String(epubTocOpen));
+  }
+  if (panelEl) {
+    panelEl.hidden = !isEpub || !epubTocOpen;
+  }
+}
+
 function syncViewerSettingsUi() {
   const settingsToggleEl = document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
   const settingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
@@ -2657,6 +2703,8 @@ function syncViewerSettingsUi() {
     "viewer-background-inherit",
     editingPreferences.backgroundMode,
   );
+
+  syncEpubTocUi();
 }
 
 function currentViewerPreferences(): ViewerSettings {
@@ -3829,6 +3877,7 @@ function destroyEpubBook() {
   activeEpubTotalPages = null;
   activeEpubRendition = null;
   activeEpubIsRtl = false;
+  epubTocOpen = false;
   if (activeEpubBook) {
     activeEpubBook.destroy();
     activeEpubBook = null;
@@ -4044,6 +4093,10 @@ async function renderCurrentPage() {
       activeEpubBook = book;
       await book.ready;
       if (currentToken !== epubRenderToken) return;
+
+      epubTocOpen = false;
+      buildEpubToc();
+      syncEpubTocUi();
 
       // Fast path: reuse previously-generated locations when the file
       // hasn't changed. Falls back to background generation after display.
@@ -5486,6 +5539,11 @@ window.addEventListener("DOMContentLoaded", async () => {
       viewerSettings.scope = "file";
     }
     syncViewerSettingsUi();
+  });
+
+  document.querySelector<HTMLButtonElement>("#epub-toc-toggle")?.addEventListener("click", () => {
+    epubTocOpen = !epubTocOpen;
+    syncEpubTocUi();
   });
 
   const rerenderPdfJs = () => {

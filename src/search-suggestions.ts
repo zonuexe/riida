@@ -6,10 +6,13 @@ const FIELD_NAMES = [
   "lang:",
   "path:",
   "publisher:",
+  "read:",
   "source:",
   "tag:",
   "title:",
 ];
+
+const READ_VALUE_SUGGESTIONS = ["today", "week", "month", "year", "never"];
 
 export type SearchSuggestion =
   | { kind: "field"; completion: string }
@@ -79,6 +82,17 @@ export function computeSuggestions(
     // field:valuePrefix — suggest known values
     const field = bare.slice(0, colonIdx).toLowerCase();
     const valuePrefix = bare.slice(colonIdx + 1);
+
+    // read: uses a fixed set of keyword suggestions
+    if (field === "read") {
+      const q = valuePrefix.toLowerCase();
+      return READ_VALUE_SUGGESTIONS.filter((v) => v.startsWith(q) && v !== q).map((v) => ({
+        kind: "value" as const,
+        field,
+        completion: v,
+      }));
+    }
+
     const knownValues: string[] | undefined = valueSource[field as keyof ValueSource];
     if (!knownValues) return [];
     const q = normalizeSearchText(valuePrefix);

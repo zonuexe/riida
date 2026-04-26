@@ -23,6 +23,7 @@ type SearchableBook = {
   sourceType?: string;
   publisher?: string | null;
   language?: string | null;
+  lastReadAt?: number | null;
 };
 
 export type TagNode = {
@@ -63,6 +64,7 @@ const KNOWN_FIELDS = new Set([
   "file",
   "path",
   "source",
+  "read",
 ]);
 
 export type QueryToken =
@@ -171,6 +173,28 @@ export function deriveDirectories(snapshot: DirectorySnapshot): DirectoryNode[] 
     });
 }
 
+// Returns the threshold in seconds for a read: value, or null if unrecognised.
+function parseReadThresholdSeconds(value: string): number | null | "never" {
+  const v = value.trim().toLowerCase();
+  if (v === "never") return "never";
+  const named: Record<string, number> = {
+    today: 86400,
+    week: 7 * 86400,
+    month: 30 * 86400,
+    year: 365 * 86400,
+  };
+  if (named[v] !== undefined) return named[v];
+  const m = /^(\d+)(d|w|m)$/.exec(v);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    const unit = m[2];
+    if (unit === "d") return n * 86400;
+    if (unit === "w") return n * 7 * 86400;
+    if (unit === "m") return n * 30 * 86400;
+  }
+  return null;
+}
+
 function matchesFieldToken(book: SearchableBook, field: string, value: string): boolean {
   const q = normalizeSearchText(value);
 
@@ -197,6 +221,15 @@ function matchesFieldToken(book: SearchableBook, field: string, value: string): 
       return normalizeSearchText(book.filePath).includes(q);
     case "source":
       return normalizeSearchText(book.sourceType ?? "").includes(q);
+    case "read": {
+      const threshold = parseReadThresholdSeconds(value);
+      if (threshold === null) return false;
+      if (threshold === "never") return book.lastReadAt == null;
+      const lastReadAt = book.lastReadAt;
+      if (lastReadAt == null) return false;
+      const nowSeconds = Date.now() / 1000;
+      return nowSeconds - lastReadAt <= threshold;
+    }
     default:
       return false;
   }

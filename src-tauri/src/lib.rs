@@ -100,6 +100,7 @@ struct BookSummary {
     url: Option<String>,
     publisher: Option<String>,
     language: Option<String>,
+    last_read_at: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -1593,9 +1594,11 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
               COALESCE(book_metadata.title, ''),
               books.source_type,
               COALESCE(book_metadata.publisher, ''),
-              COALESCE(book_metadata.language, '')
+              COALESCE(book_metadata.language, ''),
+              reading_positions.updated_at
             FROM books
             LEFT JOIN book_metadata ON book_metadata.file_path = books.file_path
+            LEFT JOIN reading_positions ON reading_positions.file_path = books.file_path
             ORDER BY books.modified_at DESC, books.file_name ASC
             ",
         )
@@ -1616,6 +1619,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 row.get::<_, String>(9)?,
                 row.get::<_, String>(10)?,
                 row.get::<_, String>(11)?,
+                row.get::<_, Option<u64>>(12)?,
             ))
         })
         .map_err(|error| error.to_string())?;
@@ -1634,6 +1638,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
             source_type,
             publisher,
             language,
+            last_read_at,
         ) = row.map_err(|error| error.to_string())?;
         let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
         books.push((
@@ -1665,6 +1670,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 } else {
                     Some(language)
                 },
+                last_read_at,
             },
         ));
     }
@@ -1704,18 +1710,20 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
         .prepare(
             "
             SELECT
-              file_path,
-              source_type,
-              title,
-              authors_json,
-              cover_url,
-              updated_at,
-              asin,
-              url,
-              publisher,
-              language
-            FROM external_books
-            ORDER BY updated_at DESC, title COLLATE NOCASE ASC
+              eb.file_path,
+              eb.source_type,
+              eb.title,
+              eb.authors_json,
+              eb.cover_url,
+              eb.updated_at,
+              eb.asin,
+              eb.url,
+              eb.publisher,
+              eb.language,
+              rp.updated_at
+            FROM external_books eb
+            LEFT JOIN reading_positions rp ON rp.file_path = eb.file_path
+            ORDER BY eb.updated_at DESC, eb.title COLLATE NOCASE ASC
             ",
         )
         .map_err(|error| error.to_string())?;
@@ -1733,6 +1741,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 row.get::<_, String>(7)?,
                 row.get::<_, String>(8)?,
                 row.get::<_, String>(9)?,
+                row.get::<_, Option<u64>>(10)?,
             ))
         })
         .map_err(|error| error.to_string())?;
@@ -1765,6 +1774,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
             url,
             publisher,
             language,
+            last_read_at,
         ) = row.map_err(|error| error.to_string())?;
         let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
         let location_label = if source_type == "kindle" {
@@ -1804,6 +1814,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 } else {
                     Some(language)
                 },
+                last_read_at,
             },
         ));
     }
@@ -3846,6 +3857,13 @@ mod tests {
                   icon TEXT NOT NULL,
                   created_at INTEGER NOT NULL
                 );
+                CREATE TABLE reading_positions (
+                  file_path TEXT PRIMARY KEY,
+                  page_number INTEGER NOT NULL,
+                  page_offset_ratio REAL NOT NULL,
+                  cfi TEXT,
+                  updated_at INTEGER NOT NULL
+                );
                 ",
             )
             .expect("books schema should be created");
@@ -4144,6 +4162,13 @@ mod tests {
                   icon TEXT NOT NULL,
                   created_at INTEGER NOT NULL
                 );
+                CREATE TABLE reading_positions (
+                  file_path TEXT PRIMARY KEY,
+                  page_number INTEGER NOT NULL,
+                  page_offset_ratio REAL NOT NULL,
+                  cfi TEXT,
+                  updated_at INTEGER NOT NULL
+                );
                 ",
             )
             .expect("schema should be created");
@@ -4304,6 +4329,13 @@ mod tests {
                   name TEXT NOT NULL,
                   icon TEXT NOT NULL,
                   created_at INTEGER NOT NULL
+                );
+                CREATE TABLE reading_positions (
+                  file_path TEXT PRIMARY KEY,
+                  page_number INTEGER NOT NULL,
+                  page_offset_ratio REAL NOT NULL,
+                  cfi TEXT,
+                  updated_at INTEGER NOT NULL
                 );
                 ",
             )

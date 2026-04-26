@@ -91,6 +91,7 @@ type BookSummary = {
   url: string | null;
   publisher: string | null;
   language: string | null;
+  lastReadAt: number | null;
 };
 
 type LibrarySnapshot = {
@@ -2408,6 +2409,7 @@ async function saveBookMetadataChanges() {
             url: payload.url || null,
             publisher: payload.publisher || null,
             language: payload.language || null,
+            lastReadAt: null,
           };
     populateBookMetadataEditor(sourceBook, payload);
     await refreshSnapshot();

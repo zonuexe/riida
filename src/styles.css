@@ -814,6 +814,58 @@ h1 {
   opacity: 1;
 }
 
+.library-search-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border: 1px solid rgb(var(--border-rgb) / 0.18);
+  border-radius: 16px;
+  background: rgb(var(--panel-rgb) / 0.96);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgb(var(--shadow-rgb) / 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.library-search-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  padding: 7px 12px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 0.9rem;
+  color: rgb(var(--ink-rgb));
+  cursor: pointer;
+  transition: background 120ms;
+}
+
+.library-search-suggestion:hover,
+.library-search-suggestion[aria-selected="true"] {
+  background: rgb(var(--accent-rgb) / 0.1);
+}
+
+.library-search-suggestion-label {
+  color: rgb(var(--accent-rgb));
+  font-weight: 600;
+}
+
+.library-search-suggestion-hint {
+  color: rgb(var(--ink-rgb) / 0.45);
+  font-size: 0.82rem;
+  margin-left: auto;
+}
+
 #home-view {
   flex: 1;
   min-height: 0;

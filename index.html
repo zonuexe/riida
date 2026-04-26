@@ -46,7 +46,18 @@
               spellcheck="false"
               autocorrect="off"
               autocapitalize="off"
+              autocomplete="off"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls="library-search-suggestions"
             />
+            <ul
+              id="library-search-suggestions"
+              class="library-search-suggestions"
+              role="listbox"
+              hidden
+            ></ul>
           </label>
         </section>
         <nav class="sidebar-nav" id="sidebar-nav"></nav>

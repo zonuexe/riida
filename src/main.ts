@@ -42,6 +42,12 @@ import {
 import { buildNavigationUrl, navigationStateSignature } from "./navigation-utils";
 import { isNavigationBackShortcut, isNavigationForwardShortcut } from "./navigation-shortcuts";
 import { suggestTagCompletions } from "./tag-suggestions";
+import {
+  applySuggestion,
+  buildValueSource,
+  computeSuggestions,
+  type SearchSuggestion,
+} from "./search-suggestions";
 import { validateTagValue } from "./tag-utils";
 import {
   clampReadingPositionOffsetRatio,
@@ -5288,6 +5294,105 @@ window.addEventListener("DOMContentLoaded", async () => {
     "#book-metadata-cover-url",
   );
 
+  const searchSuggestionsEl = document.querySelector<HTMLElement>("#library-search-suggestions");
+
+  let activeSuggestionIndex = -1;
+  let currentSuggestions: SearchSuggestion[] = [];
+
+  function renderSearchSuggestions() {
+    if (!searchInput || !searchSuggestionsEl) return;
+    const cursor = searchInput.selectionStart ?? searchInput.value.length;
+    const valueSource = buildValueSource(lastSnapshot?.books ?? []);
+    currentSuggestions = computeSuggestions(searchInput.value, cursor, valueSource);
+    activeSuggestionIndex = -1;
+
+    searchSuggestionsEl.innerHTML = "";
+    const hasSuggestions = currentSuggestions.length > 0;
+    searchSuggestionsEl.hidden = !hasSuggestions;
+    searchInput.setAttribute("aria-expanded", hasSuggestions ? "true" : "false");
+
+    for (let i = 0; i < currentSuggestions.length; i++) {
+      const s = currentSuggestions[i];
+      const li = document.createElement("li");
+      li.role = "option";
+      li.setAttribute("aria-selected", "false");
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "library-search-suggestion";
+
+      const label = document.createElement("span");
+      label.className = "library-search-suggestion-label";
+
+      if (s.kind === "field") {
+        label.textContent = s.completion;
+        const hint = document.createElement("span");
+        hint.className = "library-search-suggestion-hint";
+        hint.textContent = "field";
+        btn.append(label, hint);
+      } else {
+        label.textContent = s.completion;
+        const hint = document.createElement("span");
+        hint.className = "library-search-suggestion-hint";
+        hint.textContent = s.field;
+        btn.append(label, hint);
+      }
+
+      btn.addEventListener("mousedown", (e) => {
+        e.preventDefault(); // keep input focus
+        applySearchSuggestion(i);
+      });
+
+      li.appendChild(btn);
+      searchSuggestionsEl.appendChild(li);
+    }
+  }
+
+  function applySearchSuggestion(index: number) {
+    if (!searchInput || index < 0 || index >= currentSuggestions.length) return;
+    const { value, cursor } = applySuggestion(
+      searchInput.value,
+      searchInput.selectionStart ?? searchInput.value.length,
+      currentSuggestions[index],
+    );
+    searchInput.value = value;
+    searchInput.setSelectionRange(cursor, cursor);
+    closeSearchSuggestions();
+    void navigateToState(
+      {
+        bookFilePath: null,
+        activeDirectory: null,
+        activeTag: null,
+        activeExternalSource: null,
+        activeTagDirectOnly: false,
+        searchQuery: searchInput.value.trim(),
+      },
+      "replace",
+    );
+    renderSearchSuggestions();
+  }
+
+  function setActiveSuggestion(index: number) {
+    if (!searchSuggestionsEl) return;
+    const items = searchSuggestionsEl.querySelectorAll<HTMLButtonElement>(
+      ".library-search-suggestion",
+    );
+    items.forEach((btn, i) => {
+      const selected = i === index;
+      btn.setAttribute("aria-selected", selected ? "true" : "false");
+      btn.parentElement?.setAttribute("aria-selected", selected ? "true" : "false");
+    });
+    activeSuggestionIndex = index;
+  }
+
+  function closeSearchSuggestions() {
+    if (!searchSuggestionsEl || !searchInput) return;
+    searchSuggestionsEl.hidden = true;
+    searchInput.setAttribute("aria-expanded", "false");
+    currentSuggestions = [];
+    activeSuggestionIndex = -1;
+  }
+
   searchInput?.addEventListener("input", () => {
     void navigateToState(
       {
@@ -5300,6 +5405,37 @@ window.addEventListener("DOMContentLoaded", async () => {
       },
       "replace",
     );
+    renderSearchSuggestions();
+  });
+
+  searchInput?.addEventListener("keydown", (e) => {
+    if (searchSuggestionsEl?.hidden) return;
+    const count = currentSuggestions.length;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveSuggestion((activeSuggestionIndex + 1) % count);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveSuggestion((activeSuggestionIndex - 1 + count) % count);
+    } else if (e.key === "Enter" && activeSuggestionIndex >= 0) {
+      e.preventDefault();
+      applySearchSuggestion(activeSuggestionIndex);
+    } else if (e.key === "Escape") {
+      closeSearchSuggestions();
+    }
+  });
+
+  searchInput?.addEventListener("blur", () => {
+    // Delay so mousedown on suggestion fires first
+    setTimeout(closeSearchSuggestions, 150);
+  });
+
+  searchInput?.addEventListener("focus", () => {
+    if (searchInput.value) renderSearchSuggestions();
+  });
+
+  searchInput?.addEventListener("click", () => {
+    renderSearchSuggestions();
   });
 
   navBackEl?.addEventListener("click", () => {

@@ -98,6 +98,8 @@ struct BookSummary {
     is_openable: bool,
     asin: Option<String>,
     url: Option<String>,
+    publisher: Option<String>,
+    language: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1589,7 +1591,9 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
               COALESCE(book_metadata.asin, ''),
               COALESCE(book_metadata.url, ''),
               COALESCE(book_metadata.title, ''),
-              books.source_type
+              books.source_type,
+              COALESCE(book_metadata.publisher, ''),
+              COALESCE(book_metadata.language, '')
             FROM books
             LEFT JOIN book_metadata ON book_metadata.file_path = books.file_path
             ORDER BY books.modified_at DESC, books.file_name ASC
@@ -1610,6 +1614,8 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 row.get::<_, String>(7)?,
                 row.get::<_, String>(8)?,
                 row.get::<_, String>(9)?,
+                row.get::<_, String>(10)?,
+                row.get::<_, String>(11)?,
             ))
         })
         .map_err(|error| error.to_string())?;
@@ -1626,6 +1632,8 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
             url,
             title,
             source_type,
+            publisher,
+            language,
         ) = row.map_err(|error| error.to_string())?;
         let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
         books.push((
@@ -1647,6 +1655,16 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 is_openable: true,
                 asin: if asin.is_empty() { None } else { Some(asin) },
                 url: if url.is_empty() { None } else { Some(url) },
+                publisher: if publisher.is_empty() {
+                    None
+                } else {
+                    Some(publisher)
+                },
+                language: if language.is_empty() {
+                    None
+                } else {
+                    Some(language)
+                },
             },
         ));
     }
@@ -1693,7 +1711,9 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
               cover_url,
               updated_at,
               asin,
-              url
+              url,
+              publisher,
+              language
             FROM external_books
             ORDER BY updated_at DESC, title COLLATE NOCASE ASC
             ",
@@ -1711,6 +1731,8 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 row.get::<_, u64>(5)?,
                 row.get::<_, String>(6)?,
                 row.get::<_, String>(7)?,
+                row.get::<_, String>(8)?,
+                row.get::<_, String>(9)?,
             ))
         })
         .map_err(|error| error.to_string())?;
@@ -1732,8 +1754,18 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
         .collect();
 
     for row in external_rows {
-        let (file_path, source_type, title, authors_json, cover_url, sort_key, asin, url) =
-            row.map_err(|error| error.to_string())?;
+        let (
+            file_path,
+            source_type,
+            title,
+            authors_json,
+            cover_url,
+            sort_key,
+            asin,
+            url,
+            publisher,
+            language,
+        ) = row.map_err(|error| error.to_string())?;
         let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
         let location_label = if source_type == "kindle" {
             Some("Kindle library".to_string())
@@ -1762,6 +1794,16 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 is_openable: false,
                 asin: if asin.is_empty() { None } else { Some(asin) },
                 url: if url.is_empty() { None } else { Some(url) },
+                publisher: if publisher.is_empty() {
+                    None
+                } else {
+                    Some(publisher)
+                },
+                language: if language.is_empty() {
+                    None
+                } else {
+                    Some(language)
+                },
             },
         ));
     }

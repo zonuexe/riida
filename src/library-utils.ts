@@ -21,6 +21,8 @@ type SearchableBook = {
   locationLabel?: string | null;
   authors?: string[];
   sourceType?: string;
+  publisher?: string | null;
+  language?: string | null;
 };
 
 export type TagNode = {
@@ -50,6 +52,49 @@ export function normalizeSearchText(value: string) {
     .normalize("NFKC")
     .toLocaleLowerCase("ja")
     .replace(/[\s\-_./]+/g, "");
+}
+
+const KNOWN_FIELDS = new Set([
+  "title",
+  "author",
+  "publisher",
+  "tag",
+  "lang",
+  "file",
+  "path",
+  "source",
+]);
+
+export type QueryToken =
+  | { kind: "field"; field: string; value: string; negate: boolean }
+  | { kind: "free"; value: string };
+
+export function parseSearchQuery(raw: string): QueryToken[] {
+  const tokens: QueryToken[] = [];
+  // Tokenise respecting double-quoted phrases, e.g. author:"Robert C. Martin"
+  const re = /(-?)(?:"([^"]*)"|((?:[^\s"\\]|\\.)+))/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(raw)) !== null) {
+    const negate = match[1] === "-";
+    const atom = match[2] ?? match[3]; // quoted or unquoted
+    const colon = atom.indexOf(":");
+
+    if (colon > 0) {
+      const field = atom.slice(0, colon).toLowerCase();
+      const value = atom.slice(colon + 1);
+      if (KNOWN_FIELDS.has(field) && value.length > 0) {
+        tokens.push({ kind: "field", field, value, negate });
+        continue;
+      }
+    }
+
+    if (atom.length > 0) {
+      tokens.push({ kind: "free", value: negate ? `-${atom}` : atom });
+    }
+  }
+
+  return tokens;
 }
 
 export function formatBookLocation(filePath: string, homePath: string | null) {
@@ -126,6 +171,49 @@ export function deriveDirectories(snapshot: DirectorySnapshot): DirectoryNode[] 
     });
 }
 
+function matchesFieldToken(book: SearchableBook, field: string, value: string): boolean {
+  const q = normalizeSearchText(value);
+
+  switch (field) {
+    case "title":
+      return normalizeSearchText(book.title ?? "").includes(q);
+    case "author":
+      return (book.authors ?? []).some((a) => normalizeSearchText(a).includes(q));
+    case "publisher":
+      return normalizeSearchText(book.publisher ?? "").includes(q);
+    case "tag": {
+      const tags = book.tags ?? [];
+      return tags.some((tag) => {
+        const normalizedTag = normalizeSearchText(tag);
+        const normalizedQ = normalizeSearchText(q);
+        return normalizedTag === normalizedQ || normalizedTag.startsWith(`${normalizedQ}/`);
+      });
+    }
+    case "lang":
+      return normalizeSearchText(book.language ?? "").includes(q);
+    case "file":
+      return normalizeSearchText(book.fileName).includes(q);
+    case "path":
+      return normalizeSearchText(book.filePath).includes(q);
+    case "source":
+      return normalizeSearchText(book.sourceType ?? "").includes(q);
+    default:
+      return false;
+  }
+}
+
+function matchesFreeToken(book: SearchableBook, value: string): boolean {
+  const q = normalizeSearchText(value);
+  return (
+    normalizeSearchText(book.fileName).includes(q) ||
+    normalizeSearchText(book.title ?? "").includes(q) ||
+    normalizeSearchText(book.filePath).includes(q) ||
+    normalizeSearchText(book.locationLabel ?? "").includes(q) ||
+    normalizeSearchText((book.authors ?? []).join(" ")).includes(q) ||
+    normalizeSearchText(book.publisher ?? "").includes(q)
+  );
+}
+
 export function filterVisibleBooks<T extends SearchableBook>(
   books: T[],
   activeDirectory: string | null,
@@ -134,6 +222,8 @@ export function filterVisibleBooks<T extends SearchableBook>(
   activeTagDirectOnly: boolean,
   searchQuery: string,
 ) {
+  const tokens = parseSearchQuery(searchQuery);
+
   return books.filter((book) => {
     if (activeExternalSource && book.sourceType !== activeExternalSource) {
       return false;
@@ -161,24 +251,16 @@ export function filterVisibleBooks<T extends SearchableBook>(
       }
     }
 
-    if (!searchQuery) {
-      return true;
+    for (const token of tokens) {
+      if (token.kind === "field") {
+        const matches = matchesFieldToken(book, token.field, token.value);
+        if (token.negate ? matches : !matches) return false;
+      } else {
+        if (!matchesFreeToken(book, token.value)) return false;
+      }
     }
 
-    const query = normalizeSearchText(searchQuery);
-    const normalizedName = normalizeSearchText(book.fileName);
-    const normalizedTitle = normalizeSearchText(book.title ?? "");
-    const normalizedPath = normalizeSearchText(book.filePath);
-    const normalizedLocation = normalizeSearchText(book.locationLabel ?? "");
-    const normalizedAuthors = normalizeSearchText((book.authors ?? []).join(" "));
-
-    return (
-      normalizedName.includes(query) ||
-      normalizedTitle.includes(query) ||
-      normalizedPath.includes(query) ||
-      normalizedLocation.includes(query) ||
-      normalizedAuthors.includes(query)
-    );
+    return true;
   });
 }
 

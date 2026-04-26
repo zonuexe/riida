@@ -83,6 +83,8 @@ type BookSummary = {
   isOpenable: boolean;
   asin: string | null;
   url: string | null;
+  publisher: string | null;
+  language: string | null;
 };
 
 type LibrarySnapshot = {
@@ -2398,6 +2400,8 @@ async function saveBookMetadataChanges() {
             isOpenable: bookMetadataEditorState.sourceType === "pdf",
             asin: payload.asin || null,
             url: payload.url || null,
+            publisher: payload.publisher || null,
+            language: payload.language || null,
           };
     populateBookMetadataEditor(sourceBook, payload);
     await refreshSnapshot();

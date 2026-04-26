@@ -7,6 +7,7 @@ export type ViewerSettings = {
   treatFirstPageAsCover: boolean;
   backgroundMode: "inherit-theme" | "default" | "snow-white" | "night-city" | "navy-blue";
   scrollMode: "continuous" | "paged";
+  epubFontSize: number;
 };
 
 export type ViewerSettingsScope = "global" | "file";
@@ -57,6 +58,7 @@ export function switchViewerSettingsScopeInState(
         treatFirstPageAsCover: state.treatFirstPageAsCover,
         backgroundMode: state.backgroundMode,
         scrollMode: state.scrollMode,
+        epubFontSize: state.epubFontSize,
       },
     };
   }

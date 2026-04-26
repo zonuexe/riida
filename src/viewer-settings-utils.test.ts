@@ -14,6 +14,7 @@ const defaultSettings: ViewerSettings = {
   treatFirstPageAsCover: true,
   backgroundMode: "inherit-theme",
   scrollMode: "continuous",
+  epubFontSize: 100,
 };
 
 describe("applyViewerSettingsPayloadToState", () => {

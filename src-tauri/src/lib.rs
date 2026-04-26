@@ -1273,7 +1273,9 @@ fn load_saved_viewer_preferences(
             treat_first_page_as_cover: row.get::<_, i64>(5)? != 0,
             background_mode: row.get(6)?,
             scroll_mode: row.get(7)?,
-            epub_font_size: row.get::<_, i64>(8).unwrap_or(DEFAULT_VIEWER_EPUB_FONT_SIZE),
+            epub_font_size: row
+                .get::<_, i64>(8)
+                .unwrap_or(DEFAULT_VIEWER_EPUB_FONT_SIZE),
         })
     });
 
@@ -1366,7 +1368,9 @@ fn build_file_viewer_preferences_for_storage(
         } else {
             normalized.scroll_mode
         },
-        epub_font_size: if normalized.epub_font_size == global.epub_font_size {
+        epub_font_size: if normalized.epub_font_size
+            == normalize_epub_font_size(global.epub_font_size)
+        {
             0
         } else {
             normalized.epub_font_size

@@ -5350,13 +5350,15 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   function applySearchSuggestion(index: number) {
     if (!searchInput || index < 0 || index >= currentSuggestions.length) return;
-    const { value, cursor } = applySuggestion(
+    const { value } = applySuggestion(
       searchInput.value,
       searchInput.selectionStart ?? searchInput.value.length,
       currentSuggestions[index],
     );
-    searchInput.value = value;
-    searchInput.setSelectionRange(cursor, cursor);
+    // Append a trailing space so the user can immediately type the next token.
+    const valueWithSpace = value.endsWith(" ") ? value : `${value} `;
+    searchInput.value = valueWithSpace;
+    searchInput.setSelectionRange(valueWithSpace.length, valueWithSpace.length);
     closeSearchSuggestions();
     void navigateToState(
       {
@@ -5365,7 +5367,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         activeTag: null,
         activeExternalSource: null,
         activeTagDirectOnly: false,
-        searchQuery: searchInput.value.trim(),
+        searchQuery: searchInput.value,
       },
       "replace",
     );
@@ -5401,7 +5403,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         activeTag: null,
         activeExternalSource: null,
         activeTagDirectOnly: false,
-        searchQuery: searchInput.value.trim(),
+        searchQuery: searchInput.value,
       },
       "replace",
     );

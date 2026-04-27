@@ -5399,19 +5399,25 @@ window.addEventListener("DOMContentLoaded", async () => {
     activeSuggestionIndex = -1;
   }
 
+  let librarySearchTimer: number | null = null;
+
   searchInput?.addEventListener("input", () => {
-    void navigateToState(
-      {
-        bookFilePath: null,
-        activeDirectory: null,
-        activeTag: null,
-        activeExternalSource: null,
-        activeTagDirectOnly: false,
-        searchQuery: searchInput.value,
-      },
-      "replace",
-    );
     renderSearchSuggestions();
+    if (librarySearchTimer !== null) window.clearTimeout(librarySearchTimer);
+    librarySearchTimer = window.setTimeout(() => {
+      librarySearchTimer = null;
+      void navigateToState(
+        {
+          bookFilePath: null,
+          activeDirectory: null,
+          activeTag: null,
+          activeExternalSource: null,
+          activeTagDirectOnly: false,
+          searchQuery: searchInput.value,
+        },
+        "replace",
+      );
+    }, 150);
   });
 
   searchInput?.addEventListener("keydown", (e) => {

@@ -4439,7 +4439,7 @@ async function renderCurrentPage() {
         cMapPacked: true,
         standardFontDataUrl: "/pdfjs/standard_fonts/node_modules/pdfjs-dist/standard_fonts/",
         useSystemFonts: true,
-        disableFontFace: true,
+        disableFontFace: false,
         password: savedPassword ?? undefined,
       });
       documentTask.onPassword = async (updatePassword: (pw: string) => void, reason: number) => {

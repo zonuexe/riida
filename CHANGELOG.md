@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-04-27
+
+### Added
+
+- Structured search query language with field filters (`title:`, `author:`, `tag:`, `read:`) and negation (`-`).
+- Search query autocomplete for field names and field values.
+- `read:` field filter for filtering books by last read date.
+
+### Fixed
+
+- Non-embedded standard Japanese fonts (Ryumin-Light, GothicBBB-Medium) now render correctly in the PDF.js viewer instead of showing garbled Latin glyphs.
+- Search field no longer appends a trailing space after autocompleting a field name.
+- Search field no longer trims trailing spaces from input.
+
 ## [0.3.2] - 2026-04-26
 
 ### Added
@@ -244,7 +258,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/zonuexe/riida/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/zonuexe/riida/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/zonuexe/riida/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/zonuexe/riida/compare/v0.2.5...v0.3.0

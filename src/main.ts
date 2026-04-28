@@ -4874,6 +4874,193 @@ function renderSidebar(snapshot: LibrarySnapshot) {
   }
 }
 
+type LibraryViewMode = "list" | "grid";
+
+function getLibraryViewMode(): LibraryViewMode {
+  return localStorage.getItem("riida.libraryViewMode") === "grid" ? "grid" : "list";
+}
+
+function setLibraryViewMode(mode: LibraryViewMode) {
+  localStorage.setItem("riida.libraryViewMode", mode);
+}
+
+let bookGridPopupEl: HTMLElement | null = null;
+let bookGridPopupHideTimer: ReturnType<typeof setTimeout> | null = null;
+
+function ensureBookGridPopup(): HTMLElement {
+  if (!bookGridPopupEl) {
+    const el = document.createElement("div");
+    el.className = "book-grid-popup";
+    document.body.appendChild(el);
+    bookGridPopupEl = el;
+  }
+  return bookGridPopupEl;
+}
+
+function showBookGridPopup(
+  anchorEl: HTMLElement,
+  book: BookSummary,
+  onTagClick: (tag: string) => void,
+  onEditTags: () => void,
+  onEditMetadata: () => void,
+  onClickBook: () => void,
+  onOpenUrl: ((url: string) => void) | null,
+) {
+  if (bookGridPopupHideTimer !== null) {
+    clearTimeout(bookGridPopupHideTimer);
+    bookGridPopupHideTimer = null;
+  }
+
+  const popup = ensureBookGridPopup();
+
+  const copyEl = document.createElement("div");
+  copyEl.className = "book-copy";
+
+  const titleEl = document.createElement("strong");
+  titleEl.textContent = book.title ?? book.fileName;
+  titleEl.style.cursor = "pointer";
+  titleEl.addEventListener("click", onClickBook);
+
+  const metaEl = document.createElement("small");
+  metaEl.className = "book-meta";
+  metaEl.textContent = book.sourceType === "pdf" ? formatFileSize(book.fileSize) : "";
+
+  const tagsRowEl = document.createElement("div");
+  tagsRowEl.className = "book-tags-row";
+
+  const tagsEl = document.createElement("div");
+  tagsEl.className = "book-tag-list";
+  const actionsEl = document.createElement("div");
+  actionsEl.className = "book-action-list";
+
+  if (book.tags.length === 0) {
+    tagsEl.hidden = true;
+  } else {
+    for (const tag of book.tags) {
+      const tagEl = document.createElement("button");
+      tagEl.type = "button";
+      tagEl.className = "book-tag";
+      tagEl.innerHTML = `<i class="fa-solid fa-tag" aria-hidden="true"></i><span>${tag}</span>`;
+      tagEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        hideBookGridPopup(true);
+        onTagClick(tag);
+      });
+      tagsEl.appendChild(tagEl);
+    }
+  }
+
+  const editTagsEl = document.createElement("button");
+  editTagsEl.type = "button";
+  editTagsEl.className = "book-tags-edit";
+  editTagsEl.textContent = book.tags.length > 0 ? "Edit tags" : "Add tags";
+  editTagsEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    hideBookGridPopup(true);
+    onEditTags();
+  });
+
+  const editMetadataEl = document.createElement("button");
+  editMetadataEl.type = "button";
+  editMetadataEl.className = "book-tags-edit";
+  editMetadataEl.textContent = "Edit metadata";
+  editMetadataEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    hideBookGridPopup(true);
+    onEditMetadata();
+  });
+
+  tagsRowEl.appendChild(tagsEl);
+  actionsEl.appendChild(editMetadataEl);
+  actionsEl.appendChild(editTagsEl);
+  tagsRowEl.appendChild(actionsEl);
+
+  copyEl.appendChild(titleEl);
+  copyEl.appendChild(tagsRowEl);
+  if (metaEl.textContent) {
+    copyEl.appendChild(metaEl);
+  }
+
+  if (book.asin || book.url) {
+    const linksEl = document.createElement("div");
+    linksEl.className = "book-links";
+    if (book.asin) {
+      const amazonEl = document.createElement("button");
+      amazonEl.type = "button";
+      amazonEl.className = "book-link";
+      amazonEl.innerHTML = `<i class="fa-brands fa-amazon" aria-hidden="true"></i><span>Amazon</span>`;
+      amazonEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        void openUrl(`https://www.amazon.co.jp/dp/${book.asin}`);
+      });
+      linksEl.appendChild(amazonEl);
+    }
+    if (book.url && onOpenUrl) {
+      let label: string;
+      try {
+        label = new URL(book.url).hostname;
+      } catch {
+        label = book.url;
+      }
+      const urlEl = document.createElement("button");
+      urlEl.type = "button";
+      urlEl.className = "book-link";
+      urlEl.innerHTML = `<i class="fa-solid fa-globe" aria-hidden="true"></i><span>${label}</span>`;
+      urlEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        onOpenUrl(book.url!);
+      });
+      linksEl.appendChild(urlEl);
+    }
+    copyEl.appendChild(linksEl);
+  }
+
+  popup.innerHTML = "";
+  popup.appendChild(copyEl);
+
+  const rect = anchorEl.getBoundingClientRect();
+  const popupWidth = 420;
+  const margin = 8;
+  let left = rect.right + margin;
+  if (left + popupWidth > window.innerWidth - margin) {
+    left = rect.left - popupWidth - margin;
+  }
+  if (left < margin) {
+    left = margin;
+  }
+  let top = rect.top;
+  popup.style.left = `${left}px`;
+  popup.style.top = `${top}px`;
+  popup.style.width = `${popupWidth}px`;
+
+  popup.classList.add("is-visible");
+
+  popup.onmouseenter = () => {
+    if (bookGridPopupHideTimer !== null) {
+      clearTimeout(bookGridPopupHideTimer);
+      bookGridPopupHideTimer = null;
+    }
+  };
+  popup.onmouseleave = () => {
+    hideBookGridPopup(false);
+  };
+}
+
+function hideBookGridPopup(immediate: boolean) {
+  if (bookGridPopupHideTimer !== null) {
+    clearTimeout(bookGridPopupHideTimer);
+    bookGridPopupHideTimer = null;
+  }
+  if (immediate) {
+    bookGridPopupEl?.classList.remove("is-visible");
+    return;
+  }
+  bookGridPopupHideTimer = setTimeout(() => {
+    bookGridPopupEl?.classList.remove("is-visible");
+    bookGridPopupHideTimer = null;
+  }, 160);
+}
+
 function renderBookList(books: BookSummary[], container: HTMLElement) {
   container.innerHTML = "";
 
@@ -4899,8 +5086,9 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     return;
   }
 
+  const viewMode = getLibraryViewMode();
   const listEl = document.createElement("ul");
-  listEl.className = "books";
+  listEl.className = viewMode === "grid" ? "books grid-view" : "books";
 
   for (const book of books) {
     const itemEl = document.createElement("li");
@@ -5023,6 +5211,58 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     }
     itemEl.appendChild(thumbEl);
     itemEl.appendChild(bodyEl);
+
+    if (viewMode === "grid") {
+      const gridTitleEl = document.createElement("span");
+      gridTitleEl.className = "book-item-grid-title";
+      gridTitleEl.textContent = book.title ?? book.fileName;
+      itemEl.appendChild(gridTitleEl);
+
+      const openBook = () => {
+        if (!book.isOpenable) {
+          void openBookMetadataEditor(book);
+          return;
+        }
+        void navigateToState(
+          {
+            bookFilePath: book.filePath,
+            activeDirectory: viewerState.activeDirectory,
+            activeTag: viewerState.activeTag,
+            activeExternalSource: viewerState.activeExternalSource,
+            activeTagDirectOnly: viewerState.activeTagDirectOnly,
+            searchQuery: viewerState.searchQuery,
+          },
+          "push",
+        );
+      };
+
+      itemEl.addEventListener("mouseenter", () => {
+        showBookGridPopup(
+          itemEl,
+          book,
+          (tag) => {
+            void navigateToState(
+              {
+                bookFilePath: null,
+                activeDirectory: null,
+                activeTag: tag,
+                activeExternalSource: null,
+                activeTagDirectOnly: false,
+                searchQuery: viewerState.searchQuery,
+              },
+              "push",
+            );
+          },
+          () => openTagEditor(book),
+          () => void openBookMetadataEditor(book),
+          openBook,
+          book.url ? (url) => void openUrl(url) : null,
+        );
+      });
+      itemEl.addEventListener("mouseleave", () => {
+        hideBookGridPopup(false);
+      });
+    }
 
     itemEl.addEventListener("click", () => {
       if (!book.isOpenable) {
@@ -5525,6 +5765,32 @@ window.addEventListener("DOMContentLoaded", async () => {
       "push",
     );
   });
+
+  const libraryViewToggleEl = document.querySelector<HTMLButtonElement>("#library-view-toggle");
+  if (libraryViewToggleEl) {
+    const updateToggleState = () => {
+      const mode = getLibraryViewMode();
+      libraryViewToggleEl.classList.toggle("is-active", mode === "grid");
+      libraryViewToggleEl.setAttribute(
+        "aria-label",
+        mode === "grid" ? "リスト表示に切り替え" : "グリッド表示に切り替え",
+      );
+      libraryViewToggleEl.innerHTML =
+        mode === "grid"
+          ? `<i class="fa-solid fa-list" aria-hidden="true"></i>`
+          : `<i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>`;
+    };
+    updateToggleState();
+    libraryViewToggleEl.addEventListener("click", () => {
+      const next = getLibraryViewMode() === "grid" ? "list" : "grid";
+      setLibraryViewMode(next);
+      updateToggleState();
+      hideBookGridPopup(true);
+      if (lastSnapshot) {
+        renderApp();
+      }
+    });
+  }
 
   libraryAddKindleEl?.addEventListener("click", () => {
     openNewKindleBookEditor();

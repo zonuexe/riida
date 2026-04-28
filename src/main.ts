@@ -4475,9 +4475,32 @@ async function renderCurrentPage() {
       const viewerHeight = Math.max(pdfjsViewerEl.clientHeight, 600);
       const maxColumns = viewerSettings.pageMode === "spread" ? 2 : 1;
       const availableWidth = viewerWidth - pageGap * (maxColumns - 1) - 32;
+      const targetHeight = Math.max(260, viewerHeight - 56);
+
+      // Strategy A: in fit-height + spread mode, split any 2-page group whose
+      // combined rendered width would exceed the available viewer width.
+      let layoutGroups = pageGroups;
+      if (viewerSettings.pageMode === "spread" && viewerSettings.zoomMode === "fit-height") {
+        layoutGroups = [];
+        for (const group of pageGroups) {
+          if (group.length === 2) {
+            const vp0 = (await pdfDocument.getPage(group[0])).getViewport({ scale: 1 });
+            const vp1 = (await pdfDocument.getPage(group[1])).getViewport({ scale: 1 });
+            const fitScale = targetHeight / Math.max(vp0.height, 1);
+            const combinedWidth = (vp0.width + vp1.width) * fitScale + pageGap;
+            if (combinedWidth > availableWidth) {
+              layoutGroups.push([group[0]]);
+              layoutGroups.push([group[1]]);
+              continue;
+            }
+          }
+          layoutGroups.push(group);
+        }
+      }
+
       const renderPlans: PdfRenderPlan[] = [];
 
-      for (const [groupIndex, group] of pageGroups.entries()) {
+      for (const [groupIndex, group] of layoutGroups.entries()) {
         const visualOrder = getVisualPageOrder(group, viewerSettings);
         const spreadEl = document.createElement("section");
         spreadEl.className = "pdfjs-spread";
@@ -4492,7 +4515,6 @@ async function renderCurrentPage() {
           viewerSettings.pageMode === "spread"
             ? Math.max(220, Math.floor(availableWidth / Math.max(visualOrder.length, 1)))
             : Math.max(320, availableWidth);
-        const targetHeight = Math.max(260, viewerHeight - 56);
 
         let baseScale = 1;
         if (viewerSettings.zoomMode === "fit-width") {
@@ -4525,7 +4547,7 @@ async function renderCurrentPage() {
           ? 0
           : Math.max(
               0,
-              pageGroups.findIndex((group) => group.includes(restoreTargetPage)),
+              layoutGroups.findIndex((group) => group.includes(restoreTargetPage)),
             );
       const session: PdfRenderSession = {
         token: currentToken,

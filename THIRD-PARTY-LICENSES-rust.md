@@ -2,7 +2,7 @@
 
 This file was generated from the currently installed Rust dependencies used by riida.
 
-- Rust dependencies: 462
+- Rust dependencies: 461
 
 _Regenerate with `npm run generate:third-party-licenses` inside the Nix development shell._
 
@@ -2248,7 +2248,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### cpubits 0.1.0
+### cpubits 0.1.1
 
 - License: MIT OR Apache-2.0
 - Authors: RustCrypto Developers
@@ -7565,7 +7565,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### idna_adapter 1.2.1
+### idna_adapter 1.2.2
 
 - License: Apache-2.0 OR MIT
 - Authors: The rust-url developers
@@ -10346,7 +10346,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### plist 1.8.0
+### plist 1.9.0
 
 - License: MIT
 - Authors: Ed Barnard <eabarnard@gmail.com>
@@ -11103,39 +11103,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-```
-
-### quick-xml 0.38.4
-
-- License: MIT
-- Source: https://github.com/tafia/quick-xml
-
-#### LICENSE-MIT.md
-
-```text
-The MIT License (MIT)
-
-Copyright (c) 2016 Johann Tuffe
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
 ```
 
 ### quick-xml 0.39.2
@@ -14128,7 +14095,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tauri-winres 0.3.5
+### tauri-winres 0.3.6
 
 - License: MIT
 - Authors: Tauri Programme within The Commons Conservancy, Max Resch <resch.max@gmail.com>
@@ -17323,7 +17290,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### zbus 5.14.0
+### zbus 5.15.0
 
 - License: MIT
 - Authors: Zeeshan Ali Khan <zeeshanak@gnome.org>
@@ -17359,7 +17326,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### zbus_macros 5.14.0
+### zbus_macros 5.15.0
 
 - License: MIT
 - Authors: Marc-André Lureau <marcandre.lureau@redhat.com>, Zeeshan Ali Khan <zeeshanak@gnome.org>
@@ -17395,7 +17362,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### zbus_names 4.3.1
+### zbus_names 4.3.2
 
 - License: MIT
 - Authors: Zeeshan Ali Khan <zeeshanak@gnome.org>
@@ -18039,7 +18006,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### zvariant 5.10.0
+### zvariant 5.10.1
 
 - License: MIT
 - Authors: Zeeshan Ali Khan <zeeshanak@gnome.org>
@@ -18075,7 +18042,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### zvariant_derive 5.10.0
+### zvariant_derive 5.10.1
 
 - License: MIT
 - Authors: Zeeshan Ali Khan <zeeshanak@gnome.org>
@@ -18111,7 +18078,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### zvariant_utils 3.3.0
+### zvariant_utils 3.3.1
 
 - License: MIT
 - Authors: Zeeshan Ali Khan <zeeshanak@gnome.org>, turbocooler <turbocooler@cocaine.ninja>

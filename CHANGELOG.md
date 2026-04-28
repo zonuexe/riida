@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-04-29
+
+### Added
+
+- Grid view mode in the library with a hover popup showing book details.
+- Landscape PDF pages are now displayed single-page when in fit-height + two-page spread mode, preventing cut-off pages that cannot fit side by side.
+
+### Changed
+
+- Library search input is now debounced by 150 ms to reduce unnecessary filtering while typing.
+
 ## [0.3.3] - 2026-04-27
 
 ### Added
@@ -258,7 +269,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/zonuexe/riida/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/zonuexe/riida/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/zonuexe/riida/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/zonuexe/riida/compare/v0.3.0...v0.3.1

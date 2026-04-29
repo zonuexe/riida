@@ -16,6 +16,45 @@ export function clampReadingPositionOffsetRatio(value: number) {
   return Math.min(Math.max(value, 0), 1);
 }
 
+/**
+ * Pick the index of the page anchoring the current reading position.
+ *
+ * The anchor is the last page whose `offsetTop` is at or above the
+ * `anchorLine` (i.e. the page that the line cuts through, or the
+ * one immediately above it). Pages must be supplied in document
+ * order. Returns -1 only when the input is empty.
+ */
+export function selectAnchorPageIndex(pageOffsetTops: readonly number[], anchorLine: number) {
+  if (pageOffsetTops.length === 0) return -1;
+  let anchorIndex = 0;
+  for (let i = 0; i < pageOffsetTops.length; i++) {
+    const top = pageOffsetTops[i];
+    if (top === undefined) continue;
+    if (top <= anchorLine) {
+      anchorIndex = i;
+    } else {
+      break;
+    }
+  }
+  return anchorIndex;
+}
+
+/**
+ * Compute the reading-position fraction within the anchor page.
+ *
+ * `(scrollTop - anchorOffsetTop) / pageHeight`, clamped to [0, 1].
+ * `pageHeight` is treated as at least 1 to avoid division-by-zero
+ * when a page hasn't laid out yet.
+ */
+export function computePageOffsetRatio(
+  scrollTop: number,
+  anchorOffsetTop: number,
+  pageHeight: number,
+) {
+  const safeHeight = Math.max(pageHeight, 1);
+  return clampReadingPositionOffsetRatio((scrollTop - anchorOffsetTop) / safeHeight);
+}
+
 const cachedReadingPositionSchema = v.pipe(
   v.object({
     filePath: v.string(),

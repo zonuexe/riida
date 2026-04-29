@@ -52,8 +52,10 @@ import {
 import { validateTagValue } from "./tag-utils";
 import {
   clampReadingPositionOffsetRatio,
+  computePageOffsetRatio,
   parseCachedReadingPosition,
   readingPositionStorageKey,
+  selectAnchorPageIndex,
 } from "./reading-position-utils";
 import { parseRequestedPageNumber } from "./page-jump-utils";
 import { resolvePdfLinkTarget, type PdfAnnotationRecord } from "./pdf-link-utils";
@@ -3641,21 +3643,17 @@ function captureReadingPositionFromViewer(): ReadingPosition | null {
   }
 
   const anchorLine = stageEl.scrollTop + 24;
-  let anchorPageEl: HTMLElement = pageEls[0]!;
-
-  for (const pageEl of pageEls) {
-    if (pageEl.offsetTop <= anchorLine) {
-      anchorPageEl = pageEl;
-    } else {
-      break;
-    }
-  }
+  const anchorIndex = selectAnchorPageIndex(
+    pageEls.map((el) => el.offsetTop),
+    anchorLine,
+  );
+  const anchorPageEl = pageEls[anchorIndex] ?? pageEls[0]!;
 
   const pageNumber = Number(anchorPageEl.dataset.pageNumber ?? "1");
-  const pageHeight = Math.max(anchorPageEl.offsetHeight, 1);
-  const pageOffsetRatio = Math.min(
-    Math.max((stageEl.scrollTop - anchorPageEl.offsetTop) / pageHeight, 0),
-    1,
+  const pageOffsetRatio = computePageOffsetRatio(
+    stageEl.scrollTop,
+    anchorPageEl.offsetTop,
+    anchorPageEl.offsetHeight,
   );
 
   return {

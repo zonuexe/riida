@@ -31,6 +31,27 @@ export default defineConfig(async () => ({
 
   test: {
     exclude: ["**/node_modules/**", "**/dist/**", "mcp-server/**"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html"],
+      all: true,
+      include: ["src/**/*.ts"],
+      exclude: [
+        "src/main.ts",
+        "src/note-editor.ts",
+        "src/cjk-radical-map.ts",
+        "src/search-suggestions.ts",
+        "src/vendor/**",
+        "src/**/*.test.ts",
+        "src/vite-env.d.ts",
+      ],
+      thresholds: {
+        lines: 80,
+        functions: 90,
+        branches: 70,
+        statements: 80,
+      },
+    },
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

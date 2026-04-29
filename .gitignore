@@ -4,6 +4,7 @@ node_modules/
 target/
 dist/
 dist-ssr/
+coverage/
 logs
 *.log
 npm-debug.log*

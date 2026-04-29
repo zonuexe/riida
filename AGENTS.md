@@ -457,6 +457,24 @@ Current scope is intentionally narrow:
 
 This keeps adoption simple while still covering the main frontend code path.
 
+## Frontend Test Coverage
+
+`vitest run --coverage` (alias `npm run test:coverage`) produces a
+v8-based coverage report and fails if coverage drops below the
+thresholds configured in [vite.config.ts](vite.config.ts).
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run test:coverage
+```
+
+`check:frontend` runs `test:coverage` instead of plain `test`, so any
+regression below the thresholds breaks the verification pipeline.
+
+`src/main.ts`, `src/note-editor.ts`, the vendored assets, and
+`src/cjk-radical-map.ts` are excluded from coverage because they are
+DOM-driven entry points or large data files that the helper-module
+test strategy does not target.
+
 ## Dead-Code Detection
 
 `knip` checks for unused files, exports, and dependencies in the frontend.

@@ -1,3 +1,66 @@
+export type EmptyLibraryStateInput = {
+  libraryRoots: string[];
+  existingLibraryRoots: string[];
+  missingLibraryRoots: string[];
+  bookCount: number;
+  hasFilter: boolean;
+  libraryErrorMessage: string | null;
+};
+
+export type EmptyLibraryStateMessage = {
+  message: string;
+  detail: string | null;
+};
+
+/**
+ * Decide which empty / error message to show in the library list given
+ * the current snapshot, filter state, and any user-facing error.
+ *
+ * Branch order (first match wins):
+ *  1. an active filter is in effect → "No matching books."
+ *  2. a library error message has been recorded → show it verbatim
+ *  3. no library roots configured → onboarding message
+ *  4. configured roots all missing on disk → ask the user to update
+ *  5. no books at all → "Your library is empty." with a hint
+ *  6. otherwise → "No PDFs yet." (e.g. scanning in progress)
+ */
+export function describeEmptyLibraryState(input: EmptyLibraryStateInput): EmptyLibraryStateMessage {
+  if (input.hasFilter) {
+    return { message: "No matching books.", detail: null };
+  }
+
+  if (input.libraryErrorMessage) {
+    return { message: input.libraryErrorMessage, detail: null };
+  }
+
+  if (input.libraryRoots.length === 0) {
+    return {
+      message: "No library folders selected yet.",
+      detail: "Open Settings and add at least one library folder.",
+    };
+  }
+
+  if (input.existingLibraryRoots.length === 0) {
+    return {
+      message: "The configured library folders do not exist.",
+      detail:
+        "Update Library roots in Settings and choose folders that are available on this machine.",
+    };
+  }
+
+  if (input.bookCount === 0) {
+    return {
+      message: "Your library is empty.",
+      detail:
+        input.missingLibraryRoots.length > 0
+          ? "Some configured folders are missing, and no PDFs were found in the folders that still exist."
+          : "No PDFs were found in the configured library folders.",
+    };
+  }
+
+  return { message: "No PDFs yet.", detail: null };
+}
+
 export type DirectoryNode = {
   id: string;
   label: string;

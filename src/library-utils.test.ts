@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveDirectories,
   deriveTags,
+  describeEmptyLibraryState,
   filterVisibleBooks,
   formatBookLocation,
   formatFileSize,
@@ -199,5 +200,69 @@ describe("deriveTags", () => {
       { id: "magazine/web", label: "web", count: 1, depth: 1, explicit: true, hasChildren: false },
       { id: "tech", label: "tech", count: 2, depth: 0, explicit: true, hasChildren: false },
     ]);
+  });
+});
+
+describe("describeEmptyLibraryState", () => {
+  const baseInput = {
+    libraryRoots: ["/books"],
+    existingLibraryRoots: ["/books"],
+    missingLibraryRoots: [],
+    bookCount: 0,
+    hasFilter: false,
+    libraryErrorMessage: null as string | null,
+  };
+
+  it("returns 'No matching books.' when a filter is active", () => {
+    const result = describeEmptyLibraryState({ ...baseInput, hasFilter: true });
+    expect(result).toEqual({ message: "No matching books.", detail: null });
+  });
+
+  it("preserves a recorded library error message verbatim", () => {
+    const result = describeEmptyLibraryState({
+      ...baseInput,
+      libraryErrorMessage: "Boom!",
+    });
+    expect(result).toEqual({ message: "Boom!", detail: null });
+  });
+
+  it("prompts onboarding when no library roots are configured", () => {
+    const result = describeEmptyLibraryState({ ...baseInput, libraryRoots: [] });
+    expect(result.message).toBe("No library folders selected yet.");
+    expect(result.detail).toContain("Settings");
+  });
+
+  it("flags missing roots when none of the configured ones exist", () => {
+    const result = describeEmptyLibraryState({
+      ...baseInput,
+      libraryRoots: ["/missing"],
+      existingLibraryRoots: [],
+    });
+    expect(result.message).toBe("The configured library folders do not exist.");
+  });
+
+  it("uses the missing-roots detail when bookCount is 0 and some roots are missing", () => {
+    const result = describeEmptyLibraryState({
+      ...baseInput,
+      missingLibraryRoots: ["/gone"],
+    });
+    expect(result.message).toBe("Your library is empty.");
+    expect(result.detail).toContain("Some configured folders are missing");
+  });
+
+  it("uses the simple detail when bookCount is 0 and all roots exist", () => {
+    const result = describeEmptyLibraryState(baseInput);
+    expect(result.message).toBe("Your library is empty.");
+    expect(result.detail).toContain("No PDFs were found");
+  });
+
+  it("filter takes precedence over missing-roots and library error", () => {
+    const result = describeEmptyLibraryState({
+      ...baseInput,
+      hasFilter: true,
+      libraryErrorMessage: "ignored",
+      libraryRoots: [],
+    });
+    expect(result.message).toBe("No matching books.");
   });
 });

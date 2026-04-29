@@ -34,6 +34,7 @@ import { resolveEpubLinkAction } from "./epub-link-routing";
 import {
   deriveDirectories,
   deriveTags,
+  describeEmptyLibraryState,
   filterVisibleBooks,
   formatBookLocation,
   formatFileSize,
@@ -3101,57 +3102,20 @@ function visibleBooks(snapshot: LibrarySnapshot) {
   );
 }
 
-function describeEmptyLibraryState(snapshot: LibrarySnapshot, books: BookSummary[]) {
-  if (
-    viewerState.searchQuery ||
-    viewerState.activeDirectory ||
-    viewerState.activeTag ||
-    viewerState.activeExternalSource
-  ) {
-    return {
-      message: "No matching books.",
-      detail: null as string | null,
-    };
-  }
-
-  if (viewerState.libraryErrorMessage) {
-    return {
-      message: viewerState.libraryErrorMessage,
-      detail: null as string | null,
-    };
-  }
-
-  if (snapshot.libraryRoots.length === 0) {
-    return {
-      message: "No library folders selected yet.",
-      detail: "Open Settings and add at least one library folder.",
-    };
-  }
-
-  if (snapshot.existingLibraryRoots.length === 0) {
-    return {
-      message: "The configured library folders do not exist.",
-      detail:
-        "Update Library roots in Settings and choose folders that are available on this machine.",
-    };
-  }
-
-  if (books.length === 0) {
-    const detail =
-      snapshot.missingLibraryRoots.length > 0
-        ? "Some configured folders are missing, and no PDFs were found in the folders that still exist."
-        : "No PDFs were found in the configured library folders.";
-
-    return {
-      message: "Your library is empty.",
-      detail,
-    };
-  }
-
-  return {
-    message: "No PDFs yet.",
-    detail: null as string | null,
-  };
+function describeCurrentEmptyLibraryState(snapshot: LibrarySnapshot, books: BookSummary[]) {
+  return describeEmptyLibraryState({
+    libraryRoots: snapshot.libraryRoots,
+    existingLibraryRoots: snapshot.existingLibraryRoots,
+    missingLibraryRoots: snapshot.missingLibraryRoots,
+    bookCount: books.length,
+    hasFilter: Boolean(
+      viewerState.searchQuery ||
+      viewerState.activeDirectory ||
+      viewerState.activeTag ||
+      viewerState.activeExternalSource,
+    ),
+    libraryErrorMessage: viewerState.libraryErrorMessage,
+  });
 }
 
 function currentNavigationState(): NavigationState {
@@ -5044,7 +5008,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     const emptyEl = document.createElement("div");
     emptyEl.className = "empty-state";
     const state = snapshot
-      ? describeEmptyLibraryState(snapshot, books)
+      ? describeCurrentEmptyLibraryState(snapshot, books)
       : { message: "Loading library...", detail: null as string | null };
     const messageEl = document.createElement("p");
     messageEl.textContent = state.message;

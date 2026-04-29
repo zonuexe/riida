@@ -1,4 +1,5 @@
 import { Temporal } from "temporal-polyfill-lite";
+import * as v from "valibot";
 
 export type BookMetadataDraft = {
   title: string;
@@ -24,7 +25,20 @@ export type BookMetadataImportPatch = {
   coverUrl?: string | null;
 };
 
-type NullableStringImportKey = Exclude<keyof BookMetadataImportPatch, "authors">;
+const nullableString = v.nullable(v.string());
+const bookMetadataImportSchema = v.object({
+  title: v.optional(nullableString),
+  authors: v.optional(
+    v.nullable(v.pipe(v.array(v.string(), '"authors" must be an array of strings or null.'))),
+  ),
+  description: v.optional(nullableString),
+  publisher: v.optional(nullableString),
+  releaseDate: v.optional(nullableString),
+  language: v.optional(nullableString),
+  url: v.optional(nullableString),
+  asin: v.optional(nullableString),
+  coverUrl: v.optional(nullableString),
+});
 
 export const BOOK_METADATA_IMPORT_EXAMPLE = `{
   "title": "型システムのしくみ",
@@ -172,61 +186,27 @@ export function parseBookMetadataImport(
   try {
     parsed = JSON.parse(value);
   } catch {
-    return {
-      ok: false,
-      message: "Metadata JSON must be valid JSON.",
-    };
+    return { ok: false, message: "Metadata JSON must be valid JSON." };
   }
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return {
-      ok: false,
-      message: "Metadata JSON must be an object.",
-    };
+    return { ok: false, message: "Metadata JSON must be an object." };
   }
 
-  const record = parsed as Record<string, unknown>;
-  const patch: BookMetadataImportPatch = {};
-
-  const assignNullableString = (key: NullableStringImportKey) => {
-    if (!(key in record)) {
-      return;
+  const result = v.safeParse(bookMetadataImportSchema, parsed);
+  if (!result.success) {
+    const issue = result.issues[0];
+    const key = issue?.path?.[0]?.key;
+    if (key === "authors") {
+      return { ok: false, message: '"authors" must be an array of strings or null.' };
     }
-    const value = record[key];
-    if (value !== null && typeof value !== "string") {
-      throw new Error(`"${key}" must be a string or null.`);
+    if (typeof key === "string") {
+      return { ok: false, message: `"${key}" must be a string or null.` };
     }
-    patch[key] = value as string | null;
-  };
-
-  try {
-    assignNullableString("title");
-    assignNullableString("description");
-    assignNullableString("publisher");
-    assignNullableString("releaseDate");
-    assignNullableString("language");
-    assignNullableString("url");
-    assignNullableString("asin");
-    assignNullableString("coverUrl");
-
-    if ("authors" in record) {
-      const authors = record.authors;
-      if (authors === null) {
-        patch.authors = null;
-      } else if (Array.isArray(authors) && authors.every((author) => typeof author === "string")) {
-        patch.authors = authors;
-      } else {
-        throw new Error('"authors" must be an array of strings or null.');
-      }
-    }
-  } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : "Metadata JSON is invalid.",
-    };
+    return { ok: false, message: "Metadata JSON is invalid." };
   }
 
-  return { ok: true, patch };
+  return { ok: true, patch: result.output };
 }
 
 export function applyBookMetadataImport(

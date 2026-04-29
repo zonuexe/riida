@@ -457,6 +457,22 @@ Current scope is intentionally narrow:
 
 This keeps adoption simple while still covering the main frontend code path.
 
+## Frontend Boundary Schemas
+
+External payloads parsed by the frontend (cached `localStorage`
+entries, JSON metadata patches) go through
+[valibot](https://valibot.dev) schemas instead of hand-rolled type
+guards. Today this covers:
+
+- `parseCachedReadingPosition` in
+  [src/reading-position-utils.ts](src/reading-position-utils.ts)
+- `parseBookMetadataImport` in
+  [src/book-metadata-utils.ts](src/book-metadata-utils.ts)
+
+When adding a new persistence boundary or external-input parser,
+prefer a valibot schema over inline `typeof` checks so the validation
+contract is co-located and reusable.
+
 ## Frontend Property-Based Tests
 
 Frontend property tests use [fast-check](https://github.com/dubzzz/fast-check)

@@ -410,9 +410,17 @@ Standard Rust static checks:
 ```bash
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run rust:fmt:check
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run rust:lint
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run rust:machete
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run rust:audit
 ```
 
 `rust:lint` currently runs `cargo clippy --all-targets -- -D warnings`.
+`rust:machete` runs `cargo machete src-tauri` to detect unused
+Cargo dependencies. `rust:audit` runs `cargo audit` against the
+RustSec Advisory Database; by default it exits 0 on `unmaintained`
+warnings (mostly transitive GTK / Tauri ecosystem crates we cannot
+fix locally) and exits non-zero when an actual vulnerability is
+reported.
 
 Project defaults live in [.cargo/mutants.toml](.cargo/mutants.toml), and currently focus on [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
 

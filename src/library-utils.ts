@@ -79,7 +79,7 @@ function parseSearchQuery(raw: string): QueryToken[] {
 
   while ((match = re.exec(raw)) !== null) {
     const negate = match[1] === "-";
-    const atom = match[2] ?? match[3]; // quoted or unquoted
+    const atom = match[2] ?? match[3] ?? ""; // quoted or unquoted
     const colon = atom.indexOf(":");
 
     if (colon > 0) {
@@ -185,7 +185,7 @@ function parseReadThresholdSeconds(value: string): number | null | "never" {
   };
   if (named[v] !== undefined) return named[v];
   const m = /^(\d+)(d|w|m)$/.exec(v);
-  if (m) {
+  if (m && m[1] !== undefined) {
     const n = parseInt(m[1], 10);
     const unit = m[2];
     if (unit === "d") return n * 86400;

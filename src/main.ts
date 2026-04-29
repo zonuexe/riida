@@ -1294,7 +1294,11 @@ async function renderPdfJsLinks(
       continue;
     }
 
-    const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(annotation.rect);
+    const rect = viewport.convertToViewportRectangle(annotation.rect);
+    const x1 = rect[0] ?? 0;
+    const y1 = rect[1] ?? 0;
+    const x2 = rect[2] ?? 0;
+    const y2 = rect[3] ?? 0;
     const left = Math.min(x1, x2);
     const top = Math.min(y1, y2);
     const width = Math.abs(x2 - x1);
@@ -3219,6 +3223,7 @@ function syncNavigationHistoryState(state: NavigationState, mode: "push" | "repl
 
   navigationHistoryMax = Math.max(0, navigationEntries.length - 1);
   const historyState = navigationEntries[navigationHistoryIndex];
+  if (!historyState) return;
   const url = buildNavigationUrl(historyState);
 
   if (mode === "push") {
@@ -3333,7 +3338,7 @@ function findActivePdfPageEl(stageEl: HTMLElement, pageEls: HTMLElement[]): HTML
     return null;
   }
   const anchor = stageEl.scrollTop + stageEl.clientHeight * 0.3;
-  let active = pageEls[0];
+  let active: HTMLElement | null = pageEls[0] ?? null;
   for (const pageEl of pageEls) {
     if (pageEl.offsetTop <= anchor) {
       active = pageEl;
@@ -3423,7 +3428,9 @@ function buildPdfSearchPageIndex(items: Array<{ str: string }>): PdfSearchPageIn
   let normalizedText = "";
 
   for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
-    const str = items[itemIndex].str;
+    const item = items[itemIndex];
+    if (!item) continue;
+    const str = item.str;
     let origOffset = 0;
     for (const cp of str) {
       const origOffsetEnd = origOffset + cp.length;
@@ -3546,6 +3553,7 @@ function getPdfSearchMatchRange(match: PdfSearchMatch): Range | null {
 
   const startChar = normChars[match.normalizedStart];
   const endChar = normChars[match.normalizedEnd - 1];
+  if (!startChar || !endChar) return null;
 
   const pageEl = findPageElement(match.pageNumber);
   if (!pageEl) return null;
@@ -3583,6 +3591,7 @@ function applyPdfSearchHighlights() {
 
   for (let i = 0; i < pdfSearchState.matches.length; i++) {
     const match = pdfSearchState.matches[i];
+    if (!match) continue;
     const range = getPdfSearchMatchRange(match);
     if (!range) continue;
 
@@ -3728,7 +3737,7 @@ function captureReadingPositionFromViewer(): ReadingPosition | null {
   }
 
   const anchorLine = stageEl.scrollTop + 24;
-  let anchorPageEl = pageEls[0];
+  let anchorPageEl: HTMLElement = pageEls[0]!;
 
   for (const pageEl of pageEls) {
     if (pageEl.offsetTop <= anchorLine) {
@@ -3917,6 +3926,7 @@ function navigateBack() {
 
   navigationHistoryIndex -= 1;
   const nextState = navigationEntries[navigationHistoryIndex];
+  if (!nextState) return;
   window.history.replaceState(nextState, "", buildNavigationUrl(nextState));
   syncNavigationControlsUi();
   suppressHistoryUpdates = true;
@@ -3932,6 +3942,7 @@ function navigateForward() {
 
   navigationHistoryIndex += 1;
   const nextState = navigationEntries[navigationHistoryIndex];
+  if (!nextState) return;
   window.history.replaceState(nextState, "", buildNavigationUrl(nextState));
   syncNavigationControlsUi();
   suppressHistoryUpdates = true;
@@ -4483,14 +4494,16 @@ async function renderCurrentPage() {
       if (viewerSettings.pageMode === "spread" && viewerSettings.zoomMode === "fit-height") {
         layoutGroups = [];
         for (const group of pageGroups) {
-          if (group.length === 2) {
-            const vp0 = (await pdfDocument.getPage(group[0])).getViewport({ scale: 1 });
-            const vp1 = (await pdfDocument.getPage(group[1])).getViewport({ scale: 1 });
+          if (group.length === 2 && group[0] !== undefined && group[1] !== undefined) {
+            const g0 = group[0];
+            const g1 = group[1];
+            const vp0 = (await pdfDocument.getPage(g0)).getViewport({ scale: 1 });
+            const vp1 = (await pdfDocument.getPage(g1)).getViewport({ scale: 1 });
             const fitScale = targetHeight / Math.max(vp0.height, 1);
             const combinedWidth = (vp0.width + vp1.width) * fitScale + pageGap;
             if (combinedWidth > availableWidth) {
-              layoutGroups.push([group[0]]);
-              layoutGroups.push([group[1]]);
+              layoutGroups.push([g0]);
+              layoutGroups.push([g1]);
               continue;
             }
           }
@@ -4509,7 +4522,7 @@ async function renderCurrentPage() {
         spreadEl.dataset.cover = String(group.length === 1);
         pdfjsViewerEl.appendChild(spreadEl);
 
-        const samplePage = await pdfDocument.getPage(group[0]);
+        const samplePage = await pdfDocument.getPage(group[0]!);
         const sampleViewport = samplePage.getViewport({ scale: 1 });
         const targetWidth =
           viewerSettings.pageMode === "spread"
@@ -5577,6 +5590,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     for (let i = 0; i < currentSuggestions.length; i++) {
       const s = currentSuggestions[i];
+      if (!s) continue;
       const li = document.createElement("li");
       li.role = "option";
       li.setAttribute("aria-selected", "false");
@@ -5614,14 +5628,16 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   function applySearchSuggestion(index: number) {
     if (!searchInput || index < 0 || index >= currentSuggestions.length) return;
+    const suggestion = currentSuggestions[index];
+    if (!suggestion) return;
     const { value } = applySuggestion(
       searchInput.value,
       searchInput.selectionStart ?? searchInput.value.length,
-      currentSuggestions[index],
+      suggestion,
     );
     // Field completions end with ":" — don't add a space so the user can type the value directly.
     // Value completions end with the value itself — add a space to start the next token.
-    const isFieldCompletion = currentSuggestions[index].kind === "field";
+    const isFieldCompletion = suggestion.kind === "field";
     const finalValue = isFieldCompletion || value.endsWith(" ") ? value : `${value} `;
     searchInput.value = finalValue;
     searchInput.setSelectionRange(finalValue.length, finalValue.length);

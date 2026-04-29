@@ -18,7 +18,7 @@ export type ResolvedPdfLinkTarget =
 
 function parsePdfHashPageNumber(value: string) {
   const matchedPage = value.match(/(?:^|[#?&])page=(\d+)/i);
-  if (!matchedPage) {
+  if (!matchedPage || matchedPage[1] === undefined) {
     return null;
   }
 

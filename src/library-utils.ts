@@ -71,7 +71,7 @@ export type QueryToken =
   | { kind: "field"; field: string; value: string; negate: boolean }
   | { kind: "free"; value: string };
 
-export function parseSearchQuery(raw: string): QueryToken[] {
+function parseSearchQuery(raw: string): QueryToken[] {
   const tokens: QueryToken[] = [];
   // Tokenise respecting double-quoted phrases, e.g. author:"Robert C. Martin"
   const re = /(-?)(?:"([^"]*)"|((?:[^\s"\\]|\\.)+))/g;

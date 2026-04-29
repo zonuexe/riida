@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["src/note-editor.ts", "scripts/*.mjs"],
+  "project": ["src/**/*.ts"],
+  "ignore": ["mcp-server/**"],
+  "rules": {
+    "types": "off"
+  }
+}

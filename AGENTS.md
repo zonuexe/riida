@@ -457,6 +457,19 @@ Current scope is intentionally narrow:
 
 This keeps adoption simple while still covering the main frontend code path.
 
+## Dead-Code Detection
+
+`knip` checks for unused files, exports, and dependencies in the frontend.
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run knip
+```
+
+It runs as part of `npm run check:frontend`. Configuration lives in
+[knip.json](knip.json). The `types` rule is intentionally disabled because
+many exported types describe the parameter shapes of exported functions
+and are kept for callers to name.
+
 `npm run check:frontend` now ends with a lightweight bundle-size report from
 [scripts/report-bundle-size.mjs](scripts/report-bundle-size.mjs)
 so large asset growth is visible in local runs and CI logs.

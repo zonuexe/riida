@@ -14,7 +14,8 @@
     "check": "npm run check:rust && npm run check:frontend",
     "check:release": "npm run check && npm run check:licenses",
     "check:rust": "npm run rust:fmt:check && npm run rust:lint && cargo test --manifest-path src-tauri/Cargo.toml && cargo check --manifest-path src-tauri/Cargo.toml",
-    "check:frontend": "npm run lint && npm run fmt:check && npm test && npm run build && npm run report:bundle-size",
+    "check:frontend": "npm run lint && npm run fmt:check && npm run knip && npm test && npm run build && npm run report:bundle-size",
+    "knip": "knip",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml",
     "rust:fmt:check": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "rust:lint": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
@@ -43,6 +44,7 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "knip": "^6.8.0",
     "license-checker": "^25.0.1",
     "oxfmt": "^0.43.0",
     "oxlint": "^1.58.0",

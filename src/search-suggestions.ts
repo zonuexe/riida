@@ -60,7 +60,7 @@ export function buildValueSource(
 }
 
 // Returns the token fragment the cursor is currently inside, and its start offset.
-export function activeFragment(value: string, cursorPos: number): { start: number; text: string } {
+function activeFragment(value: string, cursorPos: number): { start: number; text: string } {
   let start = cursorPos;
   while (start > 0 && value[start - 1] !== " ") start--;
   return { start, text: value.slice(start, cursorPos) };

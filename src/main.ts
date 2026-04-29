@@ -68,7 +68,14 @@ import {
   applyViewerSettingsPayloadToState,
   switchViewerSettingsScopeInState,
 } from "./viewer-settings-utils";
-import { CJK_RADICAL_MAP } from "./cjk-radical-map";
+import {
+  buildPdfSearchPageIndex,
+  findPdfSearchMatchesInPage,
+  pickInitialMatchIndex,
+  searchNormalize,
+  type PdfSearchMatch,
+  type PdfSearchPageIndex,
+} from "./pdf-search-utils";
 
 type CustomSource = {
   id: string;
@@ -277,23 +284,6 @@ type PdfRenderPlan = {
   spreadEl: HTMLElement;
   pageSlots: Map<number, HTMLElement>;
   baseScale: number;
-};
-
-type PdfSearchNormChar = {
-  itemIndex: number;
-  origOffset: number;
-  origOffsetEnd: number;
-};
-
-type PdfSearchPageIndex = {
-  normalizedText: string;
-  normChars: PdfSearchNormChar[];
-};
-
-type PdfSearchMatch = {
-  pageNumber: number;
-  normalizedStart: number;
-  normalizedEnd: number;
 };
 
 type PdfOutlineNode = {
@@ -3411,41 +3401,6 @@ function handlePdfPagedKey(event: KeyboardEvent): boolean {
   return true;
 }
 
-function searchNormalize(str: string): string {
-  return [
-    ...str
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .normalize("NFKC")
-      .toLowerCase(),
-  ]
-    .map((c) => CJK_RADICAL_MAP[c] ?? c)
-    .join("");
-}
-
-function buildPdfSearchPageIndex(items: Array<{ str: string }>): PdfSearchPageIndex {
-  const normChars: PdfSearchNormChar[] = [];
-  let normalizedText = "";
-
-  for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
-    const item = items[itemIndex];
-    if (!item) continue;
-    const str = item.str;
-    let origOffset = 0;
-    for (const cp of str) {
-      const origOffsetEnd = origOffset + cp.length;
-      const normalized = searchNormalize(cp);
-      for (const nc of normalized) {
-        normChars.push({ itemIndex, origOffset, origOffsetEnd });
-        normalizedText += nc;
-      }
-      origOffset = origOffsetEnd;
-    }
-  }
-
-  return { normalizedText, normChars };
-}
-
 async function ensurePdfSearchPageIndex(pageNumber: number): Promise<PdfSearchPageIndex | null> {
   const cached = pdfSearchState.pageIndices.get(pageNumber);
   if (cached) return cached;
@@ -3500,29 +3455,14 @@ async function executePdfSearch(query: string) {
 
     if (pdfSearchState.query !== query) return;
 
-    const { normalizedText } = index;
-    let pos = 0;
-    while (pos <= normalizedText.length - normalizedQuery.length) {
-      const found = normalizedText.indexOf(normalizedQuery, pos);
-      if (found === -1) break;
-      matches.push({
-        pageNumber: p,
-        normalizedStart: found,
-        normalizedEnd: found + normalizedQuery.length,
-      });
-      pos = found + 1;
-    }
+    matches.push(...findPdfSearchMatchesInPage(index.normalizedText, normalizedQuery, p));
   }
 
   pdfSearchState.matches = matches;
-
-  if (matches.length > 0) {
-    const currentPage = activeReadingPosition?.pageNumber ?? 1;
-    const idx = matches.findIndex((m) => m.pageNumber >= currentPage);
-    pdfSearchState.currentMatchIndex = idx >= 0 ? idx : 0;
-  } else {
-    pdfSearchState.currentMatchIndex = -1;
-  }
+  pdfSearchState.currentMatchIndex = pickInitialMatchIndex(
+    matches,
+    activeReadingPosition?.pageNumber ?? 1,
+  );
 
   applyPdfSearchHighlights();
   syncPdfSearchUi();

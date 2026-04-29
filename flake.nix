@@ -27,6 +27,7 @@
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             cargo
+            cargo-nextest
             clippy
             nodejs_22
             pkg-config

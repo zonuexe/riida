@@ -373,7 +373,7 @@ nix --extra-experimental-features 'nix-command flakes' develop --command npm run
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run rust:lint
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run lint
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run fmt:check
-nix --extra-experimental-features 'nix-command flakes' develop --command cargo test --manifest-path src-tauri/Cargo.toml
+nix --extra-experimental-features 'nix-command flakes' develop --command cargo nextest run --manifest-path src-tauri/Cargo.toml
 nix --extra-experimental-features 'nix-command flakes' develop --command npm test
 nix --extra-experimental-features 'nix-command flakes' develop --command cargo check --manifest-path src-tauri/Cargo.toml
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run build

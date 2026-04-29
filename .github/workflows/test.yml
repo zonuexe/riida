@@ -46,6 +46,11 @@ jobs:
         with:
           workspaces: src-tauri -> target
 
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
       - name: Run Rust quality checks
         run: npm run check:rust
 

@@ -457,6 +457,23 @@ Current scope is intentionally narrow:
 
 This keeps adoption simple while still covering the main frontend code path.
 
+## Frontend Property-Based Tests
+
+Frontend property tests use [fast-check](https://github.com/dubzzz/fast-check)
+and live in [src/property-tests.test.ts](src/property-tests.test.ts).
+They cover invariants of clamp / parser / planner helpers that pair
+naturally with proptest in Rust.
+
+Notes:
+
+- `fc.property` predicates return booleans; do not call `expect`
+  conditionally inside them, since `eslint-plugin-jest`'s
+  `no-conditional-expect` rule will flag it. Use a single
+  `expect(true).toBe(true)` after `fc.assert` to keep Vitest happy.
+- New invariants should focus on the same kind of helper modules
+  already covered by deterministic tests (config normalization,
+  reading positions, navigation, viewer layout).
+
 ## Frontend Test Coverage
 
 `vitest run --coverage` (alias `npm run test:coverage`) produces a

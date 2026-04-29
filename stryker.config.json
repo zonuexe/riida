@@ -1,0 +1,34 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Mutation testing for frontend helper modules. Excludes DOM-driven entry points and large data files. See AGENTS.md > Frontend Mutation Testing.",
+  "packageManager": "npm",
+  "testRunner": "vitest",
+  "reporters": ["html", "clear-text", "progress"],
+  "mutate": [
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/main.ts",
+    "!src/note-editor.ts",
+    "!src/cjk-radical-map.ts",
+    "!src/vendor/**",
+    "!src/vite-env.d.ts"
+  ],
+  "ignorePatterns": [
+    "result",
+    "result-*",
+    "dist",
+    "coverage",
+    "reports",
+    "target",
+    "src-tauri/target",
+    ".direnv",
+    "data",
+    "cache",
+    "src/vendor",
+    "mcp-server"
+  ],
+  "incremental": true,
+  "thresholds": { "high": 80, "low": 60, "break": 50 },
+  "timeoutMS": 30000,
+  "concurrency": 4
+}

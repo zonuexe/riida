@@ -30,7 +30,7 @@ export default defineConfig(async () => ({
   ],
 
   test: {
-    exclude: ["**/node_modules/**", "**/dist/**", "mcp-server/**"],
+    exclude: ["**/node_modules/**", "**/dist/**", "mcp-server/**", "**/.stryker-tmp/**"],
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],

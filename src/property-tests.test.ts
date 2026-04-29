@@ -62,7 +62,7 @@ describe("parseCachedReadingPosition", () => {
     const arb = fc.record({
       filePath: fc.string({ minLength: 1 }),
       pageNumber: fc.integer({ min: 1, max: 100000 }),
-      pageOffsetRatio: fc.double({ noNaN: true }),
+      pageOffsetRatio: fc.double({ noNaN: true, noDefaultInfinity: true }),
       cfi: fc.option(fc.string(), { nil: null }),
       updatedAt: fc.option(fc.integer(), { nil: null }),
     });

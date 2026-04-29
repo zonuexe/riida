@@ -31,6 +31,8 @@
     "report:bundle-size": "node scripts/report-bundle-size.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "mutants:frontend": "stryker run",
+    "mutants:frontend:list": "stryker run --dryRun",
     "build:macos-local": "npm run tauri build && bash scripts/fix-macos-local-build.sh",
     "preview": "vite preview",
     "tauri": "tauri"
@@ -47,6 +49,8 @@
     "valibot": "^1.3.1"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
     "@tauri-apps/cli": "^2",
     "@vitest/coverage-v8": "^4.1.5",
     "fast-check": "^4.7.0",

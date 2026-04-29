@@ -5,6 +5,8 @@ target/
 dist/
 dist-ssr/
 coverage/
+reports/
+.stryker-tmp/
 logs
 *.log
 npm-debug.log*

@@ -405,6 +405,23 @@ nix --extra-experimental-features 'nix-command flakes' develop --command npm run
 
 Use mutation testing selectively on logic-heavy Rust code because it is much slower than the normal test suite.
 
+The frontend has a parallel mutation-testing setup via
+[Stryker](https://stryker-mutator.io). It is not part of `check:frontend`
+for the same speed reasons. Configuration lives in
+[stryker.config.json](stryker.config.json) and excludes DOM-driven
+entry points (`src/main.ts`, `src/note-editor.ts`) and the large
+`cjk-radical-map.ts` data module.
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run mutants:frontend
+nix --extra-experimental-features 'nix-command flakes' develop --command npx stryker run --mutate "src/<module>.ts"
+```
+
+Stryker runs incrementally (`incremental: true`) so subsequent runs
+only re-test mutated regions. The HTML report is written to
+`reports/mutation/mutation.html`. Both `reports/` and `.stryker-tmp/`
+are gitignored.
+
 Standard Rust static checks:
 
 ```bash

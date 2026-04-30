@@ -15215,7 +15215,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 ```
 
-### typescript 5.6.3
+### typescript 6.0.3
 
 - License: Apache-2.0
 - Authors: Microsoft Corp.

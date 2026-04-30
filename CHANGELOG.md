@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-01
+
+### Added
+
+- Multi-book bulk-edit mode for tags and metadata in the library list.
+- Reveal in Finder button on library list items.
+- Windows x64 build workflow for CI.
+
+### Fixed
+
+- PDF.js scroll position is now preserved correctly across resize-triggered re-renders and layout rebuilds.
+- PDF reading position within a two-page spread now anchors to the head-side page.
+- Stale render tokens no longer cause layout build errors in the PDF viewer.
+- Inline styles are now permitted in the Content Security Policy so PDF.js font injection works correctly in release builds.
+
 ## [0.4.0] - 2026-04-30
 
 ### Added
@@ -280,7 +295,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/zonuexe/riida/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/zonuexe/riida/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/zonuexe/riida/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/zonuexe/riida/compare/v0.3.2...v0.3.3

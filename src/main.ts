@@ -4741,7 +4741,9 @@ async function renderCurrentPage() {
             const g0 = group[0];
             const g1 = group[1];
             const vp0 = (await pdfDocument.getPage(g0)).getViewport({ scale: 1 });
+            if (currentToken !== pdfRenderToken) return;
             const vp1 = (await pdfDocument.getPage(g1)).getViewport({ scale: 1 });
+            if (currentToken !== pdfRenderToken) return;
             const fitScale = targetHeight / Math.max(vp0.height, 1);
             const combinedWidth = (vp0.width + vp1.width) * fitScale + pageGap;
             if (combinedWidth > availableWidth) {
@@ -4757,15 +4759,16 @@ async function renderCurrentPage() {
       const renderPlans: PdfRenderPlan[] = [];
 
       for (const [groupIndex, group] of layoutGroups.entries()) {
+        if (currentToken !== pdfRenderToken) return;
         const visualOrder = getVisualPageOrder(group, viewerSettings);
         const spreadEl = document.createElement("section");
         spreadEl.className = "pdfjs-spread";
         spreadEl.dataset.pageCount = String(visualOrder.length);
         spreadEl.dataset.binding = viewerSettings.bindingDirection;
         spreadEl.dataset.cover = String(group.length === 1);
-        pdfjsViewerEl.appendChild(spreadEl);
 
         const samplePage = await pdfDocument.getPage(group[0]!);
+        if (currentToken !== pdfRenderToken) return;
         const sampleViewport = samplePage.getViewport({ scale: 1 });
         const targetWidth =
           viewerSettings.pageMode === "spread"
@@ -4786,6 +4789,7 @@ async function renderCurrentPage() {
           const estimatedViewport = (await pdfDocument.getPage(pageNumber)).getViewport({
             scale: baseScale,
           });
+          if (currentToken !== pdfRenderToken) return;
           const pageEl = document.createElement("section");
           pageEl.className = "pdfjs-page page";
           pageEl.dataset.pageNumber = String(pageNumber);
@@ -4795,6 +4799,8 @@ async function renderCurrentPage() {
           pageSlots.set(pageNumber, pageEl);
         }
 
+        if (currentToken !== pdfRenderToken) return;
+        pdfjsViewerEl.appendChild(spreadEl);
         renderPlans.push({ groupIndex, visualOrder, spreadEl, pageSlots, baseScale });
       }
 

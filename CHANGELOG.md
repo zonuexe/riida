@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-05-01
+
+### Fixed
+
+- Non-embedded Adobe-Japan1 PostScript fonts (Ryumin-Light, GothicBBB-Medium) now render correctly in release builds by aliasing them to system Hiragino fonts via CSS @font-face declarations with local() lookup. Previous attempts to fix this via CSP style-src 'unsafe-inline' were ineffective because Tauri's inline style hashes neutralize 'unsafe-inline' directives, but explicit style-src-elem and font-src CSP directives plus local()-based font aliases resolve the issue without relying on unsafe CSP permissions.
+
 ## [0.4.1] - 2026-05-01
 
 ### Added
@@ -295,7 +301,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/zonuexe/riida/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/zonuexe/riida/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/zonuexe/riida/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/zonuexe/riida/compare/v0.3.3...v0.3.4

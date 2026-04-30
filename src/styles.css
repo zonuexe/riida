@@ -1804,6 +1804,7 @@ h1 {
 }
 
 .book-item {
+  position: relative;
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);
   gap: 12px;
@@ -1912,6 +1913,40 @@ h1 {
 .book-meta {
   color: rgb(var(--ink-rgb) / 0.48);
   font-size: 0.8rem;
+}
+
+.book-reveal-btn {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgb(var(--border-rgb) / 0.28);
+  background: rgb(var(--panel-rgb) / 0.72);
+  color: rgb(var(--ink-rgb) / 0.55);
+  font-size: 0.82rem;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 140ms,
+    color 140ms,
+    background 140ms;
+  backdrop-filter: blur(4px);
+}
+
+.book-item:hover .book-reveal-btn,
+.book-item:focus-within .book-reveal-btn {
+  opacity: 1;
+}
+
+.book-reveal-btn:hover {
+  color: var(--accent);
+  background: rgb(var(--panel-rgb) / 0.92);
+  border-color: rgb(var(--border-rgb) / 0.5);
 }
 
 .book-links {

@@ -3,7 +3,7 @@ import { getName, getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { homeDir } from "@tauri-apps/api/path";
 import { confirm, message, open } from "@tauri-apps/plugin-dialog";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import "./vendor/fontawesome/css/fontawesome.min.css";
 import "./vendor/fontawesome/css/brands.min.css";
 import "./vendor/fontawesome/css/regular.min.css";
@@ -5202,6 +5202,25 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     }
     itemEl.appendChild(thumbEl);
     itemEl.appendChild(bodyEl);
+
+    if (book.sourceType === "pdf" || book.sourceType === "epub") {
+      const revealEl = document.createElement("button");
+      revealEl.type = "button";
+      revealEl.className = "book-reveal-btn";
+      revealEl.title = navigator.platform.startsWith("Win") ? "Show in Explorer" : "Show in Finder";
+      revealEl.innerHTML = `<i class="fa-solid fa-folder" aria-hidden="true"></i>`;
+      revealEl.addEventListener("mouseenter", () => {
+        revealEl.innerHTML = `<i class="fa-solid fa-folder-open" aria-hidden="true"></i>`;
+      });
+      revealEl.addEventListener("mouseleave", () => {
+        revealEl.innerHTML = `<i class="fa-solid fa-folder" aria-hidden="true"></i>`;
+      });
+      revealEl.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void revealItemInDir(book.filePath);
+      });
+      itemEl.appendChild(revealEl);
+    }
 
     if (viewMode === "grid") {
       const gridTitleEl = document.createElement("span");

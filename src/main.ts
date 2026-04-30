@@ -4828,6 +4828,13 @@ async function renderCurrentPage() {
         pendingFocusGroupIndex: null,
       };
       activePdfRenderSession = session;
+      // Restore scroll position immediately using placeholder dimensions so
+      // the user's view is preserved before async page rendering begins.
+      // Without this, scroll-snap or stray scroll events during rebuild can
+      // re-anchor the render window to group 0 and lose the target group.
+      if (restoreTargetPage !== null) {
+        restoreReadingPositionAttempt();
+      }
       schedulePdfRenderWindowUpdate(session, targetGroupIndex);
 
       // Load PDF outline (TOC) asynchronously so it does not block rendering.
@@ -6102,6 +6109,9 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   viewerStageEl?.addEventListener("scroll", () => {
     if (lastSnapshot?.pdfRenderer !== "pdfjs" || !viewerState.currentBook) {
+      return;
+    }
+    if (pdfRenderInProgress) {
       return;
     }
 

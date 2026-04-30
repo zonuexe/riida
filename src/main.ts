@@ -411,6 +411,7 @@ let noteSaveTimer: number | null = null;
 let noteLoadToken = 0;
 let pdfRenderToken = 0;
 let pdfRenderResizeTimer: number | null = null;
+let pdfRenderInProgress = false;
 let activePdfRenderSession: PdfRenderSession | null = null;
 let epubRenderToken = 0;
 let activeEpubBook: import("epubjs").Book | null = null;
@@ -4073,6 +4074,9 @@ function scheduleEpubPositionSave() {
 }
 
 function scheduleReadingPositionSave() {
+  if (pdfRenderInProgress) {
+    return;
+  }
   activeReadingPosition = captureReadingPositionFromViewer();
 
   if (!activeReadingPosition) {
@@ -4675,6 +4679,7 @@ async function renderCurrentPage() {
 
     closePdfSearch();
     pdfRenderToken += 1;
+    pdfRenderInProgress = true;
     const currentToken = pdfRenderToken;
     const loadingEl = document.createElement("div");
     loadingEl.className = "pdfjs-loading";
@@ -4852,6 +4857,10 @@ async function renderCurrentPage() {
           ? "This PDF requires a password."
           : `Failed to render with PDF.js: ${msg}`;
       pdfjsViewerEl.appendChild(errorEl);
+    } finally {
+      if (currentToken === pdfRenderToken) {
+        pdfRenderInProgress = false;
+      }
     }
 
     return;

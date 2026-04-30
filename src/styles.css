@@ -783,6 +783,38 @@ h1 {
   margin-bottom: 14px;
 }
 
+.library-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.library-sort {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 28px 6px 12px;
+  font: inherit;
+  font-size: 0.84rem;
+  background: rgb(var(--panel-rgb) / 0.9)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E")
+    no-repeat right 10px center;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 120ms;
+}
+
+.library-sort:hover {
+  border-color: var(--accent-soft);
+}
+
+.library-sort:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .tag-direct-filter {
   display: inline-flex;
   align-items: center;

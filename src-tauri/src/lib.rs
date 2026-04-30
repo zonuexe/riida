@@ -101,6 +101,7 @@ struct BookSummary {
     publisher: Option<String>,
     language: Option<String>,
     last_read_at: Option<u64>,
+    indexed_at: u64,
 }
 
 #[derive(Serialize)]
@@ -1595,7 +1596,8 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
               books.source_type,
               COALESCE(book_metadata.publisher, ''),
               COALESCE(book_metadata.language, ''),
-              reading_positions.updated_at
+              reading_positions.updated_at,
+              books.indexed_at
             FROM books
             LEFT JOIN book_metadata ON book_metadata.file_path = books.file_path
             LEFT JOIN reading_positions ON reading_positions.file_path = books.file_path
@@ -1620,6 +1622,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 row.get::<_, String>(10)?,
                 row.get::<_, String>(11)?,
                 row.get::<_, Option<u64>>(12)?,
+                row.get::<_, u64>(13)?,
             ))
         })
         .map_err(|error| error.to_string())?;
@@ -1639,6 +1642,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
             publisher,
             language,
             last_read_at,
+            indexed_at,
         ) = row.map_err(|error| error.to_string())?;
         let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
         books.push((
@@ -1671,6 +1675,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                     Some(language)
                 },
                 last_read_at,
+                indexed_at,
             },
         ));
     }
@@ -1720,7 +1725,8 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
               eb.url,
               eb.publisher,
               eb.language,
-              rp.updated_at
+              rp.updated_at,
+              eb.updated_at
             FROM external_books eb
             LEFT JOIN reading_positions rp ON rp.file_path = eb.file_path
             ORDER BY eb.updated_at DESC, eb.title COLLATE NOCASE ASC
@@ -1742,6 +1748,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 row.get::<_, String>(8)?,
                 row.get::<_, String>(9)?,
                 row.get::<_, Option<u64>>(10)?,
+                row.get::<_, u64>(11)?,
             ))
         })
         .map_err(|error| error.to_string())?;
@@ -1775,6 +1782,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
             publisher,
             language,
             last_read_at,
+            indexed_at,
         ) = row.map_err(|error| error.to_string())?;
         let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
         let location_label = if source_type == "kindle" {
@@ -1815,6 +1823,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                     Some(language)
                 },
                 last_read_at,
+                indexed_at,
             },
         ));
     }

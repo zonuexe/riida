@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-30
+
+### Added
+
+- Library books can now be sorted by title (A→Z or Z→A), last read date, file size, and added date (newest or oldest).
+- Books now track their indexed date for sorting and filtering purposes.
+
+### Changed
+
+- Sorting preference resets to default when navigating to a different directory, tag, or external source.
+
 ## [0.3.4] - 2026-04-29
 
 ### Added
@@ -269,7 +280,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/zonuexe/riida/compare/v0.3.4...v0.4.0
 [0.3.4]: https://github.com/zonuexe/riida/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/zonuexe/riida/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/zonuexe/riida/compare/v0.3.1...v0.3.2

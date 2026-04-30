@@ -102,6 +102,7 @@ type BookSummary = {
   publisher: string | null;
   language: string | null;
   lastReadAt: number | null;
+  indexedAt: number;
 };
 
 type LibrarySnapshot = {
@@ -358,6 +359,45 @@ const viewerSettings: ViewerSettingsState = {
 };
 
 let lastSnapshot: LibrarySnapshot | null = null;
+
+type ListSortKey =
+  | "default"
+  | "title-asc"
+  | "title-desc"
+  | "last-read"
+  | "file-size"
+  | "added-desc"
+  | "added-asc";
+let currentListSort: ListSortKey = "default";
+
+function resetListSort() {
+  currentListSort = "default";
+  const el = document.querySelector<HTMLSelectElement>("#library-sort");
+  if (el) el.value = "default";
+}
+
+function sortBooks(books: BookSummary[]): BookSummary[] {
+  switch (currentListSort) {
+    case "title-asc":
+      return [...books].sort((a, b) =>
+        (a.title ?? a.fileName).localeCompare(b.title ?? b.fileName, "ja"),
+      );
+    case "title-desc":
+      return [...books].sort((a, b) =>
+        (b.title ?? b.fileName).localeCompare(a.title ?? a.fileName, "ja"),
+      );
+    case "last-read":
+      return [...books].sort((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0));
+    case "file-size":
+      return [...books].sort((a, b) => b.fileSize - a.fileSize);
+    case "added-desc":
+      return [...books].sort((a, b) => b.indexedAt - a.indexedAt);
+    case "added-asc":
+      return [...books].sort((a, b) => a.indexedAt - b.indexedAt);
+    default:
+      return books;
+  }
+}
 const thumbnailUrls = new Map<string, string>();
 let thumbnailObserver: IntersectionObserver | null = null;
 let noteEditor: NoteEditorHandle | null = null;
@@ -402,7 +442,7 @@ let activeReadingPosition: ReadingPosition | null = null;
 let lastAppConfig: AppConfigPayload | null = null;
 let cachedHomeDir: string | null = null;
 let cachedAppName = "riida";
-let cachedAppVersion = "0.3.4";
+let cachedAppVersion = "0.4.0";
 const buildDate = __BUILD_DATE__;
 let cachedLicenseText = "Loading license text...";
 let cachedThirdPartyRustText = "Loading Rust notices...";
@@ -2407,6 +2447,7 @@ async function saveBookMetadataChanges() {
             publisher: payload.publisher || null,
             language: payload.language || null,
             lastReadAt: null,
+            indexedAt: Math.floor(Date.now() / 1000),
           };
     populateBookMetadataEditor(sourceBook, payload);
     await refreshSnapshot();
@@ -3094,7 +3135,7 @@ function endNoteInteraction() {
 }
 
 function visibleBooks(snapshot: LibrarySnapshot) {
-  return filterVisibleBooks(
+  const filtered = filterVisibleBooks(
     snapshot.books,
     viewerState.activeDirectory,
     viewerState.activeTag,
@@ -3102,6 +3143,7 @@ function visibleBooks(snapshot: LibrarySnapshot) {
     viewerState.activeTagDirectOnly,
     viewerState.searchQuery,
   );
+  return sortBooks(filtered);
 }
 
 function describeCurrentEmptyLibraryState(snapshot: LibrarySnapshot, books: BookSummary[]) {
@@ -3214,11 +3256,23 @@ async function applyNavigationState(state: NavigationState) {
     return;
   }
 
+  const prevDirectory = viewerState.activeDirectory;
+  const prevTag = viewerState.activeTag;
+  const prevExternalSource = viewerState.activeExternalSource;
+
   viewerState.searchQuery = state.searchQuery;
   viewerState.activeDirectory = state.activeDirectory;
   viewerState.activeTag = state.activeTag;
   viewerState.activeExternalSource = state.activeExternalSource;
   viewerState.activeTagDirectOnly = state.activeTagDirectOnly;
+
+  if (
+    prevDirectory !== viewerState.activeDirectory ||
+    prevTag !== viewerState.activeTag ||
+    prevExternalSource !== viewerState.activeExternalSource
+  ) {
+    resetListSort();
+  }
 
   const nextBook = state.bookFilePath
     ? (snapshot.books.find((book) => book.filePath === state.bookFilePath) ?? null)
@@ -5705,6 +5759,16 @@ window.addEventListener("DOMContentLoaded", async () => {
       "push",
     );
   });
+
+  const librarySortEl = document.querySelector<HTMLSelectElement>("#library-sort");
+  if (librarySortEl) {
+    librarySortEl.addEventListener("change", () => {
+      currentListSort = (librarySortEl.value as ListSortKey) ?? "default";
+      if (lastSnapshot) {
+        renderApp();
+      }
+    });
+  }
 
   const libraryViewToggleEl = document.querySelector<HTMLButtonElement>("#library-view-toggle");
   if (libraryViewToggleEl) {

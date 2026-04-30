@@ -1,3 +1,24 @@
+/*
+ * Alias non-embedded standard Adobe-Japan1 PostScript fonts to system CJK fonts
+ * so PDF.js can resolve them via local() lookups when rendering PDFs that
+ * reference Ryumin-Light / GothicBBB-Medium without embedding glyph data.
+ * Without these aliases PDF.js falls back to a Latin font and Japanese text
+ * renders as garbled glyphs in release builds where CSP can otherwise block
+ * PDF.js's dynamic @font-face injection.
+ */
+@font-face {
+  font-family: "Ryumin-Light";
+  src:
+    local("Hiragino Mincho ProN"), local("Hiragino Mincho Pro"), local("YuMincho"),
+    local("Yu Mincho"), local("MS Mincho");
+}
+@font-face {
+  font-family: "GothicBBB-Medium";
+  src:
+    local("Hiragino Kaku Gothic ProN"), local("Hiragino Kaku Gothic Pro"), local("YuGothic"),
+    local("Yu Gothic"), local("MS Gothic");
+}
+
 :root {
   font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
   font-size: 16px;

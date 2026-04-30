@@ -3354,7 +3354,11 @@ mod tests {
             enabled_external_sources: None,
         });
 
-        assert_eq!(config.library_roots, vec![format!("{home}/Books")]);
+        let expected_root = PathBuf::from(&home)
+            .join("Books")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(config.library_roots, vec![expected_root]);
         assert_eq!(
             config.excluded_patterns,
             vec!["**/backup/**".to_string(), "prefix_*".to_string()]

@@ -3991,11 +3991,27 @@ function captureReadingPositionFromViewer(): ReadingPosition | null {
   );
   const anchorPageEl = pageEls[anchorIndex] ?? pageEls[0]!;
 
-  const pageNumber = Number(anchorPageEl.dataset.pageNumber ?? "1");
+  // When the anchor page sits in a multi-page spread (same offsetTop),
+  // prefer the page with the smallest page number — i.e. the "head-side"
+  // page. This way switching from spread to single-page lands on the page
+  // closer to the start of the book rather than the trailing page.
+  const anchorTop = anchorPageEl.offsetTop;
+  let representativeEl = anchorPageEl;
+  let representativePageNumber = Number(anchorPageEl.dataset.pageNumber ?? "1");
+  for (const el of pageEls) {
+    if (el.offsetTop !== anchorTop) continue;
+    const candidate = Number(el.dataset.pageNumber ?? "0");
+    if (candidate > 0 && candidate < representativePageNumber) {
+      representativePageNumber = candidate;
+      representativeEl = el;
+    }
+  }
+
+  const pageNumber = representativePageNumber;
   const pageOffsetRatio = computePageOffsetRatio(
     stageEl.scrollTop,
-    anchorPageEl.offsetTop,
-    anchorPageEl.offsetHeight,
+    representativeEl.offsetTop,
+    representativeEl.offsetHeight,
   );
 
   return {

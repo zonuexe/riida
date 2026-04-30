@@ -144,6 +144,20 @@
                 <span>Show only directly tagged files</span>
               </label>
             </div>
+            <div id="bulk-action-bar" class="bulk-action-bar" hidden>
+              <span id="bulk-select-count" class="bulk-action-count"></span>
+              <button id="bulk-edit-tags" class="bulk-action-btn" type="button">
+                <i class="fa-solid fa-tags" aria-hidden="true"></i>
+                Edit tags
+              </button>
+              <button id="bulk-edit-metadata" class="bulk-action-btn" type="button">
+                <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>
+                Edit metadata
+              </button>
+              <button id="bulk-deselect" class="bulk-action-deselect" type="button">
+                Clear selection
+              </button>
+            </div>
             <div id="book-results">
               <div class="empty-state">Loading...</div>
             </div>
@@ -598,6 +612,7 @@
         </div>
         <div class="app-settings-body">
           <p id="tag-editor-book" class="app-settings-path"></p>
+          <p id="tag-editor-multi-info" class="multi-edit-info" hidden></p>
           <div id="tag-editor-list" class="tag-editor-list"></div>
           <label class="app-settings-field">
             <span>Add tag</span>
@@ -647,6 +662,7 @@
           </button>
         </div>
         <div class="app-settings-body">
+          <p id="book-metadata-multi-info" class="multi-edit-info" hidden></p>
           <div class="metadata-book-row">
             <p id="book-metadata-book" class="app-settings-path"></p>
             <button

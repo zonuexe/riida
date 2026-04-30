@@ -242,15 +242,21 @@ type BookTagsPayload = {
 type TagEditorState = {
   isOpen: boolean;
   filePath: string | null;
+  books: BookSummary[] | null;
   bookTitle: string;
   tags: string[];
   input: string;
   statusMessage: string;
 };
 
+type MetadataFieldPolicy = "fill-empty" | "overwrite-all";
+
 type BookMetadataEditorState = {
   isOpen: boolean;
   filePath: string | null;
+  books: BookSummary[] | null;
+  existingMetadataMap: Map<string, BookMetadataPayload>;
+  fieldPolicies: Partial<Record<string, MetadataFieldPolicy>>;
   bookTitle: string;
   sourceType: string;
   title: string;
@@ -778,6 +784,7 @@ const viewerPageJumpState: ViewerPageJumpState = {
 const tagEditorState: TagEditorState = {
   isOpen: false,
   filePath: null,
+  books: null,
   bookTitle: "",
   tags: [],
   input: "",
@@ -786,6 +793,9 @@ const tagEditorState: TagEditorState = {
 const bookMetadataEditorState: BookMetadataEditorState = {
   isOpen: false,
   filePath: null,
+  books: null,
+  existingMetadataMap: new Map(),
+  fieldPolicies: {},
   bookTitle: "",
   sourceType: "pdf",
   title: "",
@@ -800,6 +810,10 @@ const bookMetadataEditorState: BookMetadataEditorState = {
   importText: "",
   statusMessage: "",
   loadToken: 0,
+};
+
+const bulkSelectState = {
+  selectedFilePaths: new Set<string>(),
 };
 
 type CustomSourceEditorState = {
@@ -1874,6 +1888,7 @@ function setBookMetadataStatus(message: string, tone: "neutral" | "success" | "e
 function syncTagEditorUi() {
   const modalEl = document.querySelector<HTMLElement>("#tag-editor-modal");
   const bookEl = document.querySelector<HTMLElement>("#tag-editor-book");
+  const multiInfoEl = document.querySelector<HTMLElement>("#tag-editor-multi-info");
   const listEl = document.querySelector<HTMLElement>("#tag-editor-list");
   const inputEl = document.querySelector<HTMLInputElement>("#tag-editor-input");
   const suggestionsEl = document.querySelector<HTMLElement>("#tag-editor-suggestions");
@@ -1882,8 +1897,16 @@ function syncTagEditorUi() {
     modalEl.hidden = !tagEditorState.isOpen;
   }
 
+  const isMulti = tagEditorState.books !== null;
   if (bookEl) {
-    bookEl.textContent = tagEditorState.bookTitle;
+    bookEl.hidden = isMulti;
+  }
+  if (multiInfoEl) {
+    multiInfoEl.hidden = !isMulti;
+    if (isMulti) {
+      const n = tagEditorState.books!.length;
+      multiInfoEl.textContent = `The tags below will be added to all ${n} selected books.`;
+    }
   }
 
   if (inputEl) {
@@ -2007,15 +2030,129 @@ function syncBookMetadataEditorUi() {
   if (exampleEl) {
     exampleEl.textContent = BOOK_METADATA_IMPORT_EXAMPLE;
   }
-  if (deleteEl) {
-    const canDelete =
-      bookMetadataEditorState.filePath !== null || bookMetadataEditorState.sourceType === "pdf";
-    deleteEl.hidden = !canDelete;
-    deleteEl.textContent =
-      bookMetadataEditorState.sourceType === "pdf" ? "Clear metadata" : "Delete book";
+  const isMulti = bookMetadataEditorState.books !== null;
+  const modalEl2 = document.querySelector<HTMLElement>("#book-metadata-modal");
+  if (modalEl2) {
+    modalEl2.classList.toggle("is-multi", isMulti);
   }
-  if (epubImportEl) {
-    epubImportEl.hidden = bookMetadataEditorState.sourceType !== "epub";
+
+  const multiInfoEl = document.querySelector<HTMLElement>("#book-metadata-multi-info");
+  if (multiInfoEl) {
+    multiInfoEl.hidden = !isMulti;
+    if (isMulti) {
+      const n = bookMetadataEditorState.books!.length;
+      multiInfoEl.textContent = `Editing ${n} books. Only filled fields will be applied.`;
+    }
+  }
+
+  if (!isMulti) {
+    if (deleteEl) {
+      const canDelete =
+        bookMetadataEditorState.filePath !== null || bookMetadataEditorState.sourceType === "pdf";
+      deleteEl.hidden = !canDelete;
+      deleteEl.textContent =
+        bookMetadataEditorState.sourceType === "pdf" ? "Clear metadata" : "Delete book";
+    }
+    if (epubImportEl) {
+      epubImportEl.hidden = bookMetadataEditorState.sourceType !== "epub";
+    }
+  }
+
+  if (isMulti) {
+    syncMultiMetadataFieldPolicies();
+  } else {
+    clearMultiMetadataFieldPolicies();
+  }
+}
+
+type MetadataFieldDef = {
+  inputId: string;
+  fieldKey: string;
+  existingValues: (m: BookMetadataPayload) => string;
+};
+
+const METADATA_FIELD_DEFS: MetadataFieldDef[] = [
+  { inputId: "book-metadata-title", fieldKey: "title", existingValues: (m) => m.title },
+  {
+    inputId: "book-metadata-authors",
+    fieldKey: "authorsText",
+    existingValues: (m) => joinMetadataAuthors(m.authors),
+  },
+  {
+    inputId: "book-metadata-description",
+    fieldKey: "description",
+    existingValues: (m) => m.description,
+  },
+  { inputId: "book-metadata-publisher", fieldKey: "publisher", existingValues: (m) => m.publisher },
+  {
+    inputId: "book-metadata-release-date",
+    fieldKey: "releaseDate",
+    existingValues: (m) => m.releaseDate,
+  },
+  { inputId: "book-metadata-language", fieldKey: "language", existingValues: (m) => m.language },
+  { inputId: "book-metadata-url", fieldKey: "url", existingValues: (m) => m.url },
+  { inputId: "book-metadata-asin", fieldKey: "asin", existingValues: (m) => m.asin },
+  { inputId: "book-metadata-cover-url", fieldKey: "coverUrl", existingValues: (m) => m.coverUrl },
+];
+
+function syncMultiMetadataFieldPolicies() {
+  const existingList = [...bookMetadataEditorState.existingMetadataMap.values()];
+
+  for (const def of METADATA_FIELD_DEFS) {
+    const inputEl = document.querySelector(`#${def.inputId}`);
+    if (!inputEl) continue;
+    const parentEl = inputEl.closest<HTMLElement>(".app-settings-field");
+    if (!parentEl) continue;
+
+    const hasConflict = existingList.some((m) => def.existingValues(m).trim() !== "");
+    let policyRowEl = parentEl.querySelector<HTMLElement>(".field-policy-row");
+
+    if (!hasConflict) {
+      policyRowEl?.remove();
+      continue;
+    }
+
+    const currentPolicy: MetadataFieldPolicy =
+      (bookMetadataEditorState.fieldPolicies[def.fieldKey] as MetadataFieldPolicy | undefined) ??
+      "fill-empty";
+
+    if (!policyRowEl) {
+      policyRowEl = document.createElement("div");
+      policyRowEl.className = "field-policy-row";
+      const fieldKey = def.fieldKey;
+      policyRowEl.innerHTML = `
+        <span class="field-policy-label">Some books already have a value:</span>
+        <label class="field-policy-option">
+          <input type="radio" name="policy-${fieldKey}" value="fill-empty">
+          Fill empty only
+        </label>
+        <label class="field-policy-option">
+          <input type="radio" name="policy-${fieldKey}" value="overwrite-all">
+          Overwrite all
+        </label>
+      `;
+      for (const radio of policyRowEl.querySelectorAll<HTMLInputElement>("input[type=radio]")) {
+        radio.addEventListener("change", () => {
+          if (radio.checked) {
+            bookMetadataEditorState.fieldPolicies[fieldKey] = radio.value as MetadataFieldPolicy;
+          }
+        });
+      }
+      parentEl.appendChild(policyRowEl);
+    }
+
+    for (const radio of policyRowEl.querySelectorAll<HTMLInputElement>("input[type=radio]")) {
+      radio.checked = radio.value === currentPolicy;
+    }
+  }
+}
+
+function clearMultiMetadataFieldPolicies() {
+  for (const def of METADATA_FIELD_DEFS) {
+    const inputEl = document.querySelector(`#${def.inputId}`);
+    if (!inputEl) continue;
+    const parentEl = inputEl.closest<HTMLElement>(".app-settings-field");
+    parentEl?.querySelector(".field-policy-row")?.remove();
   }
 }
 
@@ -2144,9 +2281,74 @@ function openNewCustomBookEditor(source: CustomSource) {
   syncBookMetadataEditorUi();
 }
 
+function syncBulkActionBar() {
+  const barEl = document.querySelector<HTMLElement>("#bulk-action-bar");
+  const countEl = document.querySelector<HTMLElement>("#bulk-select-count");
+  const shelfEl = document.querySelector<HTMLElement>("#book-results");
+  const n = bulkSelectState.selectedFilePaths.size;
+  if (barEl) barEl.hidden = n === 0;
+  if (countEl) countEl.textContent = `${n} book${n === 1 ? "" : "s"} selected`;
+  shelfEl?.classList.toggle("has-selection", n > 0);
+}
+
+function openTagEditorForBooks(books: BookSummary[]) {
+  tagEditorState.isOpen = true;
+  tagEditorState.filePath = null;
+  tagEditorState.books = books;
+  tagEditorState.bookTitle = `${books.length} books`;
+  tagEditorState.tags = [];
+  tagEditorState.input = "";
+  setTagEditorStatus("");
+  syncTagEditorUi();
+}
+
+async function openBookMetadataEditorForBooks(books: BookSummary[]) {
+  const loadToken = bookMetadataEditorState.loadToken + 1;
+  bookMetadataEditorState.loadToken = loadToken;
+  bookMetadataEditorState.isOpen = true;
+  bookMetadataEditorState.filePath = null;
+  bookMetadataEditorState.books = books;
+  bookMetadataEditorState.existingMetadataMap = new Map();
+  bookMetadataEditorState.fieldPolicies = {};
+  bookMetadataEditorState.bookTitle = `${books.length} books`;
+  bookMetadataEditorState.sourceType = "pdf";
+  bookMetadataEditorState.title = "";
+  bookMetadataEditorState.authorsText = "";
+  bookMetadataEditorState.description = "";
+  bookMetadataEditorState.publisher = "";
+  bookMetadataEditorState.releaseDate = "";
+  bookMetadataEditorState.language = "";
+  bookMetadataEditorState.url = "";
+  bookMetadataEditorState.asin = "";
+  bookMetadataEditorState.coverUrl = "";
+  bookMetadataEditorState.importText = "";
+  setBookMetadataStatus("Loading existing metadata...");
+  syncBookMetadataEditorUi();
+
+  try {
+    const results = await Promise.all(
+      books.map((b) => invoke<BookMetadataPayload>("load_book_metadata", { filePath: b.filePath })),
+    );
+    if (bookMetadataEditorState.loadToken !== loadToken) return;
+    const map = new Map<string, BookMetadataPayload>();
+    for (let i = 0; i < books.length; i++) {
+      const result = results[i];
+      const book = books[i];
+      if (result && book) map.set(book.filePath, result);
+    }
+    bookMetadataEditorState.existingMetadataMap = map;
+    setBookMetadataStatus("");
+    syncBookMetadataEditorUi();
+  } catch (error) {
+    if (bookMetadataEditorState.loadToken !== loadToken) return;
+    setBookMetadataStatus(`Failed to load metadata: ${String(error)}`, "error");
+  }
+}
+
 function openTagEditor(book: BookSummary) {
   tagEditorState.isOpen = true;
   tagEditorState.filePath = book.filePath;
+  tagEditorState.books = null;
   tagEditorState.bookTitle = book.fileName;
   tagEditorState.tags = [...book.tags];
   tagEditorState.input = "";
@@ -2201,6 +2403,8 @@ async function openBookMetadataEditor(book: BookSummary) {
 
 function closeTagEditor() {
   tagEditorState.isOpen = false;
+  tagEditorState.filePath = null;
+  tagEditorState.books = null;
   tagEditorState.input = "";
   setTagEditorStatus("");
   syncTagEditorUi();
@@ -2209,6 +2413,9 @@ function closeTagEditor() {
 function closeBookMetadataEditor() {
   bookMetadataEditorState.isOpen = false;
   bookMetadataEditorState.filePath = null;
+  bookMetadataEditorState.books = null;
+  bookMetadataEditorState.existingMetadataMap = new Map();
+  bookMetadataEditorState.fieldPolicies = {};
   bookMetadataEditorState.sourceType = "pdf";
   bookMetadataEditorState.importText = "";
   bookMetadataEditorState.loadToken += 1;
@@ -2342,16 +2549,38 @@ async function refreshSnapshot() {
 }
 
 async function saveTagEditorChanges() {
-  if (!tagEditorState.filePath) {
-    return;
-  }
-
   for (const tag of tagEditorState.tags) {
     const result = validateTagValue(tag);
     if (!result.ok) {
       setTagEditorStatus(result.message, "error");
       return;
     }
+  }
+
+  if (tagEditorState.books !== null) {
+    if (tagEditorState.tags.length === 0) {
+      setTagEditorStatus("Add at least one tag to apply to the selected books.", "error");
+      return;
+    }
+    try {
+      for (const book of tagEditorState.books) {
+        const merged = [...new Set([...book.tags, ...tagEditorState.tags])];
+        const payload = await invoke<BookTagsPayload>("save_book_tags", {
+          filePath: book.filePath,
+          tags: merged,
+        });
+        updateBookTagsInState(payload.filePath, payload.tags);
+      }
+      closeTagEditor();
+      renderApp();
+    } catch (error) {
+      setTagEditorStatus(`Failed to save tags: ${String(error)}`, "error");
+    }
+    return;
+  }
+
+  if (!tagEditorState.filePath) {
+    return;
   }
 
   try {
@@ -2367,7 +2596,65 @@ async function saveTagEditorChanges() {
   }
 }
 
+async function saveBookMetadataChangesMulti() {
+  const draft = buildBookMetadataDraftFromForm();
+  const books = bookMetadataEditorState.books!;
+  const existingMap = bookMetadataEditorState.existingMetadataMap;
+
+  // Determine which fields the user actually filled
+  type DraftKey = keyof typeof draft;
+  const filledFields: DraftKey[] = (Object.keys(draft) as DraftKey[]).filter(
+    (k) => draft[k].trim() !== "",
+  );
+  if (filledFields.length === 0) {
+    setBookMetadataStatus("Fill in at least one field before saving.", "error");
+    return;
+  }
+
+  function resolveField(fieldKey: string, userValue: string, existingValue: string): string {
+    const policy: MetadataFieldPolicy =
+      (bookMetadataEditorState.fieldPolicies[fieldKey] as MetadataFieldPolicy | undefined) ??
+      "fill-empty";
+    if (!userValue.trim()) return existingValue;
+    if (policy === "fill-empty" && existingValue.trim()) return existingValue;
+    return userValue;
+  }
+
+  try {
+    for (const book of books) {
+      const existing = existingMap.get(book.filePath);
+      if (!existing) continue;
+      const existingAuthors = joinMetadataAuthors(existing.authors);
+      const resolvedAuthorsText = resolveField("authorsText", draft.authorsText, existingAuthors);
+      await invoke<BookMetadataPayload>("save_book_metadata", {
+        input: {
+          filePath: book.filePath,
+          sourceType: null,
+          title: resolveField("title", draft.title, existing.title),
+          authors: normalizeMetadataAuthorsText(resolvedAuthorsText),
+          description: resolveField("description", draft.description, existing.description),
+          publisher: resolveField("publisher", draft.publisher, existing.publisher),
+          releaseDate: resolveField("releaseDate", draft.releaseDate, existing.releaseDate),
+          language: resolveField("language", draft.language, existing.language),
+          url: resolveField("url", draft.url, existing.url),
+          asin: resolveField("asin", draft.asin, existing.asin),
+          coverUrl: resolveField("coverUrl", draft.coverUrl, existing.coverUrl),
+        },
+      });
+    }
+    closeBookMetadataEditor();
+    await refreshSnapshot();
+  } catch (error) {
+    setBookMetadataStatus(`Failed to save: ${String(error)}`, "error");
+  }
+}
+
 async function saveBookMetadataChanges() {
+  if (bookMetadataEditorState.books !== null) {
+    await saveBookMetadataChangesMulti();
+    return;
+  }
+
   const saveInput = buildBookMetadataDraftForSave();
   if (!saveInput.ok) {
     setBookMetadataStatus(saveInput.message, "error");
@@ -5087,6 +5374,29 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     itemEl.tabIndex = 0;
     itemEl.dataset.filePath = book.filePath;
     itemEl.classList.toggle("is-selected", viewerState.currentBook?.filePath === book.filePath);
+    itemEl.classList.toggle(
+      "is-bulk-selected",
+      bulkSelectState.selectedFilePaths.has(book.filePath),
+    );
+
+    const checkboxEl = document.createElement("input");
+    checkboxEl.type = "checkbox";
+    checkboxEl.className = "book-select-checkbox";
+    checkboxEl.checked = bulkSelectState.selectedFilePaths.has(book.filePath);
+    checkboxEl.setAttribute("aria-label", `Select ${book.title ?? book.fileName}`);
+    checkboxEl.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+    checkboxEl.addEventListener("change", () => {
+      if (checkboxEl.checked) {
+        bulkSelectState.selectedFilePaths.add(book.filePath);
+        itemEl.classList.add("is-bulk-selected");
+      } else {
+        bulkSelectState.selectedFilePaths.delete(book.filePath);
+        itemEl.classList.remove("is-bulk-selected");
+      }
+      syncBulkActionBar();
+    });
 
     const thumbEl = document.createElement("img");
     thumbEl.className = "book-thumb";
@@ -5200,6 +5510,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
       }
       bodyEl.appendChild(linksEl);
     }
+    itemEl.appendChild(checkboxEl);
     itemEl.appendChild(thumbEl);
     itemEl.appendChild(bodyEl);
 
@@ -5442,6 +5753,7 @@ function renderMain(snapshot: LibrarySnapshot) {
     if (shelfEl) {
       renderBookList(books, shelfEl);
     }
+    syncBulkActionBar();
   }
 }
 
@@ -5512,6 +5824,30 @@ window.addEventListener("DOMContentLoaded", async () => {
   const noteDragHandleEl = document.querySelector<HTMLElement>("#note-drag-handle");
   const noteResizeEls = document.querySelectorAll<HTMLElement>(".note-resize-handle");
   const tagEditorBackdropEl = document.querySelector<HTMLElement>("#tag-editor-backdrop");
+  const bulkEditTagsEl = document.querySelector<HTMLButtonElement>("#bulk-edit-tags");
+  const bulkEditMetadataEl = document.querySelector<HTMLButtonElement>("#bulk-edit-metadata");
+  const bulkDeselectEl = document.querySelector<HTMLButtonElement>("#bulk-deselect");
+
+  bulkEditTagsEl?.addEventListener("click", () => {
+    const selected = viewerState.books.filter((b) =>
+      bulkSelectState.selectedFilePaths.has(b.filePath),
+    );
+    if (selected.length > 0) openTagEditorForBooks(selected);
+  });
+
+  bulkEditMetadataEl?.addEventListener("click", () => {
+    const selected = viewerState.books.filter((b) =>
+      bulkSelectState.selectedFilePaths.has(b.filePath),
+    );
+    if (selected.length > 0) void openBookMetadataEditorForBooks(selected);
+  });
+
+  bulkDeselectEl?.addEventListener("click", () => {
+    bulkSelectState.selectedFilePaths.clear();
+    syncBulkActionBar();
+    renderApp();
+  });
+
   const tagEditorCloseEl = document.querySelector<HTMLButtonElement>("#tag-editor-close");
   const tagEditorCancelEl = document.querySelector<HTMLButtonElement>("#tag-editor-cancel");
   const tagEditorSaveEl = document.querySelector<HTMLButtonElement>("#tag-editor-save");

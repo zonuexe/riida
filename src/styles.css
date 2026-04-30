@@ -1982,6 +1982,140 @@ h1 {
   border-bottom-color: transparent;
 }
 
+.book-select-checkbox {
+  position: absolute;
+  top: 12px;
+  left: 10px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+  opacity: 0;
+  transition: opacity 140ms;
+  z-index: 1;
+}
+
+.book-item:hover .book-select-checkbox,
+.book-item:focus-within .book-select-checkbox,
+.book-item.is-bulk-selected .book-select-checkbox,
+.has-selection .book-select-checkbox {
+  opacity: 1;
+}
+
+.book-item.is-bulk-selected {
+  background: rgb(var(--accent-rgb) / 0.09);
+  border-bottom-color: rgb(var(--accent-rgb) / 0.18);
+  outline: 1px solid rgb(var(--accent-rgb) / 0.22);
+  outline-offset: -1px;
+}
+
+/* ── Bulk action bar ── */
+
+.bulk-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  background: rgb(var(--panel-rgb) / 0.85);
+  border: 1px solid rgb(var(--border-rgb) / 0.22);
+  backdrop-filter: blur(8px);
+  font-size: 0.88rem;
+}
+
+.bulk-action-count {
+  color: rgb(var(--ink-rgb) / 0.72);
+  font-size: 0.84rem;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.bulk-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgb(var(--border-rgb) / 0.3);
+  border-radius: 999px;
+  background: rgb(var(--panel-rgb) / 0.6);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition:
+    background 130ms,
+    border-color 130ms;
+}
+
+.bulk-action-btn:hover {
+  background: rgb(var(--accent-rgb) / 0.1);
+  border-color: rgb(var(--accent-rgb) / 0.4);
+}
+
+.bulk-action-deselect {
+  border: 0;
+  background: transparent;
+  color: rgb(var(--ink-rgb) / 0.5);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  margin-left: auto;
+  padding: 4px 8px;
+}
+
+.bulk-action-deselect:hover {
+  color: rgb(var(--ink-rgb) / 0.85);
+}
+
+/* ── Multi-edit modal UI ── */
+
+.multi-edit-info {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgb(var(--accent-rgb) / 0.08);
+  border: 1px solid rgb(var(--accent-rgb) / 0.2);
+  color: var(--accent);
+  font-size: 0.88rem;
+}
+
+.field-policy-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-top: 4px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgb(var(--accent-rgb) / 0.06);
+  border: 1px solid rgb(var(--accent-rgb) / 0.18);
+  font-size: 0.8rem;
+}
+
+.field-policy-label {
+  color: rgb(var(--ink-rgb) / 0.6);
+  flex-basis: 100%;
+}
+
+.field-policy-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  color: rgb(var(--ink-rgb) / 0.82);
+  font-size: 0.8rem;
+}
+
+/* hide JSON import and danger zone in bulk metadata edit */
+#book-metadata-modal.is-multi .metadata-import-block,
+#book-metadata-modal.is-multi .metadata-editor-danger-zone,
+#book-metadata-modal.is-multi #book-metadata-epub-import,
+#book-metadata-modal.is-multi .metadata-book-row {
+  display: none;
+}
+
 /* ── Library view toggle ── */
 
 .library-view-toggle {

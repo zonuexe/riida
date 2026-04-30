@@ -47,6 +47,11 @@ jobs:
         with:
           workspaces: src-tauri -> target
 
+      - name: Install cargo tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,cargo-audit,cargo-machete
+
       - name: Install frontend dependencies
         run: npm ci
 

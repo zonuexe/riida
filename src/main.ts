@@ -908,6 +908,65 @@ async function primeHomeDirCache() {
   }
 }
 
+/**
+ * Binary-data factory for PDF.js that works under the Tauri 2 webview
+ * protocol on macOS.
+ *
+ * PDF.js's bundled `DOMBinaryDataFactory` ultimately calls the exported
+ * `fetchData()`, which short-circuits on `isValidFetchUrl()` — a hard-coded
+ * `http(s):` allow-list. In Tauri 2 macOS production the document loads from
+ * `tauri://localhost`, every relative URL resolves to that scheme, and PDF.js
+ * falls through to an XHR-based code path that silently completes with an
+ * empty body. The result is that CMap files (and standard font data files)
+ * appear to load successfully but contain zero bytes, so PDF.js can never do
+ * CID → Unicode mapping for non-embedded standard CJK fonts and renders raw
+ * CIDs to the canvas as garbage codepoints.
+ *
+ * The fix is to bypass PDF.js's whitelist by using plain `fetch()` directly —
+ * which works on `tauri:` URLs in WKWebView — and feed the resulting bytes
+ * into PDF.js via the `BinaryDataFactory` API option.
+ */
+type BinaryDataKind = "cMapUrl" | "standardFontDataUrl" | "wasmUrl";
+
+class TauriBinaryDataFactory {
+  cMapUrl: string | null;
+  standardFontDataUrl: string | null;
+  wasmUrl: string | null;
+
+  constructor({
+    cMapUrl = null,
+    standardFontDataUrl = null,
+    wasmUrl = null,
+  }: {
+    cMapUrl?: string | null;
+    standardFontDataUrl?: string | null;
+    wasmUrl?: string | null;
+  }) {
+    this.cMapUrl = cMapUrl;
+    this.standardFontDataUrl = standardFontDataUrl;
+    this.wasmUrl = wasmUrl;
+  }
+
+  async fetch({ kind, filename }: { kind: BinaryDataKind; filename: string }): Promise<Uint8Array> {
+    const baseUrl = this[kind];
+    if (!baseUrl) {
+      throw new Error(`Ensure that the \`${kind}\` API parameter is provided.`);
+    }
+    const url = `${baseUrl}${filename}`;
+    let response: Response;
+    try {
+      response = await fetch(url);
+    } catch (error) {
+      throw new Error(`Unable to load ${kind} data at: ${url} (${String(error)})`);
+    }
+    if (!response.ok) {
+      throw new Error(`Unable to load ${kind} data at: ${url} (HTTP ${response.status})`);
+    }
+    const buffer = await response.arrayBuffer();
+    return new Uint8Array(buffer);
+  }
+}
+
 async function loadPdfJsRuntime() {
   pdfJsRuntimePromise ??= Promise.all([
     import("pdfjs-dist/build/pdf.min.mjs"),
@@ -4715,6 +4774,20 @@ async function renderCurrentPage() {
         standardFontDataUrl: "/pdfjs/standard_fonts/node_modules/pdfjs-dist/standard_fonts/",
         useSystemFonts: true,
         disableFontFace: false,
+        // PDF.js's built-in DOMBinaryDataFactory routes through `fetchData()`,
+        // which gates on `isValidFetchUrl()` — a hard-coded `http(s):` allow-
+        // list. In Tauri 2 macOS production builds the document loads from
+        // `tauri://localhost`, so cMap URLs resolve to `tauri:` and PDF.js
+        // falls through to an XHR path that silently completes with an empty
+        // body (`status === 0`). Without the Adobe-Japan1 reverse-CMap loaded,
+        // PDF.js cannot map CID → Unicode for non-embedded standard CJK fonts
+        // like Ryumin-Light-Identity-H, and ends up emitting raw CIDs to the
+        // canvas. Provide a `BinaryDataFactory` class that uses plain
+        // `fetch()` — which actually works on `tauri:` URLs in WKWebView.
+        // PDF.js instantiates this class itself with `cMapUrl`,
+        // `standardFontDataUrl`, and `wasmUrl`.
+        BinaryDataFactory: TauriBinaryDataFactory,
+        useWorkerFetch: false,
         password: savedPassword ?? undefined,
       });
       documentTask.onPassword = async (updatePassword: (pw: string) => void, reason: number) => {

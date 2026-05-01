@@ -21,3 +21,23 @@ codesign --force --deep --sign - "$APP_PATH"
 xattr -cr "$APP_PATH"
 
 echo "Patched and re-signed $APP_PATH"
+
+# The DMG that `tauri build` produced still embeds the un-patched .app.
+# Regenerate it from the patched .app so mounting and running from the
+# DMG no longer crashes with a libiconv code-signature mismatch.
+DMG_DIR="$(dirname "$(dirname "$APP_PATH")")/dmg"
+if [[ -d "$DMG_DIR" ]]; then
+  EXISTING_DMG="$(find "$DMG_DIR" -maxdepth 1 -name '*.dmg' -print -quit || true)"
+  if [[ -n "${EXISTING_DMG:-}" ]]; then
+    DMG_NAME="$(basename "$EXISTING_DMG")"
+    APP_NAME="$(basename "$APP_PATH" .app)"
+    rm -f "$EXISTING_DMG"
+    hdiutil create \
+      -volname "$APP_NAME" \
+      -srcfolder "$APP_PATH" \
+      -ov \
+      -format UDZO \
+      "$DMG_DIR/$DMG_NAME" >/dev/null
+    echo "Rebuilt $DMG_DIR/$DMG_NAME from patched .app"
+  fi
+fi

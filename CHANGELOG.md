@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-05-03
+
+### Changed
+
+- The sidebar collapse toggle now stays half-embedded in the screen edge in both expanded and collapsed sidebar states, keeping it visually anchored and clear of the history navigation buttons. Left-aligned viewer overlay controls (history navigation, EPUB TOC toggle, EPUB TOC panel) share a single left baseline that no longer overlaps the toggle.
+
 ## [0.4.2] - 2026-05-01
 
 ### Fixed
@@ -301,7 +307,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/zonuexe/riida/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/zonuexe/riida/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/zonuexe/riida/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/zonuexe/riida/compare/v0.3.4...v0.4.0

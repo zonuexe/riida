@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-03
+
+### Changed
+
+- Library refresh now wraps per-book INSERT statements in a single SQLite transaction, so a full library scan issues one journal sync instead of one per indexed book. This noticeably reduces disk and CPU usage during startup and after metadata edits.
+- Metadata save, app settings save, and custom source save/delete flows now use a new lightweight `load_library_snapshot` command that loads the cached snapshot from the database without re-walking the filesystem.
+- The file-system watcher debounce window has been lengthened from 250 ms to 750 ms, and reading-position autosave debounce from 300 ms to 1 s, to coalesce bursts during normal reading and reduce background writes.
+
 ## [0.4.3] - 2026-05-03
 
 ### Changed
@@ -307,7 +315,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/zonuexe/riida/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/zonuexe/riida/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/zonuexe/riida/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/zonuexe/riida/compare/v0.4.0...v0.4.1

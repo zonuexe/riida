@@ -1877,7 +1877,7 @@ async function saveCustomSource() {
       name,
       icon: customSourceEditorState.icon,
     });
-    const snapshot = await invoke<LibrarySnapshot>("library_snapshot");
+    const snapshot = await invoke<LibrarySnapshot>("load_library_snapshot");
     lastSnapshot = snapshot;
     viewerState.books = snapshot.books;
     renderApp();
@@ -1900,7 +1900,7 @@ async function deleteCustomSource(source: CustomSource) {
   }
   try {
     await invoke("delete_custom_source", { id: source.id });
-    const snapshot = await invoke<LibrarySnapshot>("library_snapshot");
+    const snapshot = await invoke<LibrarySnapshot>("load_library_snapshot");
     lastSnapshot = snapshot;
     viewerState.books = snapshot.books;
     if (viewerState.activeExternalSource === source.id) {
@@ -2601,7 +2601,7 @@ function buildBookMetadataDraftForSave():
 }
 
 async function refreshSnapshot() {
-  const snapshot = await invoke<LibrarySnapshot>("library_snapshot");
+  const snapshot = await invoke<LibrarySnapshot>("load_library_snapshot");
   lastSnapshot = snapshot;
   viewerState.books = snapshot.books;
   viewerState.libraryErrorMessage = null;
@@ -2951,7 +2951,7 @@ async function saveAppSettingsFromForm() {
     lastAppConfig = payload;
     applyAppTheme(payload.theme);
     persistAppTheme(payload.theme);
-    const snapshot = await invoke<LibrarySnapshot>("library_snapshot");
+    const snapshot = await invoke<LibrarySnapshot>("load_library_snapshot");
     lastSnapshot = snapshot;
     viewerState.books = snapshot.books;
     renderApp();
@@ -4145,7 +4145,7 @@ function scheduleEpubPositionSave() {
   }
   readingPositionSaveTimer = window.setTimeout(() => {
     void flushReadingPositionSave();
-  }, 300);
+  }, 1000);
 }
 
 function scheduleReadingPositionSave() {
@@ -4167,7 +4167,7 @@ function scheduleReadingPositionSave() {
 
   readingPositionSaveTimer = window.setTimeout(() => {
     void flushReadingPositionSave();
-  }, 300);
+  }, 1000);
 }
 
 async function loadReadingPositionForCurrentBook() {

@@ -1485,11 +1485,14 @@ fn load_viewer_preferences_payload(
 }
 
 fn scan_and_index(
-    connection: &Connection,
+    connection: &mut Connection,
     config: &AppConfig,
     excluded_patterns: &CompiledExcludePatterns,
 ) -> Result<(), String> {
     let scan_token = current_scan_token()?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| error.to_string())?;
 
     for root in &config.library_roots {
         for entry in WalkDir::new(root)
@@ -1521,7 +1524,7 @@ fn scan_and_index(
             let modified_at = modified_unix_seconds(&metadata);
             let source_type = book_source_type(path).unwrap_or("pdf");
 
-            connection
+            transaction
                 .execute(
                     "
                     INSERT INTO books (file_path, file_name, file_size, modified_at, indexed_at, source_type)
@@ -1539,12 +1542,14 @@ fn scan_and_index(
         }
     }
 
-    connection
+    transaction
         .execute(
             "DELETE FROM books WHERE indexed_at != ?1",
             params![scan_token],
         )
         .map_err(|error| error.to_string())?;
+
+    transaction.commit().map_err(|error| error.to_string())?;
 
     Ok(())
 }
@@ -1850,9 +1855,9 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
 }
 
 fn refresh_library_snapshot(config: &AppConfig) -> Result<LibrarySnapshot, String> {
-    let connection = open_database()?;
+    let mut connection = open_database()?;
     let excluded_patterns = compile_exclude_patterns(config)?;
-    scan_and_index(&connection, config, &excluded_patterns)?;
+    scan_and_index(&mut connection, config, &excluded_patterns)?;
     load_snapshot(&connection, config)
 }
 
@@ -2318,7 +2323,7 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
         while let Ok(result) = rx.recv() {
             match result {
                 Ok(event) if should_rescan(&event, &excluded_patterns) => {
-                    thread::sleep(Duration::from_millis(250));
+                    thread::sleep(Duration::from_millis(750));
 
                     while rx.try_recv().is_ok() {}
 
@@ -2341,6 +2346,13 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
 fn library_snapshot(config_state: State<'_, ConfigState>) -> Result<LibrarySnapshot, String> {
     let config = lock_config(&config_state)?.clone();
     refresh_library_snapshot(&config)
+}
+
+#[tauri::command]
+fn load_library_snapshot(config_state: State<'_, ConfigState>) -> Result<LibrarySnapshot, String> {
+    let config = lock_config(&config_state)?.clone();
+    let connection = open_database()?;
+    load_snapshot(&connection, &config)
 }
 
 #[tauri::command]
@@ -3085,6 +3097,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             library_snapshot,
+            load_library_snapshot,
             load_app_config,
             save_app_config,
             book_thumbnail,
@@ -3819,7 +3832,7 @@ mod tests {
 
     #[test]
     fn scan_and_index_removes_books_that_become_excluded_after_config_changes() {
-        let connection = Connection::open_in_memory().expect("in-memory db should open");
+        let mut connection = Connection::open_in_memory().expect("in-memory db should open");
         connection
             .execute_batch(
                 "
@@ -3895,7 +3908,7 @@ mod tests {
         };
         let initial_patterns =
             compile_exclude_patterns(&initial_config).expect("initial patterns should compile");
-        scan_and_index(&connection, &initial_config, &initial_patterns)
+        scan_and_index(&mut connection, &initial_config, &initial_patterns)
             .expect("initial scan should succeed");
         let initial_snapshot =
             load_snapshot(&connection, &initial_config).expect("initial snapshot should load");
@@ -3910,7 +3923,7 @@ mod tests {
         };
         let updated_patterns =
             compile_exclude_patterns(&updated_config).expect("updated patterns should compile");
-        scan_and_index(&connection, &updated_config, &updated_patterns)
+        scan_and_index(&mut connection, &updated_config, &updated_patterns)
             .expect("updated scan should succeed");
         let updated_snapshot =
             load_snapshot(&connection, &updated_config).expect("updated snapshot should load");
@@ -4358,7 +4371,7 @@ mod tests {
 
     #[test]
     fn load_snapshot_epub_only_book_is_shown() {
-        let connection = books_schema_connection();
+        let mut connection = books_schema_connection();
         let temp_root = unique_temp_dir("epub-only");
         fs::create_dir_all(&temp_root).expect("temp dir should be created");
         fs::write(temp_root.join("novel.epub"), "epub").expect("epub fixture should be written");
@@ -4371,7 +4384,7 @@ mod tests {
             enabled_external_sources: vec![],
         };
         let patterns = compile_exclude_patterns(&config).expect("patterns should compile");
-        scan_and_index(&connection, &config, &patterns).expect("scan should succeed");
+        scan_and_index(&mut connection, &config, &patterns).expect("scan should succeed");
         let snapshot = load_snapshot(&connection, &config).expect("snapshot should load");
 
         assert_eq!(snapshot.indexed_count, 1);
@@ -4383,7 +4396,7 @@ mod tests {
 
     #[test]
     fn load_snapshot_pdf_takes_priority_over_same_stem_epub() {
-        let connection = books_schema_connection();
+        let mut connection = books_schema_connection();
         let temp_root = unique_temp_dir("pdf-epub-dedup");
         fs::create_dir_all(&temp_root).expect("temp dir should be created");
         fs::write(temp_root.join("book.pdf"), "pdf").expect("pdf fixture should be written");
@@ -4399,7 +4412,7 @@ mod tests {
             enabled_external_sources: vec![],
         };
         let patterns = compile_exclude_patterns(&config).expect("patterns should compile");
-        scan_and_index(&connection, &config, &patterns).expect("scan should succeed");
+        scan_and_index(&mut connection, &config, &patterns).expect("scan should succeed");
         let snapshot = load_snapshot(&connection, &config).expect("snapshot should load");
 
         // book.epub is suppressed; book.pdf and epub-only.epub are shown

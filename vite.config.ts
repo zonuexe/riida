@@ -36,7 +36,13 @@ export default defineConfig(async () => ({
   ],
 
   test: {
-    exclude: ["**/node_modules/**", "**/dist/**", "mcp-server/**", "**/.stryker-tmp/**"],
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "mcp-server/**",
+      "**/.stryker-tmp/**",
+      ".claude/worktrees/**",
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],

@@ -307,6 +307,14 @@ Behavior:
 - Active rows use a translucent accent fill
 - Search is pill-shaped and embedded in the sidebar tool stack
 
+Sidebar collapse toggle:
+
+- Pill-shaped tab button anchored to the main-pane's left edge
+- Always renders as if half-embedded in a vertical edge: half of the button is hidden, half is visible and clickable
+- When the sidebar is open, it straddles the sidebar/main-pane boundary so the visible half reads as a tab attached to the sidebar's right edge
+- When the sidebar is collapsed, the same button sits half-buried in the screen's left edge so it remains discoverable without floating freely in the reading stage
+- The half-buried geometry doubles as the left-alignment baseline for other left-edge overlay chrome
+
 ### Panels
 
 Pattern:
@@ -383,6 +391,11 @@ Pattern:
 - Float above the reading stage
 - Keep compact and unobtrusive
 - Use pills for labeled actions, circles for utility toggles
+
+Left-edge alignment:
+
+- Left-aligned overlay chrome (history navigation, EPUB TOC toggle, EPUB TOC panel) shares a single left baseline that clears the half-buried sidebar collapse toggle by a small gap
+- Do not place left-aligned overlay buttons closer to the edge than this baseline; doing so would re-create the original overlap with the collapse toggle
 
 ### Viewer settings panel
 

@@ -631,7 +631,7 @@ h1 {
 .viewer-navigation-overlay {
   position: absolute;
   top: 16px;
-  left: 14px;
+  left: 24px;
   z-index: 3;
   display: grid;
   gap: 10px;
@@ -751,7 +751,7 @@ h1 {
 }
 
 .two-pane.sidebar-collapsed .sidebar-edge-toggle {
-  left: 12px;
+  left: -12px;
 }
 
 .sidebar-edge-toggle:hover {
@@ -1145,7 +1145,7 @@ h1 {
 .epub-toc-toggle {
   position: absolute;
   top: 100px;
-  left: 14px;
+  left: 24px;
   z-index: 7;
   width: 42px;
   height: 42px;
@@ -1169,7 +1169,7 @@ h1 {
 .epub-toc-panel {
   position: absolute;
   top: 152px;
-  left: 14px;
+  left: 24px;
   z-index: 6;
   width: min(280px, calc(100% - 28px));
   max-height: calc(100% - 166px);

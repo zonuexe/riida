@@ -1814,6 +1814,19 @@ h1 {
   border-radius: 12px;
   padding-inline: 12px;
   align-items: start;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 150px;
+  contain: layout paint style;
+}
+
+/* Suppress hover-triggered transitions inside book rows while the user
+   is actively scrolling.  Without this, every row that passes under the
+   pointer fires opacity/color/background transitions on its reveal
+   button and select checkbox, multiplying style and layout work on
+   long lists. */
+html.is-scrolling .book-item .book-reveal-btn,
+html.is-scrolling .book-item .book-select-checkbox {
+  transition: none;
 }
 
 .book-thumb {
@@ -2167,6 +2180,7 @@ h1 {
   border-bottom: none;
   border-radius: 16px;
   position: relative;
+  contain-intrinsic-size: auto 220px;
 }
 
 .books.grid-view .book-thumb {

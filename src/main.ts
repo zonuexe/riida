@@ -406,6 +406,7 @@ function sortBooks(books: BookSummary[]): BookSummary[] {
 }
 const thumbnailUrls = new Map<string, string>();
 let thumbnailObserver: IntersectionObserver | null = null;
+const thumbnailBookByImage = new WeakMap<HTMLImageElement, BookSummary>();
 let noteEditor: NoteEditorHandle | null = null;
 let noteSaveTimer: number | null = null;
 let noteLoadToken = 0;
@@ -1192,8 +1193,7 @@ function ensureThumbnailObserver() {
         }
 
         const imageEl = entry.target as HTMLImageElement;
-        const filePath = imageEl.dataset.filePath;
-        const book = viewerState.books.find((candidate) => candidate.filePath === filePath);
+        const book = thumbnailBookByImage.get(imageEl);
 
         if (book && imageEl.dataset.loaded !== "true") {
           void loadThumbnail(book, imageEl);
@@ -5514,6 +5514,10 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     thumbEl.alt = `${book.fileName} cover thumbnail`;
     thumbEl.dataset.filePath = book.filePath;
     thumbEl.dataset.loaded = "false";
+    thumbEl.width = 72;
+    thumbEl.height = 102;
+    thumbEl.decoding = "async";
+    thumbEl.loading = "lazy";
 
     const bodyEl = document.createElement("div");
     bodyEl.className = "book-copy";
@@ -5736,6 +5740,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     });
 
     listEl.appendChild(itemEl);
+    thumbnailBookByImage.set(thumbEl, book);
     ensureThumbnailObserver().observe(thumbEl);
   }
 
@@ -6195,6 +6200,25 @@ window.addEventListener("DOMContentLoaded", async () => {
     navigateViewerToPage(pageNumber);
     viewerPageJumpInputEl?.blur();
   });
+
+  const mainPaneScrollEl = document.querySelector<HTMLElement>("#main-pane");
+  if (mainPaneScrollEl) {
+    let scrollIdleTimer: number | null = null;
+    mainPaneScrollEl.addEventListener(
+      "scroll",
+      () => {
+        document.documentElement.classList.add("is-scrolling");
+        if (scrollIdleTimer !== null) {
+          window.clearTimeout(scrollIdleTimer);
+        }
+        scrollIdleTimer = window.setTimeout(() => {
+          document.documentElement.classList.remove("is-scrolling");
+          scrollIdleTimer = null;
+        }, 160);
+      },
+      { passive: true },
+    );
+  }
 
   viewerStageEl?.addEventListener("scroll", () => {
     if (lastSnapshot?.pdfRenderer !== "pdfjs" || !viewerState.currentBook) {

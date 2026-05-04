@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-05-05
+
+### Changed
+
+- Scrolling through long book lists is noticeably smoother. Off-screen rows now skip layout and paint via `content-visibility`, thumbnail images reserve space up-front so image loads no longer reflow rows, hover transitions on row controls are suppressed while actively scrolling, and the thumbnail observer no longer scans the full library on every callback.
+
 ## [0.5.0] - 2026-05-03
 
 ### Changed
@@ -315,7 +321,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/zonuexe/riida/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/zonuexe/riida/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/zonuexe/riida/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/zonuexe/riida/compare/v0.4.1...v0.4.2

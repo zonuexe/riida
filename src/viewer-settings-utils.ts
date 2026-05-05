@@ -1,6 +1,6 @@
 export type ViewerSettings = {
   pageMode: "single" | "spread";
-  bindingDirection: "left" | "right";
+  bindingDirection: "left" | "right" | "auto";
   zoomMode: "fit-width" | "fit-height" | "original";
   alignMode: "left" | "center" | "right";
   verticalGapMode: "wide" | "compact" | "none";

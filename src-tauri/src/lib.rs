@@ -30,7 +30,7 @@ const VIEWER_DEFAULT_SCOPE_KEY: &str = "__default__";
 const VIEWER_SOURCE_TYPE_PDF: &str = "pdf";
 const VIEWER_SOURCE_TYPE_EPUB: &str = "epub";
 const DEFAULT_VIEWER_PAGE_MODE: &str = "spread";
-const DEFAULT_VIEWER_BINDING_DIRECTION: &str = "left";
+const DEFAULT_VIEWER_BINDING_DIRECTION: &str = "auto";
 const DEFAULT_VIEWER_ZOOM_MODE: &str = "fit-height";
 const DEFAULT_VIEWER_ALIGN_MODE: &str = "center";
 const DEFAULT_VIEWER_VERTICAL_GAP_MODE: &str = "compact";
@@ -1184,7 +1184,9 @@ fn normalize_page_mode(value: &str) -> String {
 
 fn normalize_binding_direction(value: &str) -> String {
     match value.trim().to_lowercase().as_str() {
+        "left" => "left".to_string(),
         "right" => "right".to_string(),
+        "auto" => "auto".to_string(),
         _ => DEFAULT_VIEWER_BINDING_DIRECTION.to_string(),
     }
 }
@@ -4014,7 +4016,10 @@ mod tests {
             let normalized = normalize_viewer_preferences(preferences);
 
             prop_assert!(matches!(normalized.page_mode.as_str(), "single" | "spread"));
-            prop_assert!(matches!(normalized.binding_direction.as_str(), "left" | "right"));
+            prop_assert!(matches!(
+                normalized.binding_direction.as_str(),
+                "left" | "right" | "auto"
+            ));
             prop_assert!(matches!(
                 normalized.zoom_mode.as_str(),
                 "fit-width" | "fit-height" | "original"

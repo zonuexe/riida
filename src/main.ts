@@ -64,6 +64,11 @@ import {
   ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
   preserveNoteWindowBottomRightOffset,
 } from "./note-window-utils";
+import {
+  detectBindingFromTextContent,
+  detectBindingFromViewerPreferences,
+  type TextContentSampleLike,
+} from "./pdf-binding-detect";
 import { buildPageGroups, getVisualPageOrder } from "./viewer-layout-utils";
 import { buildPdfRenderWindowPlan } from "./pdf-render-window-utils";
 import { planPagedKeyAction } from "./pdf-paged-nav-utils";
@@ -181,7 +186,7 @@ type ViewerColorPalette = {
 
 type ViewerSettings = {
   pageMode: "single" | "spread";
-  bindingDirection: "left" | "right";
+  bindingDirection: "left" | "right" | "auto";
   zoomMode: "fit-width" | "fit-height" | "original";
   alignMode: "left" | "center" | "right";
   verticalGapMode: "wide" | "compact" | "none";
@@ -318,6 +323,7 @@ type PdfRenderSession = {
   updateScheduled: boolean;
   isUpdating: boolean;
   pendingFocusGroupIndex: number | null;
+  resolvedBindingDirection: "left" | "right";
 };
 
 type PdfJsRuntime = {
@@ -343,7 +349,7 @@ const viewerState: ViewerState = {
 
 const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
   pageMode: "spread",
-  bindingDirection: "left",
+  bindingDirection: "auto",
   zoomMode: "fit-height",
   alignMode: "center",
   verticalGapMode: "compact",
@@ -982,6 +988,57 @@ async function loadPdfJsRuntime() {
   });
 
   return pdfJsRuntimePromise;
+}
+
+type PdfBindingDocumentLike = {
+  numPages: number;
+  getViewerPreferences?: () => Promise<unknown>;
+  getPage: (pageNumber: number) => Promise<{
+    getTextContent: () => Promise<TextContentSampleLike>;
+  }>;
+};
+
+// Sparse-text Japanese tategaki PDFs often place real body content well
+// past the cover and front matter, so the heuristic walks up to this many
+// linear pages before giving up. Scans stop early once enough text items
+// have accumulated to make a confident call.
+const PDF_BINDING_DETECT_MAX_PAGES = 50;
+const PDF_BINDING_DETECT_ENOUGH_ITEMS = 400;
+
+async function detectPdfBindingDirection(
+  pdfDocument: PdfBindingDocumentLike,
+  isCancelled: () => boolean,
+): Promise<"left" | "right" | null> {
+  let viewerPreferences: unknown = null;
+  if (typeof pdfDocument.getViewerPreferences === "function") {
+    try {
+      viewerPreferences = await pdfDocument.getViewerPreferences();
+    } catch {
+      viewerPreferences = null;
+    }
+  }
+  if (isCancelled()) return null;
+  const fromPrefs = detectBindingFromViewerPreferences(
+    viewerPreferences as Parameters<typeof detectBindingFromViewerPreferences>[0],
+  );
+  if (fromPrefs !== null) return fromPrefs;
+
+  const limit = Math.min(PDF_BINDING_DETECT_MAX_PAGES, pdfDocument.numPages);
+  const samples: TextContentSampleLike[] = [];
+  let collectedItems = 0;
+  for (let pageNumber = 1; pageNumber <= limit; pageNumber += 1) {
+    if (isCancelled()) return null;
+    try {
+      const page = await pdfDocument.getPage(pageNumber);
+      const content = await page.getTextContent();
+      samples.push(content);
+      collectedItems += content.items.length;
+      if (collectedItems >= PDF_BINDING_DETECT_ENOUGH_ITEMS) break;
+    } catch {
+      // Skip individual page failures; the heuristic is best-effort.
+    }
+  }
+  return detectBindingFromTextContent(samples);
 }
 
 let epubJsModulePromise: Promise<typeof import("epubjs")> | null = null;
@@ -3750,7 +3807,7 @@ function handlePdfPagedKey(event: KeyboardEvent): boolean {
       pageHeight: activeEl.offsetHeight,
       pageWidth: activeEl.offsetWidth,
     },
-    viewerSettings.bindingDirection,
+    activePdfRenderSession?.resolvedBindingDirection ?? "left",
   );
 
   event.preventDefault();
@@ -4815,8 +4872,29 @@ async function renderCurrentPage() {
         return;
       }
 
+      // Resolve `bindingDirection: "auto"` to a concrete left/right by
+      // probing the document. Explicit "left" / "right" prefs short-circuit
+      // detection. When detection is inconclusive (e.g. pure-image PDFs)
+      // we fall back to "left".
+      let resolvedBinding: "left" | "right";
+      if (viewerSettings.bindingDirection === "auto") {
+        const detected = await detectPdfBindingDirection(
+          pdfDocument,
+          () => currentToken !== pdfRenderToken,
+        );
+        if (currentToken !== pdfRenderToken) return;
+        resolvedBinding = detected ?? "left";
+      } else {
+        resolvedBinding = viewerSettings.bindingDirection;
+      }
+
       pdfjsViewerEl.innerHTML = "";
-      const pageGroups = buildPageGroups(pdfDocument.numPages, viewerSettings);
+      const layoutSettings = {
+        pageMode: viewerSettings.pageMode,
+        bindingDirection: resolvedBinding,
+        treatFirstPageAsCover: viewerSettings.treatFirstPageAsCover,
+      };
+      const pageGroups = buildPageGroups(pdfDocument.numPages, layoutSettings);
       const restoreTargetPage = activeReadingPosition?.pageNumber ?? null;
       const pageGap = viewerSettings.pageMode === "spread" ? 6 : 0;
       const viewerWidth = Math.max(pdfjsViewerEl.clientWidth, 720);
@@ -4854,11 +4932,11 @@ async function renderCurrentPage() {
 
       for (const [groupIndex, group] of layoutGroups.entries()) {
         if (currentToken !== pdfRenderToken) return;
-        const visualOrder = getVisualPageOrder(group, viewerSettings);
+        const visualOrder = getVisualPageOrder(group, layoutSettings);
         const spreadEl = document.createElement("section");
         spreadEl.className = "pdfjs-spread";
         spreadEl.dataset.pageCount = String(visualOrder.length);
-        spreadEl.dataset.binding = viewerSettings.bindingDirection;
+        spreadEl.dataset.binding = resolvedBinding;
         spreadEl.dataset.cover = String(group.length === 1);
 
         const samplePage = await pdfDocument.getPage(group[0]!);
@@ -4915,6 +4993,7 @@ async function renderCurrentPage() {
         updateScheduled: false,
         isUpdating: false,
         pendingFocusGroupIndex: null,
+        resolvedBindingDirection: resolvedBinding,
       };
       activePdfRenderSession = session;
       // Restore scroll position immediately using placeholder dimensions so

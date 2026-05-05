@@ -121,6 +121,41 @@ If you touch rendering order or page DOM structure, manually re-check:
 - restore after reopening a file
 - restore after back/forward navigation
 
+### Binding Direction Auto-Detection
+
+`bindingDirection` is a tri-state preference: `"auto"` (default), `"left"`,
+or `"right"`. The settings panel exposes the same three values. When the
+effective preference is `"auto"`, the `pdfjs` path runs detection before
+laying out spreads and renders with the result; if detection is
+inconclusive the renderer falls back to `"left"`. Explicit `"left"` /
+`"right"` short-circuit detection.
+The detection runs in three stages, in order of decreasing confidence,
+expressed as pure helpers in
+[src/pdf-binding-detect.ts](src/pdf-binding-detect.ts):
+
+1. `pdfDocument.getViewerPreferences()` — `Direction === "R2L"` ⇒ right,
+   `"L2R"` ⇒ left. This honors the explicit catalog hint that PDF
+   producers like InDesign emit for Japanese/CJK books.
+2. Vertical-CMap heuristic over sampled `getTextContent()` styles. PDFs
+   using vertical CIDFont encodings (e.g. `90ms-RKSJ-V`, `UniJIS-UTF16-V`)
+   surface as `style.vertical === true` in pdf.js, and are virtually
+   always right-bound.
+3. Geometry heuristic. Many Japanese tategaki PDFs use `/Identity-H`
+   (a horizontal CMap) but place each glyph individually with its own
+   text matrix, stacking them top-to-bottom. The detector accumulates
+   `|Δtx|` and `|Δty|` across consecutive text items and treats a strong
+   vertical bias (`Δy / Δx ≥ 1.3`) over a meaningful number of items as
+   right-bound.
+
+The render path scans up to ~50 linear pages but stops early once enough
+text items are collected. The cancellation token is propagated so that
+navigating away mid-detection does not waste work.
+
+Pure-image PDFs (scanned books with no extractable text) cannot be
+auto-detected and fall through to the user's saved global preference.
+Per-file overrides (anything saved through the viewer-settings panel in
+`file` scope) take precedence over the detector.
+
 ## EPUB Viewer Notes
 
 EPUB support is shipped as an **in-development feature**. On first open

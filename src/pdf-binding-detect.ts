@@ -20,15 +20,17 @@ export type TextContentSampleLike = {
   styles: { [name: string]: TextStyleLike };
 };
 
-const VERTICAL_BINDING_THRESHOLD_RATIO = 0.5;
-const VERTICAL_BINDING_MIN_CHARACTERS = 50;
+const VERTICAL_BINDING_THRESHOLD_RATIO = 0.4;
+const VERTICAL_BINDING_MIN_CHARACTERS = 30;
 
 // Geometry path thresholds. Aggregated across all sampled pages so that
 // sparse-text PDFs (image-heavy CJK novels with only page-number text)
-// can still surface a usable signal.
-const GEOMETRY_BINDING_MIN_ITEMS = 30;
-const GEOMETRY_BINDING_MIN_TOTAL_DELTA = 200;
-const GEOMETRY_BINDING_RATIO = 1.3;
+// can still surface a usable signal. Tuned permissively because real-world
+// horizontal Western books still produce |Δx| >> |Δy| by a wide margin —
+// we mostly need to clear the noise floor on PDFs with very sparse text.
+const GEOMETRY_BINDING_MIN_ITEMS = 20;
+const GEOMETRY_BINDING_MIN_TOTAL_DELTA = 100;
+const GEOMETRY_BINDING_RATIO = 1.2;
 
 export function detectBindingFromViewerPreferences(
   preferences: ViewerPreferencesLike | null | undefined,
@@ -46,9 +48,21 @@ export function detectBindingFromViewerPreferences(
   return null;
 }
 
-export function detectBindingFromTextContent(
+export type TextContentBindingDiagnostic = {
+  verticalChars: number;
+  horizontalChars: number;
+  totalChars: number;
+  geometryItems: number;
+  cumulativeDx: number;
+  cumulativeDy: number;
+  cmapPathTriggers: boolean;
+  geometryPathTriggers: boolean;
+  result: BindingDirection | null;
+};
+
+export function summarizeBindingFromTextContent(
   samples: ReadonlyArray<TextContentSampleLike>,
-): BindingDirection | null {
+): TextContentBindingDiagnostic {
   let verticalChars = 0;
   let horizontalChars = 0;
   let geometryItems = 0;
@@ -86,31 +100,36 @@ export function detectBindingFromTextContent(
   }
 
   const totalChars = verticalChars + horizontalChars;
-  if (
+  const cmapPathTriggers =
     totalChars >= VERTICAL_BINDING_MIN_CHARACTERS &&
-    verticalChars / totalChars >= VERTICAL_BINDING_THRESHOLD_RATIO
-  ) {
-    return "right";
-  }
+    verticalChars / totalChars >= VERTICAL_BINDING_THRESHOLD_RATIO;
 
-  // Geometry fallback: many CJK PDFs use horizontal CMaps (Identity-H) but
-  // position each glyph individually, stacking them top-to-bottom. In those
-  // cases the per-item transform deltas accumulate predominantly along the
-  // Y axis even though style.vertical is false. Aggregating across pages
-  // makes this robust against sparse front-matter or page-number-only pages.
   const totalDelta = cumulativeDx + cumulativeDy;
   // Treat purely vertical motion (dx === 0) as a definitive vertical signal
   // instead of dividing by zero.
   const ratio = cumulativeDx === 0 ? Infinity : cumulativeDy / cumulativeDx;
-  if (
+  const geometryPathTriggers =
     geometryItems >= GEOMETRY_BINDING_MIN_ITEMS &&
     totalDelta >= GEOMETRY_BINDING_MIN_TOTAL_DELTA &&
-    ratio >= GEOMETRY_BINDING_RATIO
-  ) {
-    return "right";
-  }
+    ratio >= GEOMETRY_BINDING_RATIO;
 
-  return null;
+  return {
+    verticalChars,
+    horizontalChars,
+    totalChars,
+    geometryItems,
+    cumulativeDx,
+    cumulativeDy,
+    cmapPathTriggers,
+    geometryPathTriggers,
+    result: cmapPathTriggers || geometryPathTriggers ? "right" : null,
+  };
+}
+
+export function detectBindingFromTextContent(
+  samples: ReadonlyArray<TextContentSampleLike>,
+): BindingDirection | null {
+  return summarizeBindingFromTextContent(samples).result;
 }
 
 export function detectPdfBinding(

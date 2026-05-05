@@ -65,8 +65,8 @@ import {
   preserveNoteWindowBottomRightOffset,
 } from "./note-window-utils";
 import {
-  detectBindingFromTextContent,
   detectBindingFromViewerPreferences,
+  summarizeBindingFromTextContent,
   type TextContentSampleLike,
 } from "./pdf-binding-detect";
 import { buildPageGroups, getVisualPageOrder } from "./viewer-layout-utils";
@@ -1000,10 +1000,8 @@ type PdfBindingDocumentLike = {
 
 // Sparse-text Japanese tategaki PDFs often place real body content well
 // past the cover and front matter, so the heuristic walks up to this many
-// linear pages before giving up. Scans stop early once enough text items
-// have accumulated to make a confident call.
+// linear pages before giving up.
 const PDF_BINDING_DETECT_MAX_PAGES = 50;
-const PDF_BINDING_DETECT_ENOUGH_ITEMS = 400;
 
 async function detectPdfBindingDirection(
   pdfDocument: PdfBindingDocumentLike,
@@ -1021,24 +1019,31 @@ async function detectPdfBindingDirection(
   const fromPrefs = detectBindingFromViewerPreferences(
     viewerPreferences as Parameters<typeof detectBindingFromViewerPreferences>[0],
   );
-  if (fromPrefs !== null) return fromPrefs;
+  if (fromPrefs !== null) {
+    console.info("[riida] binding-detect: viewer-prefs →", fromPrefs);
+    return fromPrefs;
+  }
 
   const limit = Math.min(PDF_BINDING_DETECT_MAX_PAGES, pdfDocument.numPages);
   const samples: TextContentSampleLike[] = [];
-  let collectedItems = 0;
+  let pagesScanned = 0;
   for (let pageNumber = 1; pageNumber <= limit; pageNumber += 1) {
     if (isCancelled()) return null;
     try {
       const page = await pdfDocument.getPage(pageNumber);
       const content = await page.getTextContent();
       samples.push(content);
-      collectedItems += content.items.length;
-      if (collectedItems >= PDF_BINDING_DETECT_ENOUGH_ITEMS) break;
+      pagesScanned = pageNumber;
     } catch {
       // Skip individual page failures; the heuristic is best-effort.
     }
   }
-  return detectBindingFromTextContent(samples);
+  const diagnostic = summarizeBindingFromTextContent(samples);
+  console.info(
+    `[riida] binding-detect: pagesScanned=${pagesScanned} chars=${diagnostic.verticalChars}/${diagnostic.totalChars} items=${diagnostic.geometryItems} dy/dx=${diagnostic.cumulativeDx === 0 ? "inf" : (diagnostic.cumulativeDy / diagnostic.cumulativeDx).toFixed(2)} cmap=${diagnostic.cmapPathTriggers} geom=${diagnostic.geometryPathTriggers} →`,
+    diagnostic.result ?? "null (fallback left)",
+  );
+  return diagnostic.result;
 }
 
 let epubJsModulePromise: Promise<typeof import("epubjs")> | null = null;

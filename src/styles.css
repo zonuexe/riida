@@ -1639,6 +1639,17 @@ h1 {
   transform-origin: 0 0;
   z-index: 1;
   user-select: text;
+
+  /* pdf.js TextLayer expects these custom properties so the per-span
+     `--font-height`, `--scale-x`, and `--rotate` (set by pdf.js itself
+     when laying out each glyph run) compose into the right transform.
+     Without them, vertical-CMap PDFs emit spans with `--rotate: 90deg`
+     that we never consume — selection then appears as horizontal
+     strips instead of vertical columns. */
+  --total-scale-factor: var(--scale-factor, 1);
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
 }
 
 .pdfjs-viewer .textLayer :is(span, br) {
@@ -1646,7 +1657,23 @@ h1 {
   color: transparent;
   white-space: pre;
   cursor: text;
-  transform-origin: 0 0;
+  transform-origin: 0% 0%;
+}
+
+.pdfjs-viewer .textLayer > :not(.markedContent),
+.pdfjs-viewer .textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.pdfjs-viewer .textLayer .markedContent {
+  display: contents;
 }
 
 .pdfjs-viewer .textLayer ::selection {

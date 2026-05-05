@@ -324,6 +324,7 @@ describe("navigation utils", () => {
     activeDirectory: fc.option(fc.string(), { nil: null }),
     activeTag: fc.option(fc.string(), { nil: null }),
     activeExternalSource: fc.option(fc.string(), { nil: null }),
+    activeShelf: fc.option(fc.string(), { nil: null }),
     activeTagDirectOnly: fc.boolean(),
     searchQuery: fc.string(),
   });

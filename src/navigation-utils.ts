@@ -6,6 +6,7 @@ export type NavigationStateLike = {
   activeDirectory: string | null;
   activeTag: string | null;
   activeExternalSource: string | null;
+  activeShelf: string | null;
   activeTagDirectOnly: boolean;
   searchQuery: string;
 };
@@ -18,6 +19,7 @@ export function navigationStateSignature(state: NavigationStateLike) {
     activeDirectory: state.activeDirectory,
     activeTag: state.activeTag,
     activeExternalSource: state.activeExternalSource,
+    activeShelf: state.activeShelf,
     activeTagDirectOnly: state.activeTagDirectOnly,
     searchQuery: state.searchQuery,
   });
@@ -40,6 +42,10 @@ export function buildNavigationUrl(state: NavigationStateLike): string {
 
   if (state.activeExternalSource) {
     params.set("source", state.activeExternalSource);
+  }
+
+  if (state.activeShelf) {
+    params.set("shelf", state.activeShelf);
   }
 
   if (state.activeTagDirectOnly) {

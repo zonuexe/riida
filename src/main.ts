@@ -170,12 +170,23 @@ type ReadingPosition = {
   updatedAt: number | null;
 };
 
+type Shelf = {
+  id: string;
+  name: string;
+  query: string;
+  icon: string | null;
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
 type ViewerState = {
   books: BookSummary[];
   currentBook: BookSummary | null;
   activeDirectory: string | null;
   activeTag: string | null;
   activeExternalSource: string | null;
+  activeShelf: string | null;
   activeTagDirectOnly: boolean;
   searchQuery: string;
   expandedDirectories: Set<string>;
@@ -184,6 +195,7 @@ type ViewerState = {
   isAppSettingsOpen: boolean;
   isAboutOpen: boolean;
   libraryErrorMessage: string | null;
+  shelves: Shelf[];
 };
 
 type AppConfigPayload = {
@@ -242,6 +254,7 @@ type NavigationState = {
   activeDirectory: string | null;
   activeTag: string | null;
   activeExternalSource: string | null;
+  activeShelf: string | null;
   activeTagDirectOnly: boolean;
   searchQuery: string;
 };
@@ -358,6 +371,7 @@ const viewerState: ViewerState = {
   activeDirectory: null,
   activeTag: null,
   activeExternalSource: null,
+  activeShelf: null,
   activeTagDirectOnly: false,
   searchQuery: "",
   expandedDirectories: new Set<string>(),
@@ -366,6 +380,7 @@ const viewerState: ViewerState = {
   isAppSettingsOpen: false,
   isAboutOpen: false,
   libraryErrorMessage: null,
+  shelves: [],
 };
 
 const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
@@ -2782,6 +2797,14 @@ async function refreshSnapshot() {
   renderApp();
 }
 
+async function refreshShelves() {
+  try {
+    viewerState.shelves = await invoke<Shelf[]>("list_shelves");
+  } catch {
+    viewerState.shelves = [];
+  }
+}
+
 async function saveTagEditorChanges() {
   for (const tag of tagEditorState.tags) {
     const result = validateTagValue(tag);
@@ -3655,14 +3678,24 @@ function endNoteInteraction() {
   noteInteractionState.edge = null;
 }
 
+function activeShelfQuery(): string {
+  if (!viewerState.activeShelf) return "";
+  const shelf = viewerState.shelves.find((s) => s.id === viewerState.activeShelf);
+  return shelf?.query ?? "";
+}
+
 function visibleBooks(snapshot: LibrarySnapshot) {
+  const shelfQuery = activeShelfQuery();
+  const userQuery = viewerState.searchQuery.trim();
+  const combinedQuery =
+    shelfQuery && userQuery ? `(${shelfQuery}) AND (${userQuery})` : shelfQuery || userQuery;
   const filtered = filterVisibleBooks(
     snapshot.books,
     viewerState.activeDirectory,
     viewerState.activeTag,
     viewerState.activeExternalSource,
     viewerState.activeTagDirectOnly,
-    viewerState.searchQuery,
+    combinedQuery,
   );
   return sortBooks(filtered);
 }
@@ -3677,7 +3710,8 @@ function describeCurrentEmptyLibraryState(snapshot: LibrarySnapshot, books: Book
       viewerState.searchQuery ||
       viewerState.activeDirectory ||
       viewerState.activeTag ||
-      viewerState.activeExternalSource,
+      viewerState.activeExternalSource ||
+      viewerState.activeShelf,
     ),
     libraryErrorMessage: viewerState.libraryErrorMessage,
   });
@@ -3694,6 +3728,7 @@ function currentNavigationState(): NavigationState {
     activeDirectory: viewerState.activeDirectory,
     activeTag: viewerState.activeTag,
     activeExternalSource: viewerState.activeExternalSource,
+    activeShelf: viewerState.activeShelf,
     activeTagDirectOnly: viewerState.activeTagDirectOnly,
     searchQuery: viewerState.searchQuery,
   };
@@ -3783,17 +3818,20 @@ async function applyNavigationState(state: NavigationState) {
   const prevDirectory = viewerState.activeDirectory;
   const prevTag = viewerState.activeTag;
   const prevExternalSource = viewerState.activeExternalSource;
+  const prevShelf = viewerState.activeShelf;
 
   viewerState.searchQuery = state.searchQuery;
   viewerState.activeDirectory = state.activeDirectory;
   viewerState.activeTag = state.activeTag;
   viewerState.activeExternalSource = state.activeExternalSource;
+  viewerState.activeShelf = state.activeShelf;
   viewerState.activeTagDirectOnly = state.activeTagDirectOnly;
 
   if (
     prevDirectory !== viewerState.activeDirectory ||
     prevTag !== viewerState.activeTag ||
-    prevExternalSource !== viewerState.activeExternalSource
+    prevExternalSource !== viewerState.activeExternalSource ||
+    prevShelf !== viewerState.activeShelf
   ) {
     resetListSort();
     bulkSelectState.selectedFilePaths.clear();
@@ -5320,6 +5358,7 @@ function renderSidebar(snapshot: LibrarySnapshot) {
           activeDirectory: node.path,
           activeTag: null,
           activeExternalSource: null,
+          activeShelf: null,
           activeTagDirectOnly: false,
           searchQuery: "",
         },
@@ -5413,6 +5452,7 @@ function renderSidebar(snapshot: LibrarySnapshot) {
           activeDirectory: null,
           activeTag: tag.id,
           activeExternalSource: null,
+          activeShelf: null,
           activeTagDirectOnly: false,
           searchQuery: viewerState.searchQuery,
         },
@@ -5462,6 +5502,7 @@ function renderSidebar(snapshot: LibrarySnapshot) {
             activeDirectory: null,
             activeTag: null,
             activeExternalSource: "kindle",
+            activeShelf: null,
             activeTagDirectOnly: false,
             searchQuery: viewerState.searchQuery,
           },
@@ -5496,8 +5537,55 @@ function renderSidebar(snapshot: LibrarySnapshot) {
             activeDirectory: null,
             activeTag: null,
             activeExternalSource: source.id,
+            activeShelf: null,
             activeTagDirectOnly: false,
             searchQuery: viewerState.searchQuery,
+          },
+          "push",
+        );
+      });
+      row.appendChild(button);
+      navEl.appendChild(row);
+    }
+  }
+
+  if (viewerState.shelves.length > 0) {
+    const shelvesHeader = document.createElement("p");
+    shelvesHeader.className = "nav-section-title";
+    shelvesHeader.innerHTML =
+      '<i class="fa-solid fa-bookmark" aria-hidden="true"></i><span>SHELVES</span>';
+    navEl.appendChild(shelvesHeader);
+
+    for (const shelf of viewerState.shelves) {
+      const row = document.createElement("div");
+      row.className = "nav-tree-row";
+      row.style.setProperty("--depth", "0");
+      const spacer = document.createElement("span");
+      spacer.className = "nav-toggle-spacer";
+      spacer.setAttribute("aria-hidden", "true");
+      row.appendChild(spacer);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "nav-link nav-tree-link";
+      button.classList.toggle("is-active", viewerState.activeShelf === shelf.id);
+      const iconClass = shelf.icon ?? "fa-solid fa-bookmark";
+      const labelEl = document.createElement("span");
+      const iconEl = document.createElement("i");
+      iconEl.className = iconClass;
+      iconEl.setAttribute("aria-hidden", "true");
+      labelEl.appendChild(iconEl);
+      labelEl.append(` ${shelf.name}`);
+      button.appendChild(labelEl);
+      button.addEventListener("click", () => {
+        void navigateToState(
+          {
+            bookFilePath: null,
+            activeDirectory: null,
+            activeTag: null,
+            activeExternalSource: null,
+            activeShelf: shelf.id,
+            activeTagDirectOnly: false,
+            searchQuery: "",
           },
           "push",
         );
@@ -5800,6 +5888,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
               activeDirectory: null,
               activeTag: tag,
               activeExternalSource: null,
+              activeShelf: null,
               activeTagDirectOnly: false,
               searchQuery: viewerState.searchQuery,
             },
@@ -5910,6 +5999,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
             activeDirectory: viewerState.activeDirectory,
             activeTag: viewerState.activeTag,
             activeExternalSource: viewerState.activeExternalSource,
+            activeShelf: viewerState.activeShelf,
             activeTagDirectOnly: viewerState.activeTagDirectOnly,
             searchQuery: viewerState.searchQuery,
           },
@@ -5928,6 +6018,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
                 activeDirectory: null,
                 activeTag: tag,
                 activeExternalSource: null,
+                activeShelf: null,
                 activeTagDirectOnly: false,
                 searchQuery: viewerState.searchQuery,
               },
@@ -5957,6 +6048,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
           activeDirectory: viewerState.activeDirectory,
           activeTag: viewerState.activeTag,
           activeExternalSource: viewerState.activeExternalSource,
+          activeShelf: viewerState.activeShelf,
           activeTagDirectOnly: viewerState.activeTagDirectOnly,
           searchQuery: viewerState.searchQuery,
         },
@@ -5976,6 +6068,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
             activeDirectory: viewerState.activeDirectory,
             activeTag: viewerState.activeTag,
             activeExternalSource: viewerState.activeExternalSource,
+            activeShelf: viewerState.activeShelf,
             activeTagDirectOnly: viewerState.activeTagDirectOnly,
             searchQuery: viewerState.searchQuery,
           },
@@ -6329,6 +6422,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         activeDirectory: null,
         activeTag: null,
         activeExternalSource: null,
+        activeShelf: null,
         activeTagDirectOnly: false,
         searchQuery: searchInput.value,
       },
@@ -6371,6 +6465,7 @@ window.addEventListener("DOMContentLoaded", async () => {
           activeDirectory: null,
           activeTag: null,
           activeExternalSource: null,
+          activeShelf: null,
           activeTagDirectOnly: false,
           searchQuery: searchInput.value,
         },
@@ -6500,6 +6595,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         activeDirectory: null,
         activeTag: null,
         activeExternalSource: null,
+        activeShelf: null,
         activeTagDirectOnly: false,
         searchQuery: "",
       },
@@ -6598,6 +6694,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         activeDirectory: null,
         activeTag: viewerState.activeTag,
         activeExternalSource: viewerState.activeExternalSource,
+        activeShelf: viewerState.activeShelf,
         activeTagDirectOnly: tagDirectOnlyEl.checked,
         searchQuery: viewerState.searchQuery,
       },
@@ -7305,6 +7402,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       activeDirectory: fallbackParams.get("dir"),
       activeTag: fallbackParams.get("tag"),
       activeExternalSource: fallbackParams.get("source"),
+      activeShelf: fallbackParams.get("shelf"),
       activeTagDirectOnly: fallbackParams.get("tagMode") === "direct",
       searchQuery: fallbackParams.get("q") ?? "",
     };
@@ -7335,6 +7433,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     finishStartupPhase();
   }
 
+  await refreshShelves();
+
   invoke<LibrarySnapshot>("library_snapshot")
     .then((snapshot) => {
       lastSnapshot = snapshot;
@@ -7348,6 +7448,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         activeDirectory: params.get("dir"),
         activeTag: params.get("tag"),
         activeExternalSource: params.get("source"),
+        activeShelf: params.get("shelf"),
         activeTagDirectOnly: params.get("tagMode") === "direct",
         searchQuery: params.get("q") ?? "",
       };

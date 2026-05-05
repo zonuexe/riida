@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-05-05
+
+### Added
+
+- PDF binding direction is now auto-detected by default (`auto`), inspecting the PDF's viewer preferences, vertical CMap usage, and glyph placement geometry to choose left- or right-binding for spreads. Existing global `left` defaults are migrated to `auto` on first launch; per-file overrides are preserved.
+- App icon redesigned with a full-bleed layout for the macOS Tahoe appearance, with squircle corners baked into both release and development icon variants for consistent rendering across macOS, Windows, and Linux.
+- Development builds now use an alternate cool-palette icon variant so dev sessions are visually distinct from installed release builds in the Dock and taskbar.
+
+### Fixed
+
+- PDF text selection in vertical-CJK (tategaki) documents now works correctly in the PDF.js viewer.
+- Text content extraction in the PDF.js viewer no longer hits a WKWebView bug that could cause text-layer reads to fail; the renderer now uses a stream-reader-based path.
+
+### Changed
+
+- The `riida.toml` config file now records the `riida` version that wrote it, and one-time pre-version migrations run automatically on first launch of an upgraded build.
+
 ## [0.5.1] - 2026-05-05
 
 ### Changed

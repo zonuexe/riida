@@ -83,6 +83,27 @@ struct CustomSource {
     icon: String,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct Shelf {
+    id: String,
+    name: String,
+    query: String,
+    icon: Option<String>,
+    sort_order: i64,
+    created_at: u64,
+    updated_at: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ShelfDraft {
+    id: Option<String>,
+    name: String,
+    query: String,
+    icon: Option<String>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct BookSummary {
@@ -866,6 +887,15 @@ fn open_database() -> Result<Connection, String> {
             CREATE TABLE IF NOT EXISTS pdf_passwords (
               file_path TEXT PRIMARY KEY,
               password TEXT NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS shelves (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              query TEXT NOT NULL,
+              icon TEXT,
+              sort_order INTEGER NOT NULL DEFAULT 0,
+              created_at INTEGER NOT NULL,
               updated_at INTEGER NOT NULL
             );
             ",
@@ -2900,6 +2930,143 @@ fn delete_custom_source(id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn list_shelves() -> Result<Vec<Shelf>, String> {
+    let connection = open_database()?;
+    let mut stmt = connection
+        .prepare(
+            "
+            SELECT id, name, query, icon, sort_order, created_at, updated_at
+            FROM shelves
+            ORDER BY sort_order ASC, created_at ASC
+            ",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(Shelf {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                query: row.get(2)?,
+                icon: row.get(3)?,
+                sort_order: row.get(4)?,
+                created_at: row.get::<_, i64>(5)? as u64,
+                updated_at: row.get::<_, i64>(6)? as u64,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+    let shelves = rows.filter_map(|row| row.ok()).collect::<Vec<_>>();
+    Ok(shelves)
+}
+
+#[tauri::command]
+fn save_shelf(draft: ShelfDraft) -> Result<Shelf, String> {
+    let name = draft.name.trim().to_string();
+    if name.is_empty() {
+        return Err("Shelf name must not be empty".to_string());
+    }
+    let query = draft.query.trim().to_string();
+    if query.is_empty() {
+        return Err("Shelf query must not be empty".to_string());
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs();
+    let connection = open_database()?;
+
+    if let Some(id) = draft.id {
+        connection
+            .execute(
+                "
+                UPDATE shelves SET
+                  name = ?2,
+                  query = ?3,
+                  icon = ?4,
+                  updated_at = ?5
+                WHERE id = ?1
+                ",
+                params![&id, &name, &query, &draft.icon, now as i64],
+            )
+            .map_err(|error| error.to_string())?;
+        let mut stmt = connection
+            .prepare(
+                "
+                SELECT id, name, query, icon, sort_order, created_at, updated_at
+                FROM shelves WHERE id = ?1
+                ",
+            )
+            .map_err(|error| error.to_string())?;
+        let shelf = stmt
+            .query_row(params![&id], |row| {
+                Ok(Shelf {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    query: row.get(2)?,
+                    icon: row.get(3)?,
+                    sort_order: row.get(4)?,
+                    created_at: row.get::<_, i64>(5)? as u64,
+                    updated_at: row.get::<_, i64>(6)? as u64,
+                })
+            })
+            .map_err(|error| error.to_string())?;
+        return Ok(shelf);
+    }
+
+    let id = uuid_v4();
+    let next_order: i64 = connection
+        .query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM shelves",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    connection
+        .execute(
+            "
+            INSERT INTO shelves (id, name, query, icon, sort_order, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+            ",
+            params![&id, &name, &query, &draft.icon, next_order, now as i64],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(Shelf {
+        id,
+        name,
+        query,
+        icon: draft.icon,
+        sort_order: next_order,
+        created_at: now,
+        updated_at: now,
+    })
+}
+
+#[tauri::command]
+fn delete_shelf(id: String) -> Result<(), String> {
+    let connection = open_database()?;
+    connection
+        .execute("DELETE FROM shelves WHERE id = ?1", params![&id])
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn reorder_shelves(ids: Vec<String>) -> Result<(), String> {
+    let mut connection = open_database()?;
+    let tx = connection
+        .transaction()
+        .map_err(|error| error.to_string())?;
+    for (index, id) in ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE shelves SET sort_order = ?2 WHERE id = ?1",
+            params![id, index as i64],
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    tx.commit().map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn load_reading_position(file_path: String) -> Result<Option<ReadingPosition>, String> {
     let connection = open_database()?;
     let mut statement = connection
@@ -3168,6 +3335,10 @@ pub fn run() {
             delete_book_metadata,
             save_custom_source,
             delete_custom_source,
+            list_shelves,
+            save_shelf,
+            delete_shelf,
+            reorder_shelves,
             load_reading_position,
             save_reading_position,
             save_epub_position,

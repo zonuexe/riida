@@ -877,6 +877,24 @@ const customSourceEditorState: CustomSourceEditorState = {
   statusMessage: "",
 };
 
+type ShelfEditorState = {
+  isOpen: boolean;
+  id: string | null;
+  name: string;
+  query: string;
+  statusMessage: string;
+  statusTone: "info" | "error" | "success";
+};
+
+const shelfEditorState: ShelfEditorState = {
+  isOpen: false,
+  id: null,
+  name: "",
+  query: "",
+  statusMessage: "",
+  statusTone: "info",
+};
+
 const CUSTOM_SOURCE_ICONS: Array<{ cls: string; label: string }> = [
   { cls: "fa-regular fa-building", label: "Building" },
   { cls: "fa-solid fa-building", label: "Building (solid)" },
@@ -2093,6 +2111,140 @@ async function deleteCustomSource(source: CustomSource) {
     syncAppSettingsUi();
   } catch (error) {
     await message(`Failed to delete: ${String(error)}`, { kind: "error" });
+  }
+}
+
+function syncShelfEditorUi() {
+  const modalEl = document.querySelector<HTMLElement>("#shelf-editor-modal");
+  const titleEl = document.querySelector<HTMLElement>("#shelf-editor-title");
+  const nameEl = document.querySelector<HTMLInputElement>("#shelf-editor-name");
+  const queryEl = document.querySelector<HTMLTextAreaElement>("#shelf-editor-query");
+  const previewEl = document.querySelector<HTMLElement>("#shelf-editor-preview");
+  const statusEl = document.querySelector<HTMLElement>("#shelf-editor-status");
+  const deleteEl = document.querySelector<HTMLButtonElement>("#shelf-editor-delete");
+  if (modalEl) modalEl.hidden = !shelfEditorState.isOpen;
+  if (titleEl) titleEl.textContent = shelfEditorState.id ? "Edit shelf" : "New shelf";
+  if (nameEl && document.activeElement !== nameEl) nameEl.value = shelfEditorState.name;
+  if (queryEl && document.activeElement !== queryEl) queryEl.value = shelfEditorState.query;
+  if (deleteEl) deleteEl.hidden = !shelfEditorState.id;
+  if (statusEl) {
+    statusEl.hidden = shelfEditorState.statusMessage.length === 0;
+    statusEl.textContent = shelfEditorState.statusMessage;
+    statusEl.dataset.tone = shelfEditorState.statusTone;
+  }
+  if (previewEl) {
+    if (!shelfEditorState.isOpen || !lastSnapshot) {
+      previewEl.hidden = true;
+    } else {
+      const query = shelfEditorState.query.trim();
+      if (query.length === 0) {
+        previewEl.hidden = true;
+      } else {
+        const matched = filterVisibleBooks(lastSnapshot.books, null, null, null, false, query);
+        previewEl.hidden = false;
+        previewEl.dataset.tone = "info";
+        previewEl.textContent = `Preview: ${matched.length} book${matched.length === 1 ? "" : "s"} match`;
+      }
+    }
+  }
+}
+
+function openShelfEditor(shelf?: Shelf, presetQuery?: string) {
+  shelfEditorState.isOpen = true;
+  shelfEditorState.id = shelf?.id ?? null;
+  shelfEditorState.name = shelf?.name ?? "";
+  shelfEditorState.query = shelf?.query ?? presetQuery ?? "";
+  shelfEditorState.statusMessage = "";
+  shelfEditorState.statusTone = "info";
+  syncShelfEditorUi();
+  setTimeout(() => {
+    const nameEl = document.querySelector<HTMLInputElement>("#shelf-editor-name");
+    nameEl?.focus();
+    nameEl?.select();
+  }, 0);
+}
+
+function closeShelfEditor() {
+  shelfEditorState.isOpen = false;
+  syncShelfEditorUi();
+}
+
+async function saveShelfFromEditor() {
+  const nameEl = document.querySelector<HTMLInputElement>("#shelf-editor-name");
+  const queryEl = document.querySelector<HTMLTextAreaElement>("#shelf-editor-query");
+  const name = (nameEl?.value ?? shelfEditorState.name).trim();
+  const query = (queryEl?.value ?? shelfEditorState.query).trim();
+  if (!name) {
+    shelfEditorState.statusMessage = "Name is required.";
+    shelfEditorState.statusTone = "error";
+    syncShelfEditorUi();
+    return;
+  }
+  if (!query) {
+    shelfEditorState.statusMessage = "Query is required.";
+    shelfEditorState.statusTone = "error";
+    syncShelfEditorUi();
+    return;
+  }
+  try {
+    const saved = await invoke<Shelf>("save_shelf", {
+      draft: { id: shelfEditorState.id, name, query, icon: null },
+    });
+    await refreshShelves();
+    closeShelfEditor();
+    void navigateToState(
+      {
+        bookFilePath: null,
+        activeDirectory: null,
+        activeTag: null,
+        activeExternalSource: null,
+        activeShelf: saved.id,
+        activeTagDirectOnly: false,
+        searchQuery: "",
+      },
+      "push",
+    );
+  } catch (error) {
+    shelfEditorState.statusMessage = `Failed to save: ${String(error)}`;
+    shelfEditorState.statusTone = "error";
+    syncShelfEditorUi();
+  }
+}
+
+async function deleteShelfFromEditor() {
+  if (!shelfEditorState.id) return;
+  const confirmed = await confirm(`Delete shelf "${shelfEditorState.name}"?`, {
+    title: "Delete shelf",
+    kind: "warning",
+    okLabel: "Delete",
+    cancelLabel: "Cancel",
+  });
+  if (!confirmed) return;
+  const id = shelfEditorState.id;
+  try {
+    await invoke("delete_shelf", { id });
+    await refreshShelves();
+    if (viewerState.activeShelf === id) {
+      void navigateToState(
+        {
+          bookFilePath: null,
+          activeDirectory: null,
+          activeTag: null,
+          activeExternalSource: null,
+          activeShelf: null,
+          activeTagDirectOnly: false,
+          searchQuery: "",
+        },
+        "push",
+      );
+    } else {
+      renderApp();
+    }
+    closeShelfEditor();
+  } catch (error) {
+    shelfEditorState.statusMessage = `Failed to delete: ${String(error)}`;
+    shelfEditorState.statusTone = "error";
+    syncShelfEditorUi();
   }
 }
 
@@ -5549,50 +5701,70 @@ function renderSidebar(snapshot: LibrarySnapshot) {
     }
   }
 
-  if (viewerState.shelves.length > 0) {
-    const shelvesHeader = document.createElement("p");
-    shelvesHeader.className = "nav-section-title";
-    shelvesHeader.innerHTML =
-      '<i class="fa-solid fa-bookmark" aria-hidden="true"></i><span>SHELVES</span>';
-    navEl.appendChild(shelvesHeader);
+  const shelvesHeader = document.createElement("p");
+  shelvesHeader.className = "nav-section-title nav-section-title-with-action";
+  const shelvesHeaderLabel = document.createElement("span");
+  shelvesHeaderLabel.className = "nav-section-title-label";
+  const shelvesHeaderIcon = document.createElement("i");
+  shelvesHeaderIcon.className = "fa-solid fa-bookmark";
+  shelvesHeaderIcon.setAttribute("aria-hidden", "true");
+  shelvesHeaderLabel.appendChild(shelvesHeaderIcon);
+  const shelvesHeaderText = document.createElement("span");
+  shelvesHeaderText.textContent = "SHELVES";
+  shelvesHeaderLabel.appendChild(shelvesHeaderText);
+  shelvesHeader.appendChild(shelvesHeaderLabel);
+  const shelvesAddBtn = document.createElement("button");
+  shelvesAddBtn.type = "button";
+  shelvesAddBtn.className = "nav-section-action";
+  shelvesAddBtn.setAttribute("aria-label", "Create a new shelf");
+  shelvesAddBtn.title = "Create a new shelf";
+  shelvesAddBtn.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i>';
+  shelvesAddBtn.addEventListener("click", () => {
+    openShelfEditor(undefined, viewerState.searchQuery);
+  });
+  shelvesHeader.appendChild(shelvesAddBtn);
+  navEl.appendChild(shelvesHeader);
 
-    for (const shelf of viewerState.shelves) {
-      const row = document.createElement("div");
-      row.className = "nav-tree-row";
-      row.style.setProperty("--depth", "0");
-      const spacer = document.createElement("span");
-      spacer.className = "nav-toggle-spacer";
-      spacer.setAttribute("aria-hidden", "true");
-      row.appendChild(spacer);
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "nav-link nav-tree-link";
-      button.classList.toggle("is-active", viewerState.activeShelf === shelf.id);
-      const iconClass = shelf.icon ?? "fa-solid fa-bookmark";
-      const labelEl = document.createElement("span");
-      const iconEl = document.createElement("i");
-      iconEl.className = iconClass;
-      iconEl.setAttribute("aria-hidden", "true");
-      labelEl.appendChild(iconEl);
-      labelEl.append(` ${shelf.name}`);
-      button.appendChild(labelEl);
-      button.addEventListener("click", () => {
-        void navigateToState(
-          {
-            bookFilePath: null,
-            activeDirectory: null,
-            activeTag: null,
-            activeExternalSource: null,
-            activeShelf: shelf.id,
-            activeTagDirectOnly: false,
-            searchQuery: "",
-          },
-          "push",
-        );
-      });
-      row.appendChild(button);
-      navEl.appendChild(row);
-    }
+  for (const shelf of viewerState.shelves) {
+    const row = document.createElement("div");
+    row.className = "nav-tree-row";
+    row.style.setProperty("--depth", "0");
+    const spacer = document.createElement("span");
+    spacer.className = "nav-toggle-spacer";
+    spacer.setAttribute("aria-hidden", "true");
+    row.appendChild(spacer);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "nav-link nav-tree-link";
+    button.classList.toggle("is-active", viewerState.activeShelf === shelf.id);
+    const iconClass = shelf.icon ?? "fa-solid fa-bookmark";
+    const labelEl = document.createElement("span");
+    const iconEl = document.createElement("i");
+    iconEl.className = iconClass;
+    iconEl.setAttribute("aria-hidden", "true");
+    labelEl.appendChild(iconEl);
+    labelEl.append(` ${shelf.name}`);
+    button.appendChild(labelEl);
+    button.addEventListener("click", () => {
+      void navigateToState(
+        {
+          bookFilePath: null,
+          activeDirectory: null,
+          activeTag: null,
+          activeExternalSource: null,
+          activeShelf: shelf.id,
+          activeTagDirectOnly: false,
+          searchQuery: "",
+        },
+        "push",
+      );
+    });
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      openShelfEditor(shelf);
+    });
+    row.appendChild(button);
+    navEl.appendChild(row);
   }
 }
 
@@ -6795,6 +6967,30 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (viewerState.currentBook) {
       void openBookMetadataEditor(viewerState.currentBook);
     }
+  });
+
+  const shelfEditorCloseEl = document.querySelector<HTMLButtonElement>("#shelf-editor-close");
+  const shelfEditorCancelEl = document.querySelector<HTMLButtonElement>("#shelf-editor-cancel");
+  const shelfEditorBackdropEl = document.querySelector<HTMLElement>("#shelf-editor-backdrop");
+  const shelfEditorSaveEl = document.querySelector<HTMLButtonElement>("#shelf-editor-save");
+  const shelfEditorDeleteEl = document.querySelector<HTMLButtonElement>("#shelf-editor-delete");
+  const shelfEditorNameEl = document.querySelector<HTMLInputElement>("#shelf-editor-name");
+  const shelfEditorQueryEl = document.querySelector<HTMLTextAreaElement>("#shelf-editor-query");
+  shelfEditorCloseEl?.addEventListener("click", closeShelfEditor);
+  shelfEditorCancelEl?.addEventListener("click", closeShelfEditor);
+  shelfEditorBackdropEl?.addEventListener("click", closeShelfEditor);
+  shelfEditorSaveEl?.addEventListener("click", () => {
+    void saveShelfFromEditor();
+  });
+  shelfEditorDeleteEl?.addEventListener("click", () => {
+    void deleteShelfFromEditor();
+  });
+  shelfEditorNameEl?.addEventListener("input", () => {
+    shelfEditorState.name = shelfEditorNameEl.value;
+  });
+  shelfEditorQueryEl?.addEventListener("input", () => {
+    shelfEditorState.query = shelfEditorQueryEl.value;
+    syncShelfEditorUi();
   });
 
   tagEditorCloseEl?.addEventListener("click", closeTagEditor);

@@ -105,6 +105,11 @@ describe("filterVisibleBooks", () => {
     expect(filterVisibleBooks(books, null, null, "kindle", false, "")).toEqual([books[3]]);
   });
 
+  it("matches title field against the file name when metadata title is empty", () => {
+    const results = filterVisibleBooks(books, null, null, null, false, "title:rust");
+    expect(results).toEqual([books[1]]);
+  });
+
   it("supports OR between free tokens", () => {
     const results = filterVisibleBooks(books, null, null, null, false, "rust OR novel");
     expect(results).toEqual([books[1], books[2], books[4]]);

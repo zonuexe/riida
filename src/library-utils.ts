@@ -220,8 +220,13 @@ function matchesFieldToken(book: SearchableBook, field: string, value: string): 
   const q = normalizeSearchText(value);
 
   switch (field) {
-    case "title":
-      return normalizeSearchText(book.title ?? "").includes(q);
+    case "title": {
+      // Fall back to the file name when no metadata title is set, so
+      // unmetadata'd books can still be matched by what the user sees
+      // as the title in the library list.
+      const titleText = book.title && book.title.length > 0 ? book.title : book.fileName;
+      return normalizeSearchText(titleText).includes(q);
+    }
     case "author":
       return (book.authors ?? []).some((a) => normalizeSearchText(a).includes(q));
     case "publisher":

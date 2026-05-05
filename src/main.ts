@@ -1027,6 +1027,8 @@ async function detectPdfBindingDirection(
   const limit = Math.min(PDF_BINDING_DETECT_MAX_PAGES, pdfDocument.numPages);
   const samples: TextContentSampleLike[] = [];
   let pagesScanned = 0;
+  let firstError: unknown = null;
+  let errorCount = 0;
   for (let pageNumber = 1; pageNumber <= limit; pageNumber += 1) {
     if (isCancelled()) return null;
     try {
@@ -1034,13 +1036,22 @@ async function detectPdfBindingDirection(
       const content = await page.getTextContent();
       samples.push(content);
       pagesScanned = pageNumber;
-    } catch {
-      // Skip individual page failures; the heuristic is best-effort.
+    } catch (error) {
+      // Best-effort: skip individual page failures, but surface the first
+      // so we can diagnose runtime errors that wipe out every sample.
+      errorCount += 1;
+      if (firstError === null) firstError = error;
     }
+  }
+  if (errorCount > 0) {
+    console.warn(
+      `[riida] binding-detect: ${errorCount}/${limit} sample pages threw; first error:`,
+      firstError,
+    );
   }
   const diagnostic = summarizeBindingFromTextContent(samples);
   console.info(
-    `[riida] binding-detect: pagesScanned=${pagesScanned} chars=${diagnostic.verticalChars}/${diagnostic.totalChars} items=${diagnostic.geometryItems} dy/dx=${diagnostic.cumulativeDx === 0 ? "inf" : (diagnostic.cumulativeDy / diagnostic.cumulativeDx).toFixed(2)} cmap=${diagnostic.cmapPathTriggers} geom=${diagnostic.geometryPathTriggers} →`,
+    `[riida] binding-detect: numPages=${pdfDocument.numPages} limit=${limit} pagesScanned=${pagesScanned} chars=${diagnostic.verticalChars}/${diagnostic.totalChars} items=${diagnostic.geometryItems} dy/dx=${diagnostic.cumulativeDx === 0 ? "inf" : (diagnostic.cumulativeDy / diagnostic.cumulativeDx).toFixed(2)} cmap=${diagnostic.cmapPathTriggers} geom=${diagnostic.geometryPathTriggers} →`,
     diagnostic.result ?? "null (fallback left)",
   );
   return diagnostic.result;

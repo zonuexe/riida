@@ -40,8 +40,27 @@ import {
   formatFileSize,
   type DirectoryNode,
 } from "./library-utils";
-import { buildNavigationUrl, navigationStateSignature } from "./navigation-utils";
+import {
+  buildNavigationUrl,
+  navigationStateSignature,
+  parsePdfPageQueryParam,
+} from "./navigation-utils";
 import { isNavigationBackShortcut, isNavigationForwardShortcut } from "./navigation-shortcuts";
+import {
+  clampEpubFontSize,
+  EPUB_FONT_SIZE_DEFAULT,
+  isViewerEndShortcut,
+  isViewerHomeShortcut,
+  isViewerNextPageShortcut,
+  isViewerPrevPageShortcut,
+  isViewerZoomInShortcut,
+  isViewerZoomOutShortcut,
+  isViewerZoomResetShortcut,
+  nextEpubFontSizeDown,
+  nextEpubFontSizeUp,
+  nextViewerZoomIn,
+  nextViewerZoomOut,
+} from "./viewer-shortcuts";
 import { suggestTagCompletions } from "./tag-suggestions";
 import {
   applySuggestion,
@@ -219,6 +238,7 @@ type NavigationState = {
   historyIndex: number;
   bookFilePath: string | null;
   epubCfi?: string | null;
+  pdfPage?: number | null;
   activeDirectory: string | null;
   activeTag: string | null;
   activeExternalSource: string | null;
@@ -454,6 +474,7 @@ let navigationHistoryIndex = 0;
 let navigationHistoryMax = 0;
 let navigationEntries: NavigationState[] = [];
 let activeReadingPosition: ReadingPosition | null = null;
+let pdfZoomScale = 1;
 let lastAppConfig: AppConfigPayload | null = null;
 let cachedHomeDir: string | null = null;
 let cachedAppName = "riida";
@@ -1393,12 +1414,68 @@ function syncViewerPageJumpUi() {
   }
 }
 
-function navigateViewerToPage(pageNumber: number) {
+function resetPdfZoomScaleForBook() {
+  pdfZoomScale = 1;
+}
+
+function setPdfZoomScale(nextScale: number) {
+  if (nextScale === pdfZoomScale) {
+    return;
+  }
+  pdfZoomScale = nextScale;
+  if (lastSnapshot?.pdfRenderer === "pdfjs" && viewerState.currentBook?.sourceType === "pdf") {
+    void renderCurrentPage();
+  }
+}
+
+function currentEpubFontSize(): number {
+  return clampEpubFontSize(currentViewerPreferences().epubFontSize);
+}
+
+function applyEpubFontSizeShortcut(nextSize: number) {
+  if (viewerState.currentBook?.sourceType !== "epub") {
+    return;
+  }
+  const clamped = clampEpubFontSize(nextSize);
+  applyEpubFontSize(clamped);
+
+  const draft = { ...currentViewerPreferences(), epubFontSize: clamped };
+  setViewerDraft(viewerSettings.scope, draft);
+  syncViewerSettingsUi();
+
+  const currentFilePath = viewerState.currentBook.filePath;
+  const sourceType = currentViewerSettingsSourceType() ?? viewerSettings.sourceType;
+  void (async () => {
+    try {
+      if (viewerSettings.scope === "file" && currentFilePath) {
+        const payload = await invoke<ViewerSettingsPayload>("save_file_viewer_preferences", {
+          filePath: currentFilePath,
+          sourceType,
+          preferences: draft,
+        });
+        applyViewerSettingsPayload(payload, sourceType, "file");
+      } else {
+        const payload = await invoke<ViewerSettingsPayload>("save_default_viewer_preferences", {
+          currentFilePath,
+          sourceType,
+          preferences: draft,
+        });
+        applyViewerSettingsPayload(payload, sourceType, "global");
+      }
+    } catch (error) {
+      console.error("Failed to save EPUB font-size shortcut:", error);
+    }
+  })();
+}
+
+function navigateViewerToPage(pageNumber: number, options: { pushHistory?: boolean } = {}) {
   const currentBook = viewerState.currentBook;
 
   if (!currentBook) {
     return;
   }
+
+  const { pushHistory = true } = options;
 
   if (currentBook.sourceType === "epub") {
     if (!activeEpubBook || !activeEpubRendition || !activeEpubTotalPages) {
@@ -1413,6 +1490,11 @@ function navigateViewerToPage(pageNumber: number) {
       return;
     }
 
+    if (pushHistory) {
+      captureEpubCfiForHistory(activeEpubRendition);
+      syncNavigationHistory("replace");
+    }
+
     activeReadingPosition = {
       filePath: currentBook.filePath,
       pageNumber: boundedPageNumber,
@@ -1421,6 +1503,11 @@ function navigateViewerToPage(pageNumber: number) {
       updatedAt: activeReadingPosition?.updatedAt ?? null,
     };
     cacheReadingPosition(activeReadingPosition);
+
+    if (pushHistory) {
+      syncNavigationHistory("push");
+    }
+
     syncViewerPageJumpUi();
     void activeEpubRendition.display(cfi);
     void flushReadingPositionSave();
@@ -1429,6 +1516,15 @@ function navigateViewerToPage(pageNumber: number) {
 
   const maxPageNumber = activePdfRenderSession?.pdfDocument.numPages ?? Number.POSITIVE_INFINITY;
   const boundedPageNumber = Math.min(Math.max(Math.trunc(pageNumber), 1), maxPageNumber);
+
+  if (pushHistory) {
+    const capturedPosition = captureReadingPositionFromViewer();
+    if (capturedPosition) {
+      activeReadingPosition = capturedPosition;
+    }
+    syncNavigationHistory("replace");
+  }
+
   activeReadingPosition = {
     filePath: currentBook.filePath,
     pageNumber: boundedPageNumber,
@@ -1436,6 +1532,11 @@ function navigateViewerToPage(pageNumber: number) {
     updatedAt: activeReadingPosition?.updatedAt ?? null,
   };
   cacheReadingPosition(activeReadingPosition);
+
+  if (pushHistory) {
+    syncNavigationHistory("push");
+  }
+
   syncViewerPageJumpUi();
 
   if (lastSnapshot?.pdfRenderer === "pdfjs" && activePdfRenderSession) {
@@ -3577,10 +3678,13 @@ function describeCurrentEmptyLibraryState(snapshot: LibrarySnapshot, books: Book
 }
 
 function currentNavigationState(): NavigationState {
+  const currentBook = viewerState.currentBook;
+  const isPdf = currentBook?.sourceType === "pdf";
   return {
     historyIndex: navigationHistoryIndex,
-    bookFilePath: viewerState.currentBook?.filePath ?? null,
+    bookFilePath: currentBook?.filePath ?? null,
     epubCfi: activeReadingPosition?.cfi ?? null,
+    pdfPage: isPdf ? (activeReadingPosition?.pageNumber ?? null) : null,
     activeDirectory: viewerState.activeDirectory,
     activeTag: viewerState.activeTag,
     activeExternalSource: viewerState.activeExternalSource,
@@ -3708,6 +3812,18 @@ async function applyNavigationState(state: NavigationState) {
       return;
     }
 
+    // Fast path: same PDF book already rendered — jump directly to the page
+    // without rebuilding the render session.
+    if (
+      state.pdfPage &&
+      nextBook.filePath === viewerState.currentBook?.filePath &&
+      nextBook.sourceType === "pdf" &&
+      activePdfRenderSession
+    ) {
+      navigateViewerToPage(state.pdfPage, { pushHistory: false });
+      return;
+    }
+
     await openBook(nextBook, { updateHistory: "none" });
     return;
   }
@@ -3771,6 +3887,36 @@ function findActivePdfPageEl(stageEl: HTMLElement, pageEls: HTMLElement[]): HTML
     }
   }
   return active;
+}
+
+function advancePdfPagedSpread(direction: 1 | -1) {
+  if (viewerState.currentBook?.sourceType !== "pdf") {
+    return;
+  }
+  if (lastSnapshot?.pdfRenderer !== "pdfjs") {
+    return;
+  }
+  const stageEl = currentViewerStage();
+  if (!stageEl) {
+    return;
+  }
+
+  if (viewerSettings.scrollMode !== "paged") {
+    const step = Math.max(stageEl.clientHeight * 0.95, 40) * direction;
+    stageEl.scrollBy({ top: step, left: 0, behavior: "auto" });
+    return;
+  }
+
+  const pageEls = getPdfPageEls();
+  const activeEl = findActivePdfPageEl(stageEl, pageEls);
+  if (!activeEl) {
+    return;
+  }
+  const index = pageEls.indexOf(activeEl);
+  const target = pageEls[index + direction];
+  if (target) {
+    stageEl.scrollTo({ top: target.offsetTop, left: stageEl.scrollLeft, behavior: "auto" });
+  }
 }
 
 function handlePdfPagedKey(event: KeyboardEvent): boolean {
@@ -4963,6 +5109,7 @@ async function renderCurrentPage() {
         } else if (viewerSettings.zoomMode === "fit-height") {
           baseScale = targetHeight / Math.max(sampleViewport.height, 1);
         }
+        baseScale *= pdfZoomScale;
 
         pdfjsViewerEl.style.setProperty("--scale-factor", String(baseScale));
 
@@ -5107,6 +5254,7 @@ async function openBook(
     await flushReadingPositionSave();
     await flushPendingNoteSave();
     await destroyNoteEditor();
+    resetPdfZoomScaleForBook();
   }
 
   viewerState.currentBook = book;
@@ -6928,6 +7076,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     const shortcutInput = {
       platform: navigator.platform,
       key: event.key,
+      code: event.code,
       metaKey: event.metaKey,
       altKey: event.altKey,
       ctrlKey: event.ctrlKey,
@@ -6946,6 +7095,80 @@ window.addEventListener("DOMContentLoaded", async () => {
       event.preventDefault();
       navigateForward();
       return;
+    }
+
+    if (viewerState.currentBook) {
+      const isPdfBook = viewerState.currentBook.sourceType === "pdf";
+      const isEpubBook = viewerState.currentBook.sourceType === "epub";
+      const pdfActive = isPdfBook && lastSnapshot?.pdfRenderer === "pdfjs";
+      const epubActive = isEpubBook && Boolean(activeEpubRendition);
+
+      if (pdfActive || epubActive) {
+        if (isViewerZoomResetShortcut(shortcutInput)) {
+          event.preventDefault();
+          if (pdfActive) {
+            setPdfZoomScale(1);
+          } else if (epubActive) {
+            applyEpubFontSizeShortcut(EPUB_FONT_SIZE_DEFAULT);
+          }
+          return;
+        }
+
+        if (isViewerZoomInShortcut(shortcutInput)) {
+          event.preventDefault();
+          if (pdfActive) {
+            setPdfZoomScale(nextViewerZoomIn(pdfZoomScale));
+          } else if (epubActive) {
+            applyEpubFontSizeShortcut(nextEpubFontSizeUp(currentEpubFontSize()));
+          }
+          return;
+        }
+
+        if (isViewerZoomOutShortcut(shortcutInput)) {
+          event.preventDefault();
+          if (pdfActive) {
+            setPdfZoomScale(nextViewerZoomOut(pdfZoomScale));
+          } else if (epubActive) {
+            applyEpubFontSizeShortcut(nextEpubFontSizeDown(currentEpubFontSize()));
+          }
+          return;
+        }
+
+        if (isViewerHomeShortcut(shortcutInput)) {
+          event.preventDefault();
+          navigateViewerToPage(1);
+          return;
+        }
+
+        if (isViewerEndShortcut(shortcutInput)) {
+          event.preventDefault();
+          const totalPages = currentViewerTotalPages();
+          if (totalPages && totalPages >= 1) {
+            navigateViewerToPage(totalPages);
+          }
+          return;
+        }
+
+        if (isViewerNextPageShortcut(shortcutInput)) {
+          event.preventDefault();
+          if (epubActive && activeEpubRendition) {
+            void activeEpubRendition.next();
+          } else if (pdfActive) {
+            advancePdfPagedSpread(1);
+          }
+          return;
+        }
+
+        if (isViewerPrevPageShortcut(shortcutInput)) {
+          event.preventDefault();
+          if (epubActive && activeEpubRendition) {
+            void activeEpubRendition.prev();
+          } else if (pdfActive) {
+            advancePdfPagedSpread(-1);
+          }
+          return;
+        }
+      }
     }
 
     if (handlePdfPagedKey(event)) {
@@ -7057,14 +7280,16 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   window.addEventListener("popstate", (event) => {
     const state = event.state as NavigationState | null;
+    const fallbackParams = new URLSearchParams(window.location.search);
     const nextState: NavigationState = state ?? {
       historyIndex: 0,
-      bookFilePath: null,
-      activeDirectory: null,
-      activeTag: null,
-      activeExternalSource: null,
-      activeTagDirectOnly: false,
-      searchQuery: "",
+      bookFilePath: fallbackParams.get("book"),
+      pdfPage: parsePdfPageQueryParam(fallbackParams.get("page")),
+      activeDirectory: fallbackParams.get("dir"),
+      activeTag: fallbackParams.get("tag"),
+      activeExternalSource: fallbackParams.get("source"),
+      activeTagDirectOnly: fallbackParams.get("tagMode") === "direct",
+      searchQuery: fallbackParams.get("q") ?? "",
     };
 
     if (navigationEntries.length === 0) {
@@ -7102,6 +7327,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       const initialState: NavigationState = {
         historyIndex: 0,
         bookFilePath: params.get("book"),
+        pdfPage: parsePdfPageQueryParam(params.get("page")),
         activeDirectory: params.get("dir"),
         activeTag: params.get("tag"),
         activeExternalSource: params.get("source"),

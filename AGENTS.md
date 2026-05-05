@@ -122,6 +122,12 @@ skip the path entirely; the version is written on the first save.
 
 ## PDF Viewer Notes
 
+[docs/pdf.md](docs/pdf.md) is the deeper write-up of the project-specific
+PDF processing (CMap loading workaround, vertical text-layer CSS, the
+WKWebView ReadableStream bug and its fix, binding-direction detection,
+render-window planner, search normalization, etc.). The notes below
+cover only the highest-level points.
+
 There are two rendering paths:
 
 - `native`: iframe/native WebView PDF display

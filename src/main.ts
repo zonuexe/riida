@@ -1056,13 +1056,11 @@ async function detectPdfBindingDirection(
     viewerPreferences as Parameters<typeof detectBindingFromViewerPreferences>[0],
   );
   if (fromPrefs !== null) {
-    console.info("[riida] binding-detect: viewer-prefs →", fromPrefs);
     return fromPrefs;
   }
 
   const limit = Math.min(PDF_BINDING_DETECT_MAX_PAGES, pdfDocument.numPages);
   const samples: TextContentSampleLike[] = [];
-  let pagesScanned = 0;
   let firstError: unknown = null;
   let errorCount = 0;
   for (let pageNumber = 1; pageNumber <= limit; pageNumber += 1) {
@@ -1071,7 +1069,6 @@ async function detectPdfBindingDirection(
       const page = await pdfDocument.getPage(pageNumber);
       const content = await readPdfTextContentForBinding(page);
       samples.push(content);
-      pagesScanned = pageNumber;
     } catch (error) {
       // Best-effort: skip individual page failures, but surface the first
       // so we can diagnose runtime errors that wipe out every sample.
@@ -1085,12 +1082,7 @@ async function detectPdfBindingDirection(
       firstError,
     );
   }
-  const diagnostic = summarizeBindingFromTextContent(samples);
-  console.info(
-    `[riida] binding-detect: numPages=${pdfDocument.numPages} limit=${limit} pagesScanned=${pagesScanned} chars=${diagnostic.verticalChars}/${diagnostic.totalChars} items=${diagnostic.geometryItems} dy/dx=${diagnostic.cumulativeDx === 0 ? "inf" : (diagnostic.cumulativeDy / diagnostic.cumulativeDx).toFixed(2)} cmap=${diagnostic.cmapPathTriggers} geom=${diagnostic.geometryPathTriggers} →`,
-    diagnostic.result ?? "null (fallback left)",
-  );
-  return diagnostic.result;
+  return summarizeBindingFromTextContent(samples).result;
 }
 
 let epubJsModulePromise: Promise<typeof import("epubjs")> | null = null;
@@ -4928,9 +4920,6 @@ async function renderCurrentPage() {
       // probing the document. Explicit "left" / "right" prefs short-circuit
       // detection. When detection is inconclusive (e.g. pure-image PDFs)
       // we fall back to "left".
-      console.info(
-        `[riida] binding-pref: scope=${viewerSettings.scope} hasFileOverride=${viewerSettings.hasFileOverride} effective=${viewerSettings.bindingDirection}`,
-      );
       let resolvedBinding: "left" | "right";
       if (viewerSettings.bindingDirection === "auto") {
         const detected = await detectPdfBindingDirection(
@@ -4941,7 +4930,6 @@ async function renderCurrentPage() {
         resolvedBinding = detected ?? "left";
       } else {
         resolvedBinding = viewerSettings.bindingDirection;
-        console.info(`[riida] binding-detect: skipped (pref=${viewerSettings.bindingDirection})`);
       }
 
       pdfjsViewerEl.innerHTML = "";

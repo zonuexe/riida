@@ -35,7 +35,8 @@
     "mutants:frontend:list": "stryker run --dryRun",
     "build:macos-local": "npm run tauri build && bash scripts/fix-macos-local-build.sh",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev --config tauri.conf.dev.json"
   },
   "dependencies": {
     "@milkdown/kit": "^7.20.0",

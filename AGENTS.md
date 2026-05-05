@@ -60,6 +60,23 @@ The current app focus is local PDF library management with embedded reading, not
 
 The library now also supports external, non-file-backed books such as Kindle purchases.
 
+## Dev-Mode Icon Variant
+
+The development build uses an alternate "cool"-palette icon to make
+running dev sessions visually distinct from installed release builds in
+the Dock and taskbar.
+
+- Master sources for the dev icon live in [src-tauri/icons-dev/](src-tauri/icons-dev/),
+  alongside the same generated derivatives as [src-tauri/icons/](src-tauri/icons/).
+- [src-tauri/tauri.conf.dev.json](src-tauri/tauri.conf.dev.json) overrides
+  `bundle.icon` to point at `icons-dev/...`.
+- `npm run tauri:dev` invokes `tauri dev --config tauri.conf.dev.json` so
+  the override is merged into the resolved config. Plain `npm run tauri build`
+  ignores the override and uses the release icon set in `icons/`.
+
+When the dev master is regenerated, redo the same `@tauri-apps/cli icon`
++ `magick` flow inside `icons-dev/` that the release icon set uses.
+
 ## Config, Data, Cache
 
 The app separates storage into:

@@ -77,6 +77,15 @@ the Dock and taskbar.
 When the dev master is regenerated, redo the same `@tauri-apps/cli icon`
 + `magick` flow inside `icons-dev/` that the release icon set uses.
 
+The dev master has a rounded squircle mask **baked in** (corner radius
+230px on a 1024px canvas, matching the macOS Big Sur+ icon template).
+This is necessary because the dev binary is not bundled into a `.app`,
+so macOS does not auto-apply its Tahoe squircle/glass treatment. Without
+the baked-in mask, the dev icon shows as a hard square in the Dock.
+Release builds in [src-tauri/icons/](src-tauri/icons/) intentionally
+keep their corners square because macOS adds the squircle automatically
+to bundled apps and Windows/Linux do not need rounded corners.
+
 ## Config, Data, Cache
 
 The app separates storage into:

@@ -4881,6 +4881,9 @@ async function renderCurrentPage() {
       // probing the document. Explicit "left" / "right" prefs short-circuit
       // detection. When detection is inconclusive (e.g. pure-image PDFs)
       // we fall back to "left".
+      console.info(
+        `[riida] binding-pref: scope=${viewerSettings.scope} hasFileOverride=${viewerSettings.hasFileOverride} effective=${viewerSettings.bindingDirection}`,
+      );
       let resolvedBinding: "left" | "right";
       if (viewerSettings.bindingDirection === "auto") {
         const detected = await detectPdfBindingDirection(
@@ -4891,6 +4894,7 @@ async function renderCurrentPage() {
         resolvedBinding = detected ?? "left";
       } else {
         resolvedBinding = viewerSettings.bindingDirection;
+        console.info(`[riida] binding-detect: skipped (pref=${viewerSettings.bindingDirection})`);
       }
 
       pdfjsViewerEl.innerHTML = "";
@@ -5968,8 +5972,42 @@ function renderApp() {
   syncBookMetadataEditorUi();
 }
 
+// One-time migration for users upgrading from a release where
+// `bindingDirection` defaulted to "left". Their saved global row still
+// reads "left" even though the new default is "auto", so the auto-detect
+// branch never runs. Migrate the saved global to "auto" exactly once,
+// preserving any explicit per-file overrides.
+const BINDING_DIRECTION_AUTO_MIGRATION_KEY = "riida.bindingDirectionAutoMigrated.v1";
+
+async function migrateBindingDirectionDefaultIfNeeded() {
+  try {
+    if (window.localStorage.getItem(BINDING_DIRECTION_AUTO_MIGRATION_KEY) === "1") {
+      return;
+    }
+    for (const sourceType of ["pdf", "epub"] as const) {
+      const payload = await invoke<ViewerSettingsPayload>("load_viewer_preferences", {
+        filePath: null,
+        sourceType,
+      });
+      if (payload.global.bindingDirection === "left") {
+        const migrated: ViewerSettings = { ...payload.global, bindingDirection: "auto" };
+        await invoke("save_default_viewer_preferences", {
+          currentFilePath: null,
+          sourceType,
+          preferences: migrated,
+        });
+        console.info(`[riida] binding-pref: migrated ${sourceType} global "left" → "auto"`);
+      }
+    }
+    window.localStorage.setItem(BINDING_DIRECTION_AUTO_MIGRATION_KEY, "1");
+  } catch (error) {
+    console.error("Failed to migrate binding direction default:", error);
+  }
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
   await primeHomeDirCache();
+  await migrateBindingDirectionDefaultIfNeeded();
   const searchInput = document.querySelector<HTMLInputElement>("#library-search");
   const viewerStageEl = currentViewerStage();
   const navBackEl = document.querySelector<HTMLButtonElement>("#nav-back");

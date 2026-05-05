@@ -994,9 +994,45 @@ type PdfBindingDocumentLike = {
   numPages: number;
   getViewerPreferences?: () => Promise<unknown>;
   getPage: (pageNumber: number) => Promise<{
-    getTextContent: () => Promise<TextContentSampleLike>;
+    streamTextContent?: (params?: object) => ReadableStream<TextContentSampleLike>;
+    getTextContent?: () => Promise<TextContentSampleLike>;
   }>;
 };
+
+// Tauri's WKWebView on macOS does not implement
+// `ReadableStream[Symbol.asyncIterator]`, but pdf.js's `getTextContent`
+// (line 15294 of pdf.mjs in the bundled 5.6 build) consumes the stream
+// via `for await ... of`. Every call from us was therefore throwing
+// "undefined is not a function" before any text could be sampled. Read
+// the underlying stream by hand using `getReader()` so detection works
+// in production builds.
+async function readPdfTextContentForBinding(page: {
+  streamTextContent?: (params?: object) => ReadableStream<TextContentSampleLike>;
+  getTextContent?: () => Promise<TextContentSampleLike>;
+}): Promise<TextContentSampleLike> {
+  if (typeof page.streamTextContent !== "function") {
+    if (typeof page.getTextContent === "function") {
+      return page.getTextContent();
+    }
+    throw new Error("Page exposes neither streamTextContent nor getTextContent");
+  }
+  const stream = page.streamTextContent();
+  const reader = stream.getReader();
+  const items: Array<TextContentSampleLike["items"][number]> = [];
+  const styles: TextContentSampleLike["styles"] = {};
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      if (Array.isArray(value.items)) items.push(...value.items);
+      if (value.styles) Object.assign(styles, value.styles);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return { items, styles };
+}
 
 // Sparse-text Japanese tategaki PDFs often place real body content well
 // past the cover and front matter, so the heuristic walks up to this many
@@ -1033,7 +1069,7 @@ async function detectPdfBindingDirection(
     if (isCancelled()) return null;
     try {
       const page = await pdfDocument.getPage(pageNumber);
-      const content = await page.getTextContent();
+      const content = await readPdfTextContentForBinding(page);
       samples.push(content);
       pagesScanned = pageNumber;
     } catch (error) {

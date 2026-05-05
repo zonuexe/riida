@@ -68,6 +68,13 @@ import {
   computeSuggestions,
   type SearchSuggestion,
 } from "./search-suggestions";
+import {
+  type ShelfCondition,
+  type ShelfFieldKey,
+  type ShelfMode,
+  composeShelfQuery,
+  decomposeShelfQuery,
+} from "./shelf-query.ts";
 import { validateTagValue } from "./tag-utils";
 import {
   clampReadingPositionOffsetRatio,
@@ -882,6 +889,8 @@ type ShelfEditorState = {
   id: string | null;
   name: string;
   query: string;
+  mode: ShelfMode;
+  rows: ShelfCondition[];
   statusMessage: string;
   statusTone: "info" | "error" | "success";
 };
@@ -891,6 +900,8 @@ const shelfEditorState: ShelfEditorState = {
   id: null,
   name: "",
   query: "",
+  mode: "all",
+  rows: [],
   statusMessage: "",
   statusTone: "info",
 };
@@ -2114,48 +2125,190 @@ async function deleteCustomSource(source: CustomSource) {
   }
 }
 
+const SHELF_FIELD_OPTIONS: ReadonlyArray<{ value: ShelfFieldKey; label: string }> = [
+  { value: "free", label: "Any field" },
+  { value: "title", label: "Title" },
+  { value: "author", label: "Author" },
+  { value: "publisher", label: "Publisher" },
+  { value: "tag", label: "Tag" },
+  { value: "lang", label: "Language" },
+  { value: "file", label: "File name" },
+  { value: "path", label: "File path" },
+  { value: "source", label: "Source" },
+];
+
+function effectiveShelfQuery(): string {
+  if (shelfEditorState.mode === "custom") {
+    return shelfEditorState.query.trim();
+  }
+  return composeShelfQuery(shelfEditorState.mode, shelfEditorState.rows);
+}
+
+function renderShelfConditionRows() {
+  const container = document.querySelector<HTMLElement>("#shelf-editor-conditions");
+  if (!container) return;
+  container.innerHTML = "";
+  shelfEditorState.rows.forEach((row, index) => {
+    const rowEl = document.createElement("div");
+    rowEl.className = "shelf-editor-condition-row";
+
+    const fieldEl = document.createElement("select");
+    fieldEl.className = "shelf-editor-condition-field";
+    for (const opt of SHELF_FIELD_OPTIONS) {
+      const optionEl = document.createElement("option");
+      optionEl.value = opt.value;
+      optionEl.textContent = opt.label;
+      if (opt.value === row.field) optionEl.selected = true;
+      fieldEl.appendChild(optionEl);
+    }
+    fieldEl.addEventListener("change", () => {
+      shelfEditorState.rows[index] = { ...row, field: fieldEl.value as ShelfFieldKey };
+      syncShelfEditorUi();
+    });
+
+    const opEl = document.createElement("select");
+    opEl.className = "shelf-editor-condition-op";
+    const includesOpt = document.createElement("option");
+    includesOpt.value = "includes";
+    includesOpt.textContent = "contains";
+    const excludesOpt = document.createElement("option");
+    excludesOpt.value = "excludes";
+    excludesOpt.textContent = "does not contain";
+    opEl.appendChild(includesOpt);
+    opEl.appendChild(excludesOpt);
+    opEl.value = row.negate ? "excludes" : "includes";
+    opEl.addEventListener("change", () => {
+      shelfEditorState.rows[index] = { ...row, negate: opEl.value === "excludes" };
+      syncShelfEditorUi();
+    });
+
+    const valueEl = document.createElement("input");
+    valueEl.type = "text";
+    valueEl.className = "shelf-editor-condition-value";
+    valueEl.value = row.value;
+    valueEl.placeholder = "value";
+    valueEl.addEventListener("input", () => {
+      shelfEditorState.rows[index] = { ...row, value: valueEl.value };
+      // Skip full re-render to keep input focus; just refresh preview.
+      updateShelfPreview();
+    });
+
+    const removeEl = document.createElement("button");
+    removeEl.type = "button";
+    removeEl.className = "shelf-editor-condition-remove";
+    removeEl.setAttribute("aria-label", "Remove condition");
+    removeEl.title = "Remove condition";
+    removeEl.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
+    removeEl.addEventListener("click", () => {
+      shelfEditorState.rows.splice(index, 1);
+      syncShelfEditorUi();
+    });
+
+    rowEl.appendChild(fieldEl);
+    rowEl.appendChild(opEl);
+    rowEl.appendChild(valueEl);
+    rowEl.appendChild(removeEl);
+    container.appendChild(rowEl);
+  });
+}
+
+function updateShelfPreview() {
+  const previewEl = document.querySelector<HTMLElement>("#shelf-editor-preview");
+  if (!previewEl) return;
+  if (!shelfEditorState.isOpen || !lastSnapshot) {
+    previewEl.hidden = true;
+    return;
+  }
+  const query = effectiveShelfQuery();
+  if (query.length === 0) {
+    previewEl.hidden = true;
+    return;
+  }
+  const matched = filterVisibleBooks(lastSnapshot.books, null, null, null, false, query);
+  previewEl.hidden = false;
+  previewEl.dataset.tone = "info";
+  previewEl.textContent = `Preview: ${matched.length} book${matched.length === 1 ? "" : "s"} match`;
+}
+
 function syncShelfEditorUi() {
   const modalEl = document.querySelector<HTMLElement>("#shelf-editor-modal");
   const titleEl = document.querySelector<HTMLElement>("#shelf-editor-title");
   const nameEl = document.querySelector<HTMLInputElement>("#shelf-editor-name");
   const queryEl = document.querySelector<HTMLTextAreaElement>("#shelf-editor-query");
-  const previewEl = document.querySelector<HTMLElement>("#shelf-editor-preview");
+  const queryFieldEl = document.querySelector<HTMLElement>("#shelf-editor-query-field");
+  const conditionsFieldEl = document.querySelector<HTMLElement>("#shelf-editor-conditions-field");
   const statusEl = document.querySelector<HTMLElement>("#shelf-editor-status");
   const deleteEl = document.querySelector<HTMLButtonElement>("#shelf-editor-delete");
+  const modeEl = document.querySelector<HTMLElement>("#shelf-editor-mode");
   if (modalEl) modalEl.hidden = !shelfEditorState.isOpen;
   if (titleEl) titleEl.textContent = shelfEditorState.id ? "Edit shelf" : "New shelf";
   if (nameEl && document.activeElement !== nameEl) nameEl.value = shelfEditorState.name;
-  if (queryEl && document.activeElement !== queryEl) queryEl.value = shelfEditorState.query;
   if (deleteEl) deleteEl.hidden = !shelfEditorState.id;
+  if (modeEl) {
+    for (const btn of modeEl.querySelectorAll<HTMLButtonElement>(".shelf-editor-mode-btn")) {
+      const active = btn.dataset.mode === shelfEditorState.mode;
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+      btn.classList.toggle("is-selected", active);
+    }
+  }
+  const isCustom = shelfEditorState.mode === "custom";
+  if (queryFieldEl) queryFieldEl.hidden = !isCustom;
+  if (conditionsFieldEl) conditionsFieldEl.hidden = isCustom;
+  if (queryEl && document.activeElement !== queryEl) queryEl.value = shelfEditorState.query;
+  if (!isCustom) renderShelfConditionRows();
   if (statusEl) {
     statusEl.hidden = shelfEditorState.statusMessage.length === 0;
     statusEl.textContent = shelfEditorState.statusMessage;
     statusEl.dataset.tone = shelfEditorState.statusTone;
   }
-  if (previewEl) {
-    if (!shelfEditorState.isOpen || !lastSnapshot) {
-      previewEl.hidden = true;
-    } else {
-      const query = shelfEditorState.query.trim();
-      if (query.length === 0) {
-        previewEl.hidden = true;
+  updateShelfPreview();
+}
+
+function setShelfEditorMode(nextMode: ShelfMode) {
+  if (nextMode === shelfEditorState.mode) return;
+  if (nextMode === "custom") {
+    shelfEditorState.query = composeShelfQuery(shelfEditorState.mode, shelfEditorState.rows);
+    shelfEditorState.mode = "custom";
+    shelfEditorState.statusMessage = "";
+  } else {
+    if (shelfEditorState.mode === "custom") {
+      const decomposed = decomposeShelfQuery(shelfEditorState.query);
+      if (decomposed) {
+        shelfEditorState.rows = decomposed.rows;
+        shelfEditorState.mode = nextMode;
+        shelfEditorState.statusMessage = "";
       } else {
-        const matched = filterVisibleBooks(lastSnapshot.books, null, null, null, false, query);
-        previewEl.hidden = false;
-        previewEl.dataset.tone = "info";
-        previewEl.textContent = `Preview: ${matched.length} book${matched.length === 1 ? "" : "s"} match`;
+        shelfEditorState.statusMessage =
+          "This query is too complex to edit as conditions. Stay in Custom mode or simplify the query first.";
+        shelfEditorState.statusTone = "error";
+        syncShelfEditorUi();
+        return;
       }
+    } else {
+      shelfEditorState.mode = nextMode;
     }
   }
+  syncShelfEditorUi();
 }
 
 function openShelfEditor(shelf?: Shelf, presetQuery?: string) {
   shelfEditorState.isOpen = true;
   shelfEditorState.id = shelf?.id ?? null;
   shelfEditorState.name = shelf?.name ?? "";
-  shelfEditorState.query = shelf?.query ?? presetQuery ?? "";
+  const initialQuery = shelf?.query ?? presetQuery ?? "";
+  shelfEditorState.query = initialQuery;
   shelfEditorState.statusMessage = "";
   shelfEditorState.statusTone = "info";
+
+  const decomposed = decomposeShelfQuery(initialQuery);
+  if (decomposed) {
+    shelfEditorState.mode = decomposed.rows.length === 0 ? "all" : decomposed.mode;
+    shelfEditorState.rows = decomposed.rows;
+  } else {
+    shelfEditorState.mode = "custom";
+    shelfEditorState.rows = [];
+  }
+
   syncShelfEditorUi();
   setTimeout(() => {
     const nameEl = document.querySelector<HTMLInputElement>("#shelf-editor-name");
@@ -2173,7 +2326,10 @@ async function saveShelfFromEditor() {
   const nameEl = document.querySelector<HTMLInputElement>("#shelf-editor-name");
   const queryEl = document.querySelector<HTMLTextAreaElement>("#shelf-editor-query");
   const name = (nameEl?.value ?? shelfEditorState.name).trim();
-  const query = (queryEl?.value ?? shelfEditorState.query).trim();
+  if (shelfEditorState.mode === "custom" && queryEl) {
+    shelfEditorState.query = queryEl.value;
+  }
+  const query = effectiveShelfQuery();
   if (!name) {
     shelfEditorState.statusMessage = "Name is required.";
     shelfEditorState.statusTone = "error";
@@ -6990,7 +7146,28 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
   shelfEditorQueryEl?.addEventListener("input", () => {
     shelfEditorState.query = shelfEditorQueryEl.value;
+    updateShelfPreview();
+  });
+  const shelfEditorModeEl = document.querySelector<HTMLElement>("#shelf-editor-mode");
+  shelfEditorModeEl?.addEventListener("click", (event) => {
+    const target = (event.target as HTMLElement).closest<HTMLButtonElement>(
+      ".shelf-editor-mode-btn",
+    );
+    if (!target) return;
+    const mode = target.dataset.mode as ShelfMode | undefined;
+    if (!mode) return;
+    setShelfEditorMode(mode);
+  });
+  const shelfEditorAddConditionEl = document.querySelector<HTMLButtonElement>(
+    "#shelf-editor-add-condition",
+  );
+  shelfEditorAddConditionEl?.addEventListener("click", () => {
+    shelfEditorState.rows.push({ field: "free", negate: false, value: "" });
     syncShelfEditorUi();
+    setTimeout(() => {
+      const inputs = document.querySelectorAll<HTMLInputElement>(".shelf-editor-condition-value");
+      inputs[inputs.length - 1]?.focus();
+    }, 0);
   });
 
   tagEditorCloseEl?.addEventListener("click", closeTagEditor);

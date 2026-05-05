@@ -620,7 +620,46 @@
             <span>Name</span>
             <input id="shelf-editor-name" type="text" maxlength="200" />
           </label>
-          <label class="app-settings-field">
+          <div class="app-settings-field">
+            <span>Match</span>
+            <div id="shelf-editor-mode" class="shelf-editor-mode" role="tablist">
+              <button
+                class="shelf-editor-mode-btn"
+                type="button"
+                data-mode="all"
+                role="tab"
+                aria-selected="true"
+              >
+                All conditions
+              </button>
+              <button
+                class="shelf-editor-mode-btn"
+                type="button"
+                data-mode="any"
+                role="tab"
+                aria-selected="false"
+              >
+                Any condition
+              </button>
+              <button
+                class="shelf-editor-mode-btn"
+                type="button"
+                data-mode="custom"
+                role="tab"
+                aria-selected="false"
+              >
+                Custom query
+              </button>
+            </div>
+          </div>
+          <div id="shelf-editor-conditions-field" class="app-settings-field">
+            <span>Conditions</span>
+            <div id="shelf-editor-conditions" class="shelf-editor-conditions"></div>
+            <button id="shelf-editor-add-condition" class="app-settings-secondary" type="button">
+              + Add condition
+            </button>
+          </div>
+          <label id="shelf-editor-query-field" class="app-settings-field" hidden>
             <span>Query</span>
             <textarea
               id="shelf-editor-query"

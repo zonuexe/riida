@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  type PdfPageLike,
   type TextContentSampleLike,
   detectBindingFromTextContent,
   detectBindingFromViewerPreferences,
   detectPdfBinding,
+  readPageTextContentForBinding,
 } from "./pdf-binding-detect";
 
 describe("detectBindingFromViewerPreferences", () => {
@@ -185,5 +187,92 @@ describe("detectPdfBinding", () => {
 
   it("returns null when neither signal is present", () => {
     expect(detectPdfBinding(null, [])).toBeNull();
+  });
+});
+
+describe("readPageTextContentForBinding", () => {
+  function streamFromChunks(
+    chunks: ReadonlyArray<TextContentSampleLike>,
+  ): ReadableStream<TextContentSampleLike> {
+    return new ReadableStream<TextContentSampleLike>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+  }
+
+  it("concatenates items and merges styles across multiple stream chunks", async () => {
+    const page: PdfPageLike = {
+      streamTextContent: () =>
+        streamFromChunks([
+          {
+            items: [{ str: "あ", fontName: "v", transform: [10, 0, 0, 10, 100, 800] }],
+            styles: { v: { vertical: true } },
+          },
+          {
+            items: [{ str: "い", fontName: "v", transform: [10, 0, 0, 10, 100, 780] }],
+            styles: { h: { vertical: false } },
+          },
+        ]),
+    };
+
+    const sample = await readPageTextContentForBinding(page);
+
+    expect(sample.items).toHaveLength(2);
+    expect(sample.styles).toEqual({ v: { vertical: true }, h: { vertical: false } });
+  });
+
+  it("returns an empty sample when the stream closes immediately", async () => {
+    const page: PdfPageLike = {
+      streamTextContent: () => streamFromChunks([]),
+    };
+
+    const sample = await readPageTextContentForBinding(page);
+
+    expect(sample.items).toEqual([]);
+    expect(sample.styles).toEqual({});
+  });
+
+  it("falls back to getTextContent when streamTextContent is unavailable", async () => {
+    const fallbackContent: TextContentSampleLike = {
+      items: [{ str: "x", fontName: "h", transform: [10, 0, 0, 10, 50, 700] }],
+      styles: { h: { vertical: false } },
+    };
+    const page: PdfPageLike = {
+      getTextContent: () => Promise.resolve(fallbackContent),
+    };
+
+    expect(await readPageTextContentForBinding(page)).toBe(fallbackContent);
+  });
+
+  it("does not consume the stream via async iteration", async () => {
+    // Regression guard for the WKWebView fix: the helper must NOT depend on
+    // ReadableStream[Symbol.asyncIterator]. Hand it a stream whose async
+    // iterator is intentionally absent and the read must still succeed.
+    const page: PdfPageLike = {
+      streamTextContent: () => {
+        const stream = streamFromChunks([
+          {
+            items: [{ str: "ok", fontName: "h", transform: [10, 0, 0, 10, 0, 0] }],
+            styles: {},
+          },
+        ]);
+        Object.defineProperty(stream, Symbol.asyncIterator, {
+          value: undefined,
+          configurable: true,
+        });
+        return stream;
+      },
+    };
+
+    const sample = await readPageTextContentForBinding(page);
+    expect(sample.items).toHaveLength(1);
+  });
+
+  it("throws when neither stream nor promise API is exposed", async () => {
+    await expect(readPageTextContentForBinding({})).rejects.toThrow(
+      /streamTextContent|getTextContent/,
+    );
   });
 });

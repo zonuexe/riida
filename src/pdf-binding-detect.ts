@@ -143,6 +143,47 @@ export function detectPdfBinding(
   return detectBindingFromTextContent(samples);
 }
 
+export type PdfPageLike = {
+  streamTextContent?: (params?: object) => ReadableStream<TextContentSampleLike>;
+  getTextContent?: () => Promise<TextContentSampleLike>;
+};
+
+/**
+ * Drain a pdf.js page's text content into a single sample. Tauri's
+ * WKWebView on macOS does not implement
+ * `ReadableStream[Symbol.asyncIterator]`, but `PDFPageProxy.getTextContent`
+ * (pdf.js 5.6) consumes the underlying `streamTextContent` ReadableStream
+ * with `for await ... of`. Read the stream by hand via `getReader()` so
+ * detection works in production builds while still falling back to
+ * `getTextContent` if a runtime exposes only that.
+ */
+export async function readPageTextContentForBinding(
+  page: PdfPageLike,
+): Promise<TextContentSampleLike> {
+  if (typeof page.streamTextContent !== "function") {
+    if (typeof page.getTextContent === "function") {
+      return page.getTextContent();
+    }
+    throw new Error("Page exposes neither streamTextContent nor getTextContent");
+  }
+  const stream = page.streamTextContent();
+  const reader = stream.getReader();
+  const items: Array<TextContentSampleLike["items"][number]> = [];
+  const styles: TextContentSampleLike["styles"] = {};
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      if (Array.isArray(value.items)) items.push(...value.items);
+      if (value.styles) Object.assign(styles, value.styles);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return { items, styles };
+}
+
 function isTextItem(candidate: TextItemLike | { type: string }): candidate is TextItemLike {
   return (
     typeof (candidate as TextItemLike).str === "string" &&

@@ -88,6 +88,7 @@ When changing this logic, preserve migration behavior unless there is an explici
 Example development config in [riida.toml.example](riida.toml.example):
 
 ```toml
+version = "0.5.1"
 library_roots = ["~/Documents/Ebooks/"]
 excluded_patterns = ["**/backup/**", "*.bak.pdf"]
 pdf_renderer = "pdfjs"
@@ -95,9 +96,29 @@ pdf_renderer = "pdfjs"
 
 Important fields:
 
+- `version`: riida release that wrote the file. Stamped automatically on
+  save. Absence on an existing config triggers `apply_pre_version_migrations`
+  during startup before the file is rewritten with the current version.
 - `library_roots`: recursively scanned and watched
 - `excluded_patterns`: glob patterns matched against file names and paths
 - `pdf_renderer`: `"pdfjs"` or `"native"`
+
+### Migration scheme
+
+`migrate_legacy_config_if_needed` runs once during `tauri::Builder::setup`
+between `prepare_storage` and the first `load_config`. It reads the raw
+`AppConfigFile`, and if `version` is absent on an existing file it:
+
+1. Opens the SQLite DB and applies `apply_pre_version_migrations`
+   (currently: flip `binding_direction` from the legacy default `"left"`
+   to `"auto"` on global rows only; per-file rows stay untouched because
+   they represent explicit user choices).
+2. Stamps the current `CARGO_PKG_VERSION` into the file and rewrites it.
+
+When adding a future migration, add a new step inside
+`apply_pre_version_migrations` (or split into a versioned ladder if
+finer granularity becomes useful). Fresh installs without a config file
+skip the path entirely; the version is written on the first save.
 
 ## PDF Viewer Notes
 

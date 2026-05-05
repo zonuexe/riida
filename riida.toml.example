@@ -1,3 +1,7 @@
+# `version` is the riida release that wrote this file. The app stamps
+# it on save and reads it back on launch to decide whether one-shot
+# migrations need to run; absence indicates a pre-versioning install.
+version = "0.5.1"
 library_roots = ["~/Documents/Ebooks/"]
 excluded_patterns = ["**/backup/**", "*.bak.pdf"]
 pdf_renderer = "pdfjs"

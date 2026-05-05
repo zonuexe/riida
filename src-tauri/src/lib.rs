@@ -128,6 +128,11 @@ struct AppConfig {
 
 #[derive(Clone, Deserialize, Serialize)]
 struct AppConfigFile {
+    /// `riida` package version that wrote this file. Absence indicates the
+    /// file was written before the version-stamped migration scheme was
+    /// introduced and may need fix-up migrations applied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    version: Option<String>,
     library_roots: Option<Vec<String>>,
     excluded_patterns: Option<Vec<String>>,
     #[serde(default)]
@@ -630,6 +635,54 @@ fn load_config() -> Result<AppConfig, String> {
     load_config_file(&config_file())
 }
 
+/// If the config file exists without a `version` field it predates the
+/// version-stamped migration scheme. Run the pending fix-ups against the
+/// SQLite DB and rewrite the file with the current version stamped, so
+/// subsequent launches skip the work.
+fn migrate_legacy_config_if_needed(config_path: &Path) -> Result<(), String> {
+    let connection = open_database()?;
+    migrate_legacy_config_with_connection(config_path, &connection)
+}
+
+fn migrate_legacy_config_with_connection(
+    config_path: &Path,
+    connection: &Connection,
+) -> Result<(), String> {
+    if !config_path.exists() {
+        return Ok(());
+    }
+    let contents = fs::read_to_string(config_path).map_err(|error| error.to_string())?;
+    let file_config: AppConfigFile =
+        toml::from_str(&contents).map_err(|error| error.to_string())?;
+    if file_config.version.is_some() {
+        return Ok(());
+    }
+
+    apply_pre_version_migrations(connection)?;
+
+    let stamped = AppConfigFile {
+        version: Some(env!("CARGO_PKG_VERSION").to_string()),
+        ..file_config
+    };
+    let serialized = toml::to_string_pretty(&stamped).map_err(|error| error.to_string())?;
+    fs::write(config_path, serialized).map_err(|error| error.to_string())
+}
+
+/// Migrations to apply once when an unversioned config is detected:
+/// flip global viewer preferences whose `binding_direction` is the legacy
+/// default `"left"` to the new `"auto"`. File-level rows are explicit
+/// user choices and stay untouched.
+fn apply_pre_version_migrations(connection: &Connection) -> Result<(), String> {
+    connection
+        .execute(
+            "UPDATE viewer_preferences SET binding_direction = 'auto' \
+             WHERE binding_direction = 'left' AND scope_key LIKE ?1",
+            params![format!("{VIEWER_DEFAULT_SCOPE_KEY}:%")],
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 fn lock_config<'a>(
     config_state: &'a State<'a, ConfigState>,
 ) -> Result<std::sync::MutexGuard<'a, AppConfig>, String> {
@@ -683,6 +736,7 @@ fn normalize_config_input(config: AppConfigFile) -> AppConfig {
 
 fn normalize_gui_config_input(config: AppConfigInput) -> AppConfig {
     normalize_config_input(AppConfigFile {
+        version: None,
         library_roots: Some(config.library_roots),
         excluded_patterns: Some(config.excluded_patterns),
         excluded_dir_names: None,
@@ -695,6 +749,7 @@ fn normalize_gui_config_input(config: AppConfigInput) -> AppConfig {
 
 fn save_config_input_file(input: &AppConfigInput) -> Result<(), String> {
     let payload = AppConfigFile {
+        version: Some(env!("CARGO_PKG_VERSION").to_string()),
         library_roots: Some(
             input
                 .library_roots
@@ -3067,6 +3122,7 @@ pub fn run() {
             let paths = resolve_app_paths()?;
             let _ = APP_PATHS.set(paths.clone());
             prepare_storage(&paths)?;
+            migrate_legacy_config_if_needed(&paths.config_file)?;
             let config = load_config()?;
             start_library_watcher(app.handle().clone(), config.clone())?;
             app.manage(ConfigState {
@@ -3360,6 +3416,7 @@ mod tests {
     fn normalize_config_input_expands_home_and_normalizes_patterns() {
         let home = std::env::var("HOME").expect("HOME should exist for tests");
         let config = normalize_config_input(AppConfigFile {
+            version: None,
             library_roots: Some(vec!["~/Books".to_string(), "  ".to_string()]),
             excluded_patterns: Some(vec!["Prefix_*".to_string(), r"**\BACKUP\**".to_string()]),
             excluded_dir_names: None,
@@ -3639,6 +3696,225 @@ mod tests {
         assert_eq!(merged.vertical_gap_mode, "compact");
         assert!(!merged.treat_first_page_as_cover);
         assert_eq!(merged.background_mode, "inherit-theme");
+    }
+
+    #[test]
+    fn pre_version_migration_promotes_global_left_to_auto() {
+        let connection = test_connection();
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF),
+            None,
+            VIEWER_SOURCE_TYPE_PDF,
+            viewer_preferences(
+                "spread",
+                "left",
+                "fit-height",
+                "center",
+                "compact",
+                true,
+                "default",
+            ),
+        )
+        .expect("global pdf preferences should save");
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_EPUB),
+            None,
+            VIEWER_SOURCE_TYPE_EPUB,
+            viewer_preferences(
+                "single",
+                "left",
+                "fit-height",
+                "center",
+                "wide",
+                false,
+                "default",
+            ),
+        )
+        .expect("global epub preferences should save");
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_file_scope_key("/tmp/book.pdf", VIEWER_SOURCE_TYPE_PDF),
+            Some("/tmp/book.pdf"),
+            VIEWER_SOURCE_TYPE_PDF,
+            viewer_preferences("", "left", "", "", "", false, ""),
+        )
+        .expect("file pdf preferences should save");
+
+        apply_pre_version_migrations(&connection).expect("migration should run");
+
+        let pdf_global = load_saved_viewer_preferences(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF),
+        )
+        .expect("global pdf row should load")
+        .expect("global pdf row should exist");
+        let epub_global = load_saved_viewer_preferences(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_EPUB),
+        )
+        .expect("global epub row should load")
+        .expect("global epub row should exist");
+        let file_row = load_saved_viewer_preferences(
+            &connection,
+            &viewer_file_scope_key("/tmp/book.pdf", VIEWER_SOURCE_TYPE_PDF),
+        )
+        .expect("file row should load")
+        .expect("file row should exist");
+
+        assert_eq!(pdf_global.binding_direction, "auto");
+        assert_eq!(epub_global.binding_direction, "auto");
+        // Per-file rows are explicit user choices and must not be touched.
+        assert_eq!(file_row.binding_direction, "left");
+    }
+
+    #[test]
+    fn pre_version_migration_leaves_explicit_global_right_alone() {
+        let connection = test_connection();
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF),
+            None,
+            VIEWER_SOURCE_TYPE_PDF,
+            viewer_preferences(
+                "spread",
+                "right",
+                "fit-height",
+                "center",
+                "compact",
+                true,
+                "default",
+            ),
+        )
+        .expect("global preferences should save");
+
+        apply_pre_version_migrations(&connection).expect("migration should run");
+
+        let global = load_saved_viewer_preferences(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF),
+        )
+        .expect("global row should load")
+        .expect("global row should exist");
+        assert_eq!(global.binding_direction, "right");
+    }
+
+    #[test]
+    fn legacy_config_migration_stamps_version_and_runs_once() {
+        let temp_root = unique_temp_dir("legacy-config-migration");
+        let config_path = temp_root.join(CONFIG_FILE);
+        fs::write(
+            &config_path,
+            "library_roots = [\"~/Documents/Ebooks/\"]\npdf_renderer = \"pdfjs\"\n",
+        )
+        .expect("legacy config should be written");
+
+        let connection = test_connection();
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF),
+            None,
+            VIEWER_SOURCE_TYPE_PDF,
+            viewer_preferences(
+                "spread",
+                "left",
+                "fit-height",
+                "center",
+                "compact",
+                true,
+                "default",
+            ),
+        )
+        .expect("global preferences should save");
+
+        migrate_legacy_config_with_connection(&config_path, &connection)
+            .expect("legacy migration should succeed");
+
+        let global = load_saved_viewer_preferences(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF),
+        )
+        .expect("global row should load")
+        .expect("global row should exist");
+        assert_eq!(global.binding_direction, "auto");
+
+        let after_first = fs::read_to_string(&config_path).expect("config should be readable");
+        assert!(
+            after_first.contains(&format!("version = \"{}\"", env!("CARGO_PKG_VERSION"))),
+            "stamped config should include current version: {after_first}"
+        );
+
+        // Second run with version present must be a no-op: revert global to
+        // "left" by hand and confirm the migration leaves it alone.
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF),
+            None,
+            VIEWER_SOURCE_TYPE_PDF,
+            viewer_preferences(
+                "spread",
+                "left",
+                "fit-height",
+                "center",
+                "compact",
+                true,
+                "default",
+            ),
+        )
+        .expect("global preferences should save");
+        migrate_legacy_config_with_connection(&config_path, &connection)
+            .expect("repeat run should succeed");
+        let after_second = load_saved_viewer_preferences(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF),
+        )
+        .expect("global row should load")
+        .expect("global row should exist");
+        assert_eq!(
+            after_second.binding_direction, "left",
+            "version-stamped config should not re-run the migration",
+        );
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn legacy_config_migration_is_noop_when_config_missing() {
+        let temp_root = unique_temp_dir("legacy-config-missing");
+        let config_path = temp_root.join(CONFIG_FILE);
+        let connection = test_connection();
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF),
+            None,
+            VIEWER_SOURCE_TYPE_PDF,
+            viewer_preferences(
+                "spread",
+                "left",
+                "fit-height",
+                "center",
+                "compact",
+                true,
+                "default",
+            ),
+        )
+        .expect("global preferences should save");
+
+        migrate_legacy_config_with_connection(&config_path, &connection)
+            .expect("missing config should not error");
+
+        let global = load_saved_viewer_preferences(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF),
+        )
+        .expect("global row should load")
+        .expect("global row should exist");
+        // Fresh installs have no config file yet — the migration must not
+        // touch the DB until a real upgrade is detected.
+        assert_eq!(global.binding_direction, "left");
+
+        let _ = fs::remove_dir_all(&temp_root);
     }
 
     #[test]

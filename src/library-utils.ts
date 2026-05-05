@@ -1,3 +1,5 @@
+import { type LeafNode, evaluateAst, parseSearchQueryAstSafe } from "./search-query-ast.ts";
+
 export type EmptyLibraryStateInput = {
   libraryRoots: string[];
   existingLibraryRoots: string[];
@@ -116,50 +118,6 @@ export function normalizeSearchText(value: string) {
     .normalize("NFKC")
     .toLocaleLowerCase("ja")
     .replace(/[\s\-_./]+/g, "");
-}
-
-const KNOWN_FIELDS = new Set([
-  "title",
-  "author",
-  "publisher",
-  "tag",
-  "lang",
-  "file",
-  "path",
-  "source",
-  "read",
-]);
-
-export type QueryToken =
-  | { kind: "field"; field: string; value: string; negate: boolean }
-  | { kind: "free"; value: string };
-
-function parseSearchQuery(raw: string): QueryToken[] {
-  const tokens: QueryToken[] = [];
-  // Tokenise respecting double-quoted phrases, e.g. author:"Robert C. Martin"
-  const re = /(-?)(?:"([^"]*)"|((?:[^\s"\\]|\\.)+))/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = re.exec(raw)) !== null) {
-    const negate = match[1] === "-";
-    const atom = match[2] ?? match[3] ?? ""; // quoted or unquoted
-    const colon = atom.indexOf(":");
-
-    if (colon > 0) {
-      const field = atom.slice(0, colon).toLowerCase();
-      const value = atom.slice(colon + 1);
-      if (KNOWN_FIELDS.has(field) && value.length > 0) {
-        tokens.push({ kind: "field", field, value, negate });
-        continue;
-      }
-    }
-
-    if (atom.length > 0) {
-      tokens.push({ kind: "free", value: negate ? `-${atom}` : atom });
-    }
-  }
-
-  return tokens;
 }
 
 export function formatBookLocation(filePath: string, homePath: string | null) {
@@ -310,6 +268,13 @@ function matchesFreeToken(book: SearchableBook, value: string): boolean {
   );
 }
 
+function matchesLeaf(leaf: LeafNode, book: SearchableBook): boolean {
+  if (leaf.kind === "field") {
+    return matchesFieldToken(book, leaf.field, leaf.value);
+  }
+  return matchesFreeToken(book, leaf.value);
+}
+
 export function filterVisibleBooks<T extends SearchableBook>(
   books: T[],
   activeDirectory: string | null,
@@ -318,7 +283,7 @@ export function filterVisibleBooks<T extends SearchableBook>(
   activeTagDirectOnly: boolean,
   searchQuery: string,
 ) {
-  const tokens = parseSearchQuery(searchQuery);
+  const ast = parseSearchQueryAstSafe(searchQuery);
 
   return books.filter((book) => {
     if (activeExternalSource && book.sourceType !== activeExternalSource) {
@@ -347,14 +312,7 @@ export function filterVisibleBooks<T extends SearchableBook>(
       }
     }
 
-    for (const token of tokens) {
-      if (token.kind === "field") {
-        const matches = matchesFieldToken(book, token.field, token.value);
-        if (token.negate ? matches : !matches) return false;
-      } else {
-        if (!matchesFreeToken(book, token.value)) return false;
-      }
-    }
+    if (!evaluateAst(ast, book, matchesLeaf)) return false;
 
     return true;
   });

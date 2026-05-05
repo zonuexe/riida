@@ -105,6 +105,47 @@ describe("filterVisibleBooks", () => {
     expect(filterVisibleBooks(books, null, null, "kindle", false, "")).toEqual([books[3]]);
   });
 
+  it("supports OR between free tokens", () => {
+    const results = filterVisibleBooks(books, null, null, null, false, "rust OR novel");
+    expect(results).toEqual([books[1], books[2], books[4]]);
+  });
+
+  it("supports OR between field tokens", () => {
+    const results = filterVisibleBooks(
+      books,
+      null,
+      null,
+      null,
+      false,
+      "tag:fiction OR tag:magazine",
+    );
+    expect(results).toEqual([books[0], books[2], books[3]]);
+  });
+
+  it("supports parenthesised grouping with negation", () => {
+    const results = filterVisibleBooks(
+      books,
+      null,
+      null,
+      null,
+      false,
+      "(tag:tech OR tag:magazine) -source:kindle",
+    );
+    expect(results).toEqual([books[0], books[1], books[4]]);
+  });
+
+  it("supports explicit AND keyword equivalent to whitespace", () => {
+    const explicit = filterVisibleBooks(books, null, null, null, false, "tag:tech AND rust");
+    const implicit = filterVisibleBooks(books, null, null, null, false, "tag:tech rust");
+    expect(explicit).toEqual(implicit);
+  });
+
+  it("falls back to free-text on malformed query", () => {
+    // Unclosed paren — safe parser treats the whole string as a free token.
+    const results = filterVisibleBooks(books, null, null, null, false, "(rust");
+    expect(results).toEqual([]);
+  });
+
   it("can restrict parent tags to directly tagged files only", () => {
     const booksWithHierarchicalTags = [
       { fileName: "One.pdf", filePath: "/Books/One.pdf", tags: ["language/lean"] },

@@ -917,6 +917,16 @@ const SHELF_ICONS: ReadonlyArray<{ cls: string; label: string }> = [
   { cls: "fa-solid fa-feather", label: "Feather" },
   { cls: "fa-solid fa-leaf", label: "Leaf" },
   { cls: "fa-solid fa-mug-hot", label: "Mug" },
+  { cls: "fa-solid fa-square-root-variable", label: "Square root" },
+  { cls: "fa-solid fa-superscript", label: "Superscript" },
+  { cls: "fa-solid fa-robot", label: "Robot" },
+  { cls: "fa-solid fa-chess-knight", label: "Chess knight" },
+  { cls: "fa-regular fa-chess-knight", label: "Chess knight (regular)" },
+  { cls: "fa-regular fa-compass", label: "Compass" },
+  { cls: "fa-solid fa-person-running", label: "Running" },
+  { cls: "fa-solid fa-code", label: "Code" },
+  { cls: "fa-solid fa-terminal", label: "Terminal" },
+  { cls: "fa-brands fa-square-github", label: "GitHub" },
 ];
 
 const shelfEditorState: ShelfEditorState = {

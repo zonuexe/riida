@@ -889,17 +889,42 @@ type ShelfEditorState = {
   id: string | null;
   name: string;
   query: string;
+  icon: string;
   mode: ShelfMode;
   rows: ShelfCondition[];
   statusMessage: string;
   statusTone: "info" | "error" | "success";
 };
 
+const SHELF_DEFAULT_ICON = "fa-solid fa-bookmark";
+
+const SHELF_ICONS: ReadonlyArray<{ cls: string; label: string }> = [
+  { cls: "fa-solid fa-bookmark", label: "Bookmark" },
+  { cls: "fa-regular fa-bookmark", label: "Bookmark (regular)" },
+  { cls: "fa-solid fa-star", label: "Star" },
+  { cls: "fa-solid fa-heart", label: "Heart" },
+  { cls: "fa-solid fa-fire", label: "Fire" },
+  { cls: "fa-solid fa-flag", label: "Flag" },
+  { cls: "fa-solid fa-tag", label: "Tag" },
+  { cls: "fa-solid fa-folder", label: "Folder" },
+  { cls: "fa-solid fa-list", label: "List" },
+  { cls: "fa-solid fa-magnifying-glass", label: "Search" },
+  { cls: "fa-solid fa-eye", label: "Eye" },
+  { cls: "fa-solid fa-clock", label: "Clock" },
+  { cls: "fa-solid fa-graduation-cap", label: "Graduation cap" },
+  { cls: "fa-solid fa-microscope", label: "Microscope" },
+  { cls: "fa-solid fa-flask", label: "Flask" },
+  { cls: "fa-solid fa-feather", label: "Feather" },
+  { cls: "fa-solid fa-leaf", label: "Leaf" },
+  { cls: "fa-solid fa-mug-hot", label: "Mug" },
+];
+
 const shelfEditorState: ShelfEditorState = {
   isOpen: false,
   id: null,
   name: "",
   query: "",
+  icon: SHELF_DEFAULT_ICON,
   mode: "all",
   rows: [],
   statusMessage: "",
@@ -2251,6 +2276,12 @@ function syncShelfEditorUi() {
       btn.classList.toggle("is-selected", active);
     }
   }
+  const iconPickerEl = document.querySelector<HTMLElement>("#shelf-editor-icon-picker");
+  if (iconPickerEl) {
+    for (const btn of iconPickerEl.querySelectorAll<HTMLButtonElement>("[data-icon]")) {
+      btn.classList.toggle("is-selected", btn.dataset.icon === shelfEditorState.icon);
+    }
+  }
   const isCustom = shelfEditorState.mode === "custom";
   if (queryFieldEl) queryFieldEl.hidden = !isCustom;
   if (conditionsFieldEl) conditionsFieldEl.hidden = isCustom;
@@ -2297,6 +2328,7 @@ function openShelfEditor(shelf?: Shelf, presetQuery?: string) {
   shelfEditorState.name = shelf?.name ?? "";
   const initialQuery = shelf?.query ?? presetQuery ?? "";
   shelfEditorState.query = initialQuery;
+  shelfEditorState.icon = shelf?.icon ?? SHELF_DEFAULT_ICON;
   shelfEditorState.statusMessage = "";
   shelfEditorState.statusTone = "info";
 
@@ -2344,7 +2376,7 @@ async function saveShelfFromEditor() {
   }
   try {
     const saved = await invoke<Shelf>("save_shelf", {
-      draft: { id: shelfEditorState.id, name, query, icon: null },
+      draft: { id: shelfEditorState.id, name, query, icon: shelfEditorState.icon },
     });
     await refreshShelves();
     closeShelfEditor();
@@ -5883,8 +5915,40 @@ function renderSidebar(snapshot: LibrarySnapshot) {
 
   for (const shelf of viewerState.shelves) {
     const row = document.createElement("div");
-    row.className = "nav-tree-row";
+    row.className = "nav-tree-row shelf-row";
     row.style.setProperty("--depth", "0");
+    row.draggable = true;
+    row.dataset.shelfId = shelf.id;
+    row.addEventListener("dragstart", (event) => {
+      shelfDragId = shelf.id;
+      row.classList.add("is-dragging");
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", shelf.id);
+      }
+    });
+    row.addEventListener("dragend", () => {
+      shelfDragId = null;
+      row.classList.remove("is-dragging");
+      navEl.querySelectorAll(".shelf-row").forEach((el) => el.classList.remove("is-drop-target"));
+    });
+    row.addEventListener("dragover", (event) => {
+      if (!shelfDragId || shelfDragId === shelf.id) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      row.classList.add("is-drop-target");
+    });
+    row.addEventListener("dragleave", () => {
+      row.classList.remove("is-drop-target");
+    });
+    row.addEventListener("drop", (event) => {
+      event.preventDefault();
+      row.classList.remove("is-drop-target");
+      const sourceId = shelfDragId;
+      shelfDragId = null;
+      if (!sourceId || sourceId === shelf.id) return;
+      void reorderShelvesByDrop(sourceId, shelf.id);
+    });
     const spacer = document.createElement("span");
     spacer.className = "nav-toggle-spacer";
     spacer.setAttribute("aria-hidden", "true");
@@ -5921,6 +5985,29 @@ function renderSidebar(snapshot: LibrarySnapshot) {
     });
     row.appendChild(button);
     navEl.appendChild(row);
+  }
+}
+
+let shelfDragId: string | null = null;
+
+async function reorderShelvesByDrop(sourceId: string, targetId: string) {
+  const ids = viewerState.shelves.map((s) => s.id);
+  const sourceIndex = ids.indexOf(sourceId);
+  const targetIndex = ids.indexOf(targetId);
+  if (sourceIndex < 0 || targetIndex < 0) return;
+  ids.splice(sourceIndex, 1);
+  const insertAt = targetIndex < sourceIndex ? targetIndex : targetIndex;
+  ids.splice(insertAt, 0, sourceId);
+  // Optimistic local reorder for instant feedback.
+  const byId = new Map(viewerState.shelves.map((s) => [s.id, s]));
+  viewerState.shelves = ids.map((id) => byId.get(id)!).filter(Boolean);
+  renderApp();
+  try {
+    await invoke("reorder_shelves", { ids });
+  } catch (error) {
+    console.error("failed to reorder shelves", error);
+    await refreshShelves();
+    renderApp();
   }
 }
 
@@ -6474,6 +6561,11 @@ function renderMain(snapshot: LibrarySnapshot) {
     searchInput.value = viewerState.searchQuery;
   }
 
+  const searchSaveEl = document.querySelector<HTMLButtonElement>("#sidebar-search-save");
+  if (searchSaveEl) {
+    searchSaveEl.hidden = viewerState.searchQuery.trim().length === 0;
+  }
+
   if (tagDirectFilterEl && tagDirectOnlyEl) {
     const shouldShow = Boolean(viewerState.activeTag && selectedTagNode?.hasChildren);
     tagDirectFilterEl.hidden = !shouldShow;
@@ -6916,6 +7008,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     renderApp();
   });
 
+  const sidebarSearchSaveEl = document.querySelector<HTMLButtonElement>("#sidebar-search-save");
+  sidebarSearchSaveEl?.addEventListener("click", () => {
+    const presetQuery = viewerState.searchQuery.trim();
+    if (presetQuery.length === 0) return;
+    openShelfEditor(undefined, presetQuery);
+  });
+
   sidebarHomeOpenEl?.addEventListener("click", () => {
     void navigateToState(
       {
@@ -7161,6 +7260,22 @@ window.addEventListener("DOMContentLoaded", async () => {
   const shelfEditorAddConditionEl = document.querySelector<HTMLButtonElement>(
     "#shelf-editor-add-condition",
   );
+  const shelfIconPickerEl = document.querySelector<HTMLElement>("#shelf-editor-icon-picker");
+  if (shelfIconPickerEl && shelfIconPickerEl.childElementCount === 0) {
+    for (const icon of SHELF_ICONS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "custom-source-icon-option";
+      btn.dataset.icon = icon.cls;
+      btn.title = icon.label;
+      btn.innerHTML = `<i class="${icon.cls}" aria-hidden="true"></i>`;
+      btn.addEventListener("click", () => {
+        shelfEditorState.icon = icon.cls;
+        syncShelfEditorUi();
+      });
+      shelfIconPickerEl.appendChild(btn);
+    }
+  }
   shelfEditorAddConditionEl?.addEventListener("click", () => {
     shelfEditorState.rows.push({ field: "free", negate: false, value: "" });
     syncShelfEditorUi();

@@ -52,6 +52,16 @@
               aria-expanded="false"
               aria-controls="library-search-suggestions"
             />
+            <button
+              id="sidebar-search-save"
+              class="sidebar-search-save"
+              type="button"
+              aria-label="Save current search as a shelf"
+              title="Save current search as a shelf"
+              hidden
+            >
+              <i class="fa-solid fa-bookmark" aria-hidden="true"></i>
+            </button>
             <ul
               id="library-search-suggestions"
               class="library-search-suggestions"
@@ -651,6 +661,10 @@
                 Custom query
               </button>
             </div>
+          </div>
+          <div class="app-settings-field">
+            <span>Icon</span>
+            <div id="shelf-editor-icon-picker" class="custom-source-icon-picker"></div>
           </div>
           <div id="shelf-editor-conditions-field" class="app-settings-field">
             <span>Conditions</span>

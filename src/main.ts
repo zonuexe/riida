@@ -2513,10 +2513,16 @@ function syncBulkActionBar() {
   const barEl = document.querySelector<HTMLElement>("#bulk-action-bar");
   const countEl = document.querySelector<HTMLElement>("#bulk-select-count");
   const shelfEl = document.querySelector<HTMLElement>("#book-results");
+  const selectAllEl = document.querySelector<HTMLElement>("#bulk-select-all");
   const n = bulkSelectState.selectedFilePaths.size;
   if (barEl) barEl.hidden = n === 0;
   if (countEl) countEl.textContent = `${n} book${n === 1 ? "" : "s"} selected`;
   shelfEl?.classList.toggle("has-selection", n > 0);
+  if (selectAllEl) {
+    selectAllEl.hidden = viewerState.books.every((b) =>
+      bulkSelectState.selectedFilePaths.has(b.filePath),
+    );
+  }
 }
 
 function openTagEditorForBooks(books: BookSummary[]) {
@@ -3790,6 +3796,8 @@ async function applyNavigationState(state: NavigationState) {
     prevExternalSource !== viewerState.activeExternalSource
   ) {
     resetListSort();
+    bulkSelectState.selectedFilePaths.clear();
+    syncBulkActionBar();
   }
 
   const nextBook = state.bookFilePath
@@ -6177,9 +6185,18 @@ window.addEventListener("DOMContentLoaded", async () => {
   const noteDragHandleEl = document.querySelector<HTMLElement>("#note-drag-handle");
   const noteResizeEls = document.querySelectorAll<HTMLElement>(".note-resize-handle");
   const tagEditorBackdropEl = document.querySelector<HTMLElement>("#tag-editor-backdrop");
+  const bulkSelectAllEl = document.querySelector<HTMLButtonElement>("#bulk-select-all");
   const bulkEditTagsEl = document.querySelector<HTMLButtonElement>("#bulk-edit-tags");
   const bulkEditMetadataEl = document.querySelector<HTMLButtonElement>("#bulk-edit-metadata");
   const bulkDeselectEl = document.querySelector<HTMLButtonElement>("#bulk-deselect");
+
+  bulkSelectAllEl?.addEventListener("click", () => {
+    for (const book of viewerState.books) {
+      bulkSelectState.selectedFilePaths.add(book.filePath);
+    }
+    syncBulkActionBar();
+    renderApp();
+  });
 
   bulkEditTagsEl?.addEventListener("click", () => {
     const selected = viewerState.books.filter((b) =>

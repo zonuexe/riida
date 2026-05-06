@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-05-06
+
+### Added
+
+- Shelves — a new fourth sidebar axis alongside Directories, Tags, and External. A shelf is a saved query you give a name to, register in the sidebar, and open like any other location. Edit a shelf through either a structured All / Any condition builder (field × operator × value) or a raw Custom query, with a live preview count and an icon picker. Right-click a shelf to edit it; drag-and-drop to reorder.
+- The search query language now accepts `AND`, `OR`, `NOT` keywords (uppercase) and parenthesised grouping, in addition to the existing implicit AND, leading-`-` negation, and `field:value` tokens. The same grammar drives both the sidebar search box and shelves.
+- Inline autocomplete for `tag`, `publisher`, `language`, and `source` values inside the Shelf editor, sourced from the current library.
+- A "save current search" bookmark button next to the sidebar search field. Whatever is typed there can be promoted to a shelf in one click.
+- A "Select all" action in the library's bulk-action bar, visible once at least one item is checked.
+- Sidebar sections (Directories / Tags / External / Shelves) can be reordered by drag-and-drop, with the order persisted across launches.
+- The External section now offers the same editor UX as Shelves: a `+` button on the section header to create a new custom source, right-click on a custom source to edit, and a Delete button inside the modal.
+- Common reader keyboard shortcuts, with the resulting jumps recorded as in-file history entries so they can be navigated back through.
+
+### Changed
+
+- `title:` searches fall back to the file name when a book has no metadata title set, so books without metadata are still findable by what is shown as their title in the library list.
+- Bulk selection is automatically cleared when switching the active directory, tag, external source, or shelf.
+
 ## [0.5.2] - 2026-05-05
 
 ### Added
@@ -338,7 +356,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/zonuexe/riida/compare/v0.5.2...v0.5.3
+[0.5.2]: https://github.com/zonuexe/riida/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/zonuexe/riida/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/zonuexe/riida/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/zonuexe/riida/compare/v0.4.2...v0.4.3

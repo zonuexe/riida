@@ -75,6 +75,12 @@ import {
   composeShelfQuery,
   decomposeShelfQuery,
 } from "./shelf-query.ts";
+import {
+  type SidebarSectionKey,
+  loadSidebarSectionOrder,
+  reorderSidebarSection,
+  saveSidebarSectionOrder,
+} from "./sidebar-section-order.ts";
 import { validateTagValue } from "./tag-utils";
 import {
   clampReadingPositionOffsetRatio,
@@ -5673,12 +5679,93 @@ function renderSidebar(snapshot: LibrarySnapshot) {
 
   navEl.innerHTML = "";
 
+  const sections: Record<SidebarSectionKey, HTMLElement> = {
+    directories: createSidebarSection("directories"),
+    tags: createSidebarSection("tags"),
+    external: createSidebarSection("external"),
+    shelves: createSidebarSection("shelves"),
+  };
+
+  populateDirectoriesSection(sections.directories, snapshot);
+  populateTagsSection(sections.tags, snapshot);
+  populateExternalSection(sections.external, snapshot);
+  populateShelvesSection(sections.shelves, navEl);
+
+  const order = loadSidebarSectionOrder(localStorage);
+  for (const key of order) {
+    const sectionEl = sections[key];
+    if (!sectionEl.dataset.empty) {
+      navEl.appendChild(sectionEl);
+    }
+  }
+}
+
+function createSidebarSection(key: SidebarSectionKey): HTMLElement {
+  const sectionEl = document.createElement("section");
+  sectionEl.className = "sidebar-section";
+  sectionEl.dataset.section = key;
+  return sectionEl;
+}
+
+function attachSidebarSectionDnd(headerEl: HTMLElement, sectionEl: HTMLElement) {
+  headerEl.draggable = true;
+  headerEl.classList.add("sidebar-section-drag-handle");
+  headerEl.addEventListener("dragstart", (event) => {
+    sidebarSectionDragKey = (sectionEl.dataset.section as SidebarSectionKey | undefined) ?? null;
+    sectionEl.classList.add("is-dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", sectionEl.dataset.section ?? "");
+    }
+  });
+  headerEl.addEventListener("dragend", () => {
+    sidebarSectionDragKey = null;
+    sectionEl.classList.remove("is-dragging");
+    document
+      .querySelectorAll<HTMLElement>(".sidebar-section")
+      .forEach((el) => el.classList.remove("is-drop-before", "is-drop-after"));
+  });
+  sectionEl.addEventListener("dragover", (event) => {
+    if (!sidebarSectionDragKey) return;
+    const targetKey = sectionEl.dataset.section as SidebarSectionKey | undefined;
+    if (!targetKey || targetKey === sidebarSectionDragKey) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    const rect = sectionEl.getBoundingClientRect();
+    const above = event.clientY < rect.top + rect.height / 2;
+    sectionEl.classList.toggle("is-drop-before", above);
+    sectionEl.classList.toggle("is-drop-after", !above);
+  });
+  sectionEl.addEventListener("dragleave", (event) => {
+    // Only clear when actually leaving the section (not its children).
+    const related = event.relatedTarget as Node | null;
+    if (related && sectionEl.contains(related)) return;
+    sectionEl.classList.remove("is-drop-before", "is-drop-after");
+  });
+  sectionEl.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const sourceKey = sidebarSectionDragKey;
+    sidebarSectionDragKey = null;
+    const placement = sectionEl.classList.contains("is-drop-after") ? "after" : "before";
+    sectionEl.classList.remove("is-drop-before", "is-drop-after");
+    const targetKey = sectionEl.dataset.section as SidebarSectionKey | undefined;
+    if (!sourceKey || !targetKey || sourceKey === targetKey) return;
+    const current = loadSidebarSectionOrder(localStorage);
+    const next = reorderSidebarSection(current, sourceKey, targetKey, placement);
+    saveSidebarSectionOrder(localStorage, next);
+    renderApp();
+  });
+}
+
+function populateDirectoriesSection(sectionEl: HTMLElement, snapshot: LibrarySnapshot) {
   const directoryHeader = document.createElement("p");
   directoryHeader.className = "nav-section-title";
   directoryHeader.innerHTML =
     '<i class="fa-solid fa-folder" aria-hidden="true"></i><span>Directories</span>';
-  navEl.appendChild(directoryHeader);
+  sectionEl.appendChild(directoryHeader);
+  attachSidebarSectionDnd(directoryHeader, sectionEl);
 
+  let appended = 0;
   for (const node of deriveDirectories(snapshot)) {
     if (!isNodeVisible(node)) {
       continue;
@@ -5741,13 +5828,20 @@ function renderSidebar(snapshot: LibrarySnapshot) {
     }
 
     row.appendChild(button);
-    navEl.appendChild(row);
+    sectionEl.appendChild(row);
+    appended += 1;
   }
 
-  const futureHeader = document.createElement("p");
-  futureHeader.className = "nav-section-title";
-  futureHeader.innerHTML = '<i class="fa-solid fa-tags" aria-hidden="true"></i><span>Tags</span>';
-  navEl.appendChild(futureHeader);
+  // Directories header is always rendered, even when empty.
+  void appended;
+}
+
+function populateTagsSection(sectionEl: HTMLElement, snapshot: LibrarySnapshot) {
+  const tagsHeader = document.createElement("p");
+  tagsHeader.className = "nav-section-title";
+  tagsHeader.innerHTML = '<i class="fa-solid fa-tags" aria-hidden="true"></i><span>Tags</span>';
+  sectionEl.appendChild(tagsHeader);
+  attachSidebarSectionDnd(tagsHeader, sectionEl);
 
   for (const tag of deriveTags(snapshot.books)) {
     if (!isTagVisible(tag.id, tag.depth)) {
@@ -5812,9 +5906,11 @@ function renderSidebar(snapshot: LibrarySnapshot) {
     });
     row.appendChild(button);
 
-    navEl.appendChild(row);
+    sectionEl.appendChild(row);
   }
+}
 
+function populateExternalSection(sectionEl: HTMLElement, snapshot: LibrarySnapshot) {
   const enabledExternalSources = lastAppConfig?.enabledExternalSources ?? [];
   const kindleEnabled = enabledExternalSources.includes("kindle");
   const externalBooks = snapshot.books.filter((book) => book.sourceType !== "pdf");
@@ -5822,83 +5918,89 @@ function renderSidebar(snapshot: LibrarySnapshot) {
   const customSources = snapshot.customSources ?? [];
   const hasExternalSection = (kindleEnabled && kindleCount > 0) || customSources.length > 0;
 
-  if (hasExternalSection) {
-    const externalHeader = document.createElement("p");
-    externalHeader.className = "nav-section-title";
-    externalHeader.innerHTML =
-      '<i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i><span>EXTERNAL</span>';
-    navEl.appendChild(externalHeader);
-
-    if (kindleEnabled && kindleCount > 0) {
-      const row = document.createElement("div");
-      row.className = "nav-tree-row";
-      row.style.setProperty("--depth", "0");
-      const spacer = document.createElement("span");
-      spacer.className = "nav-toggle-spacer";
-      spacer.setAttribute("aria-hidden", "true");
-      row.appendChild(spacer);
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "nav-link nav-tree-link";
-      button.classList.toggle("is-active", viewerState.activeExternalSource === "kindle");
-      button.innerHTML =
-        '<span><i class="fa-brands fa-amazon" aria-hidden="true"></i> Kindle</span><small>' +
-        String(kindleCount) +
-        "</small>";
-      button.addEventListener("click", () => {
-        void navigateToState(
-          {
-            bookFilePath: null,
-            activeDirectory: null,
-            activeTag: null,
-            activeExternalSource: "kindle",
-            activeShelf: null,
-            activeTagDirectOnly: false,
-            searchQuery: viewerState.searchQuery,
-          },
-          "push",
-        );
-      });
-      row.appendChild(button);
-      navEl.appendChild(row);
-    }
-
-    for (const source of customSources) {
-      const count = externalBooks.filter((book) => book.sourceType === source.id).length;
-      const row = document.createElement("div");
-      row.className = "nav-tree-row";
-      row.style.setProperty("--depth", "0");
-      const spacer = document.createElement("span");
-      spacer.className = "nav-toggle-spacer";
-      spacer.setAttribute("aria-hidden", "true");
-      row.appendChild(spacer);
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "nav-link nav-tree-link";
-      button.classList.toggle("is-active", viewerState.activeExternalSource === source.id);
-      button.innerHTML =
-        `<span><i class="${source.icon}" aria-hidden="true"></i> ${source.name}</span><small>` +
-        String(count) +
-        "</small>";
-      button.addEventListener("click", () => {
-        void navigateToState(
-          {
-            bookFilePath: null,
-            activeDirectory: null,
-            activeTag: null,
-            activeExternalSource: source.id,
-            activeShelf: null,
-            activeTagDirectOnly: false,
-            searchQuery: viewerState.searchQuery,
-          },
-          "push",
-        );
-      });
-      row.appendChild(button);
-      navEl.appendChild(row);
-    }
+  if (!hasExternalSection) {
+    sectionEl.dataset.empty = "1";
+    return;
   }
 
+  const externalHeader = document.createElement("p");
+  externalHeader.className = "nav-section-title";
+  externalHeader.innerHTML =
+    '<i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i><span>EXTERNAL</span>';
+  sectionEl.appendChild(externalHeader);
+  attachSidebarSectionDnd(externalHeader, sectionEl);
+
+  if (kindleEnabled && kindleCount > 0) {
+    const row = document.createElement("div");
+    row.className = "nav-tree-row";
+    row.style.setProperty("--depth", "0");
+    const spacer = document.createElement("span");
+    spacer.className = "nav-toggle-spacer";
+    spacer.setAttribute("aria-hidden", "true");
+    row.appendChild(spacer);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "nav-link nav-tree-link";
+    button.classList.toggle("is-active", viewerState.activeExternalSource === "kindle");
+    button.innerHTML =
+      '<span><i class="fa-brands fa-amazon" aria-hidden="true"></i> Kindle</span><small>' +
+      String(kindleCount) +
+      "</small>";
+    button.addEventListener("click", () => {
+      void navigateToState(
+        {
+          bookFilePath: null,
+          activeDirectory: null,
+          activeTag: null,
+          activeExternalSource: "kindle",
+          activeShelf: null,
+          activeTagDirectOnly: false,
+          searchQuery: viewerState.searchQuery,
+        },
+        "push",
+      );
+    });
+    row.appendChild(button);
+    sectionEl.appendChild(row);
+  }
+
+  for (const source of customSources) {
+    const count = externalBooks.filter((book) => book.sourceType === source.id).length;
+    const row = document.createElement("div");
+    row.className = "nav-tree-row";
+    row.style.setProperty("--depth", "0");
+    const spacer = document.createElement("span");
+    spacer.className = "nav-toggle-spacer";
+    spacer.setAttribute("aria-hidden", "true");
+    row.appendChild(spacer);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "nav-link nav-tree-link";
+    button.classList.toggle("is-active", viewerState.activeExternalSource === source.id);
+    button.innerHTML =
+      `<span><i class="${source.icon}" aria-hidden="true"></i> ${source.name}</span><small>` +
+      String(count) +
+      "</small>";
+    button.addEventListener("click", () => {
+      void navigateToState(
+        {
+          bookFilePath: null,
+          activeDirectory: null,
+          activeTag: null,
+          activeExternalSource: source.id,
+          activeShelf: null,
+          activeTagDirectOnly: false,
+          searchQuery: viewerState.searchQuery,
+        },
+        "push",
+      );
+    });
+    row.appendChild(button);
+    sectionEl.appendChild(row);
+  }
+}
+
+function populateShelvesSection(sectionEl: HTMLElement, navEl: HTMLElement) {
   const shelvesHeader = document.createElement("p");
   shelvesHeader.className = "nav-section-title nav-section-title-with-action";
   const shelvesHeaderLabel = document.createElement("span");
@@ -5921,7 +6023,8 @@ function renderSidebar(snapshot: LibrarySnapshot) {
     openShelfEditor(undefined, viewerState.searchQuery);
   });
   shelvesHeader.appendChild(shelvesAddBtn);
-  navEl.appendChild(shelvesHeader);
+  sectionEl.appendChild(shelvesHeader);
+  attachSidebarSectionDnd(shelvesHeader, sectionEl);
 
   for (const shelf of viewerState.shelves) {
     const row = document.createElement("div");
@@ -5994,11 +6097,12 @@ function renderSidebar(snapshot: LibrarySnapshot) {
       openShelfEditor(shelf);
     });
     row.appendChild(button);
-    navEl.appendChild(row);
+    sectionEl.appendChild(row);
   }
 }
 
 let shelfDragId: string | null = null;
+let sidebarSectionDragKey: SidebarSectionKey | null = null;
 
 async function reorderShelvesByDrop(sourceId: string, targetId: string) {
   const ids = viewerState.shelves.map((s) => s.id);

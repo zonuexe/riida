@@ -1,0 +1,44 @@
+---
+title: Reading EPUBs
+description: How to use riida's EPUB viewer and known limitations.
+draft: false
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="Feature in development">
+The EPUB viewer is currently in development. Basic reading works, but there are known issues with link handling.
+</Aside>
+
+## Basic Navigation
+
+### Page Controls
+
+| Action | Method |
+|--------|--------|
+| Next page | → key / PageDown |
+| Previous page | ← key / PageUp |
+
+### Reading Position
+
+Your position (CFI) is saved automatically when you close the viewer and restored on next open.
+
+## Viewer Settings
+
+Click the settings icon in the toolbar to adjust font size, background color, and layout.
+
+## Known Issues
+
+### Link Handling
+
+Links inside EPUB content do not work correctly in this version:
+
+- External links (`https://`): clicking may produce no response
+- Same-section anchor links (`#anchor`): clicking may break the page layout
+
+This is caused by cross-frame DOM interaction issues in macOS WKWebView and is under investigation.
+
+### Other Limitations
+
+- Complex CSS or custom font declarations may cause layout issues
+- Image-heavy EPUBs may be slow to load

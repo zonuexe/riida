@@ -1,0 +1,12 @@
+/* riida brand accent — warm parchment brown */
+:root {
+  --sl-color-accent-low: hsl(28, 40%, 82%);
+  --sl-color-accent: hsl(28, 58%, 37%);
+  --sl-color-accent-high: hsl(28, 65%, 22%);
+}
+
+:root[data-theme='dark'] {
+  --sl-color-accent-low: hsl(28, 28%, 24%);
+  --sl-color-accent: hsl(28, 55%, 55%);
+  --sl-color-accent-high: hsl(28, 60%, 80%);
+}

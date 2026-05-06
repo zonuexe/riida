@@ -123,7 +123,7 @@ Core colors:
 
 ### Snow White theme
 
-Creative direction: macOS-inspired paper white, soft silver, quiet blue emphasis.
+Creative direction: paper white, soft silver, quiet blue emphasis.
 
 Core colors:
 
@@ -140,7 +140,7 @@ Core colors:
 
 ### Night City theme
 
-Creative direction: macOS-inspired dark mode, graphite glass, electric blue highlights.
+Creative direction: graphite glass dark mode, electric blue highlights.
 
 Core colors:
 

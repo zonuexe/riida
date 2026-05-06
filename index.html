@@ -912,7 +912,7 @@
     </div>
 
     <div id="custom-source-editor-modal" class="app-settings-modal" hidden>
-      <div class="app-settings-backdrop"></div>
+      <div id="custom-source-backdrop" class="app-settings-backdrop"></div>
       <section
         class="app-settings-dialog custom-source-editor-dialog"
         role="dialog"
@@ -921,6 +921,14 @@
       >
         <div class="app-settings-header">
           <h2 id="custom-source-editor-heading" class="app-settings-title">Custom source</h2>
+          <button
+            id="custom-source-close"
+            class="app-settings-close"
+            type="button"
+            aria-label="Close custom source editor"
+          >
+            ×
+          </button>
         </div>
         <div class="app-settings-body">
           <label class="app-settings-field">
@@ -934,6 +942,9 @@
           <p id="custom-source-status" class="app-settings-status" hidden></p>
         </div>
         <div class="app-settings-actions">
+          <button id="custom-source-delete" class="app-settings-danger" type="button" hidden>
+            Delete source
+          </button>
           <button
             id="custom-source-cancel"
             class="app-settings-secondary app-settings-leading"

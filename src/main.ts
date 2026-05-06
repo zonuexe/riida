@@ -2081,10 +2081,18 @@ function renderCustomSourcesList() {
 
 function syncCustomSourceEditorUi() {
   const modalEl = document.querySelector<HTMLElement>("#custom-source-editor-modal");
+  const titleEl = document.querySelector<HTMLElement>("#custom-source-editor-heading");
   const nameEl = document.querySelector<HTMLInputElement>("#custom-source-name");
   const statusEl = document.querySelector<HTMLElement>("#custom-source-status");
+  const deleteEl = document.querySelector<HTMLButtonElement>("#custom-source-delete");
   if (modalEl) {
     modalEl.hidden = !customSourceEditorState.isOpen;
+  }
+  if (titleEl) {
+    titleEl.textContent = customSourceEditorState.id ? "Edit source" : "New source";
+  }
+  if (deleteEl) {
+    deleteEl.hidden = !customSourceEditorState.id;
   }
   if (nameEl && document.activeElement !== nameEl) {
     nameEl.value = customSourceEditorState.name;
@@ -2163,6 +2171,22 @@ async function deleteCustomSource(source: CustomSource) {
     syncAppSettingsUi();
   } catch (error) {
     await message(`Failed to delete: ${String(error)}`, { kind: "error" });
+  }
+}
+
+async function deleteCustomSourceFromEditor() {
+  const id = customSourceEditorState.id;
+  if (!id) return;
+  const source: CustomSource = {
+    id,
+    name: customSourceEditorState.name,
+    icon: customSourceEditorState.icon,
+  };
+  await deleteCustomSource(source);
+  if (!viewerState.activeExternalSource || viewerState.activeExternalSource !== id) {
+    closeCustomSourceEditor();
+  } else {
+    closeCustomSourceEditor();
   }
 }
 
@@ -5916,17 +5940,29 @@ function populateExternalSection(sectionEl: HTMLElement, snapshot: LibrarySnapsh
   const externalBooks = snapshot.books.filter((book) => book.sourceType !== "pdf");
   const kindleCount = externalBooks.filter((book) => book.sourceType === "kindle").length;
   const customSources = snapshot.customSources ?? [];
-  const hasExternalSection = (kindleEnabled && kindleCount > 0) || customSources.length > 0;
-
-  if (!hasExternalSection) {
-    sectionEl.dataset.empty = "1";
-    return;
-  }
 
   const externalHeader = document.createElement("p");
-  externalHeader.className = "nav-section-title";
-  externalHeader.innerHTML =
-    '<i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i><span>EXTERNAL</span>';
+  externalHeader.className = "nav-section-title nav-section-title-with-action";
+  const externalHeaderLabel = document.createElement("span");
+  externalHeaderLabel.className = "nav-section-title-label";
+  const externalHeaderIcon = document.createElement("i");
+  externalHeaderIcon.className = "fa-solid fa-up-right-from-square";
+  externalHeaderIcon.setAttribute("aria-hidden", "true");
+  externalHeaderLabel.appendChild(externalHeaderIcon);
+  const externalHeaderText = document.createElement("span");
+  externalHeaderText.textContent = "EXTERNAL";
+  externalHeaderLabel.appendChild(externalHeaderText);
+  externalHeader.appendChild(externalHeaderLabel);
+  const externalAddBtn = document.createElement("button");
+  externalAddBtn.type = "button";
+  externalAddBtn.className = "nav-section-action";
+  externalAddBtn.setAttribute("aria-label", "Create a new external source");
+  externalAddBtn.title = "Create a new external source";
+  externalAddBtn.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i>';
+  externalAddBtn.addEventListener("click", () => {
+    openCustomSourceEditor();
+  });
+  externalHeader.appendChild(externalAddBtn);
   sectionEl.appendChild(externalHeader);
   attachSidebarSectionDnd(externalHeader, sectionEl);
 
@@ -5994,6 +6030,10 @@ function populateExternalSection(sectionEl: HTMLElement, snapshot: LibrarySnapsh
         },
         "push",
       );
+    });
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      openCustomSourceEditor(source);
     });
     row.appendChild(button);
     sectionEl.appendChild(row);
@@ -7205,6 +7245,14 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   const customSourceCancelEl = document.querySelector<HTMLButtonElement>("#custom-source-cancel");
   customSourceCancelEl?.addEventListener("click", () => closeCustomSourceEditor());
+  const customSourceCloseEl = document.querySelector<HTMLButtonElement>("#custom-source-close");
+  customSourceCloseEl?.addEventListener("click", () => closeCustomSourceEditor());
+  const customSourceBackdropEl = document.querySelector<HTMLElement>("#custom-source-backdrop");
+  customSourceBackdropEl?.addEventListener("click", () => closeCustomSourceEditor());
+  const customSourceDeleteEl = document.querySelector<HTMLButtonElement>("#custom-source-delete");
+  customSourceDeleteEl?.addEventListener("click", () => {
+    void deleteCustomSourceFromEditor();
+  });
 
   const customSourceNameEl = document.querySelector<HTMLInputElement>("#custom-source-name");
   customSourceNameEl?.addEventListener("input", () => {

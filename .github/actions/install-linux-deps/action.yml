@@ -1,0 +1,34 @@
+name: Install Linux system dependencies
+description: Install apt packages required to build riida on Linux, with .deb caching.
+
+runs:
+  using: composite
+  steps:
+    - name: Configure apt to keep downloaded packages
+      shell: bash
+      run: |
+        echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' \
+          | sudo tee /etc/apt/apt.conf.d/01keep-debs >/dev/null
+
+    - name: Restore apt package cache
+      uses: actions/cache@v4
+      with:
+        path: /var/cache/apt/archives
+        key: apt-${{ runner.os }}-${{ runner.arch }}-v1-${{ hashFiles('.github/actions/install-linux-deps/action.yml') }}
+        restore-keys: |
+          apt-${{ runner.os }}-${{ runner.arch }}-v1-
+
+    - name: Install packages
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          libwebkit2gtk-4.1-dev \
+          build-essential \
+          curl \
+          wget \
+          file \
+          libxdo-dev \
+          libssl-dev \
+          libayatana-appindicator3-dev \
+          librsvg2-dev

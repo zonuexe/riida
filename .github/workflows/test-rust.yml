@@ -1,0 +1,52 @@
+name: Test (Rust)
+
+on:
+  pull_request:
+    paths:
+      - 'src-tauri/**'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches:
+      - master
+    paths:
+      - 'src-tauri/**'
+      - 'package.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+jobs:
+  rust-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Linux system dependencies
+        uses: ./.github/actions/install-linux-deps
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install cargo tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,cargo-audit,cargo-machete
+
+      - name: Run Rust quality checks
+        run: npm run check:rust

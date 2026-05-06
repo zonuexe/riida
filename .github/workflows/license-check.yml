@@ -19,8 +19,7 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
-          cache-all-crates: true
+          workspaces: src-tauri -> target
       - name: Install cargo-deny
         uses: taiki-e/install-action@cargo-deny
       - name: Check Rust dependency licenses

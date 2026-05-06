@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveDirectories,
+  derivePublishers,
   deriveTags,
   describeEmptyLibraryState,
   filterVisibleBooks,
@@ -310,5 +311,20 @@ describe("describeEmptyLibraryState", () => {
       libraryRoots: [],
     });
     expect(result.message).toBe("No matching books.");
+  });
+});
+
+describe("derivePublishers", () => {
+  it("returns distinct non-empty publishers in Japanese-collation order", () => {
+    expect(
+      derivePublishers([
+        { publisher: "技術評論社" },
+        { publisher: "オライリー" },
+        { publisher: "技術評論社" },
+        { publisher: "  " },
+        { publisher: null },
+        { publisher: "ラムダノート" },
+      ]),
+    ).toEqual(["オライリー", "ラムダノート", "技術評論社"]);
   });
 });

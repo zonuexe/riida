@@ -350,3 +350,18 @@ export function deriveTags(books: Array<{ tags?: string[] }>): TagNode[] {
       hasChildren: [...counts.keys()].some((candidate) => candidate.startsWith(`${tag}/`)),
     }));
 }
+
+/**
+ * Distinct non-empty publishers across the supplied books, sorted by
+ * Japanese collation. Useful for inline suggestion lists.
+ */
+export function derivePublishers(books: Array<{ publisher?: string | null }>): string[] {
+  const set = new Set<string>();
+  for (const book of books) {
+    const value = book.publisher?.trim();
+    if (value && value.length > 0) {
+      set.add(value);
+    }
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, "ja"));
+}

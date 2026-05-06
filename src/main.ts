@@ -33,6 +33,7 @@ import {
 import { resolveEpubLinkAction } from "./epub-link-routing";
 import {
   deriveDirectories,
+  derivePublishers,
   deriveTags,
   describeEmptyLibraryState,
   filterVisibleBooks,
@@ -2247,16 +2248,70 @@ function renderShelfConditionRows() {
       syncShelfEditorUi();
     });
 
+    const valueWrap = document.createElement("div");
+    valueWrap.className = "shelf-editor-condition-value-wrap";
+
     const valueEl = document.createElement("input");
     valueEl.type = "text";
     valueEl.className = "shelf-editor-condition-value";
     valueEl.value = row.value;
     valueEl.placeholder = "value";
+    valueEl.autocomplete = "off";
+
+    const suggestionsEl = document.createElement("div");
+    suggestionsEl.className = "shelf-editor-condition-suggestions";
+    suggestionsEl.hidden = true;
+
+    const updateSuggestions = () => {
+      const candidates = getShelfFieldSuggestionCandidates(row.field);
+      if (candidates.length === 0) {
+        suggestionsEl.hidden = true;
+        suggestionsEl.innerHTML = "";
+        return;
+      }
+      const matches = suggestTagCompletions(candidates, valueEl.value, [], 8);
+      suggestionsEl.innerHTML = "";
+      if (matches.length === 0) {
+        suggestionsEl.hidden = true;
+        return;
+      }
+      for (const match of matches) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "shelf-editor-condition-suggestion";
+        btn.textContent = match;
+        btn.addEventListener("mousedown", (event) => {
+          // Prevent input blur before click handler runs.
+          event.preventDefault();
+        });
+        btn.addEventListener("click", () => {
+          shelfEditorState.rows[index] = { ...row, value: match };
+          valueEl.value = match;
+          suggestionsEl.hidden = true;
+          updateShelfPreview();
+          valueEl.focus();
+        });
+        suggestionsEl.appendChild(btn);
+      }
+      suggestionsEl.hidden = false;
+    };
+
     valueEl.addEventListener("input", () => {
       shelfEditorState.rows[index] = { ...row, value: valueEl.value };
+      updateSuggestions();
       // Skip full re-render to keep input focus; just refresh preview.
       updateShelfPreview();
     });
+    valueEl.addEventListener("focus", updateSuggestions);
+    valueEl.addEventListener("blur", () => {
+      // Delay so suggestion clicks can fire first.
+      setTimeout(() => {
+        suggestionsEl.hidden = true;
+      }, 120);
+    });
+
+    valueWrap.appendChild(valueEl);
+    valueWrap.appendChild(suggestionsEl);
 
     const removeEl = document.createElement("button");
     removeEl.type = "button";
@@ -2271,10 +2326,23 @@ function renderShelfConditionRows() {
 
     rowEl.appendChild(fieldEl);
     rowEl.appendChild(opEl);
-    rowEl.appendChild(valueEl);
+    rowEl.appendChild(valueWrap);
     rowEl.appendChild(removeEl);
     container.appendChild(rowEl);
   });
+}
+
+function getShelfFieldSuggestionCandidates(field: ShelfFieldKey): string[] {
+  if (!lastSnapshot) return [];
+  if (field === "tag") {
+    return deriveTags(lastSnapshot.books)
+      .filter((tag) => tag.explicit)
+      .map((tag) => tag.id);
+  }
+  if (field === "publisher") {
+    return derivePublishers(lastSnapshot.books);
+  }
+  return [];
 }
 
 function updateShelfPreview() {

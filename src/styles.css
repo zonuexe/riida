@@ -417,6 +417,52 @@ body[data-startup="loading"] .app-shell {
   min-width: 0;
 }
 
+.shelf-editor-condition-value-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.shelf-editor-condition-value-wrap .shelf-editor-condition-value {
+  width: 100%;
+}
+
+.shelf-editor-condition-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: rgb(var(--panel-rgb) / 0.98);
+  border: 1px solid rgb(var(--border-rgb) / 0.3);
+  border-radius: 14px;
+  padding: 6px;
+  box-shadow: 0 12px 32px rgb(var(--shadow-rgb) / 0.18);
+  backdrop-filter: blur(10px);
+}
+
+.shelf-editor-condition-suggestion {
+  appearance: none;
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: rgb(var(--ink-rgb));
+  font: inherit;
+  font-size: 0.92rem;
+}
+
+.shelf-editor-condition-suggestion:hover {
+  background: rgb(var(--accent-rgb) / 0.15);
+  color: rgb(var(--accent-rgb));
+}
+
 .shelf-editor-condition-remove {
   appearance: none;
   border: 1px solid rgb(var(--border-rgb) / 0.4);

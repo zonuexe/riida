@@ -33,7 +33,9 @@ import {
 import { resolveEpubLinkAction } from "./epub-link-routing";
 import {
   deriveDirectories,
+  deriveLanguages,
   derivePublishers,
+  deriveSources,
   deriveTags,
   describeEmptyLibraryState,
   filterVisibleBooks,
@@ -2269,7 +2271,11 @@ function renderShelfConditionRows() {
         suggestionsEl.innerHTML = "";
         return;
       }
-      const matches = suggestTagCompletions(candidates, valueEl.value, [], 8);
+      const trimmed = valueEl.value.trim();
+      const matches =
+        trimmed.length === 0
+          ? candidates.slice(0, 8)
+          : suggestTagCompletions(candidates, valueEl.value, [], 8);
       suggestionsEl.innerHTML = "";
       if (matches.length === 0) {
         suggestionsEl.hidden = true;
@@ -2341,6 +2347,12 @@ function getShelfFieldSuggestionCandidates(field: ShelfFieldKey): string[] {
   }
   if (field === "publisher") {
     return derivePublishers(lastSnapshot.books);
+  }
+  if (field === "lang") {
+    return deriveLanguages(lastSnapshot.books);
+  }
+  if (field === "source") {
+    return deriveSources(lastSnapshot.books);
   }
   return [];
 }

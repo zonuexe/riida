@@ -356,9 +356,32 @@ export function deriveTags(books: Array<{ tags?: string[] }>): TagNode[] {
  * Japanese collation. Useful for inline suggestion lists.
  */
 export function derivePublishers(books: Array<{ publisher?: string | null }>): string[] {
+  return collectDistinctTrimmed(books, (book) => book.publisher);
+}
+
+/**
+ * Distinct non-empty languages across the supplied books, sorted by
+ * Japanese collation.
+ */
+export function deriveLanguages(books: Array<{ language?: string | null }>): string[] {
+  return collectDistinctTrimmed(books, (book) => book.language);
+}
+
+/**
+ * Distinct non-empty source types across the supplied books, sorted
+ * by Japanese collation.
+ */
+export function deriveSources(books: Array<{ sourceType?: string | null }>): string[] {
+  return collectDistinctTrimmed(books, (book) => book.sourceType);
+}
+
+function collectDistinctTrimmed<B>(
+  books: B[],
+  pick: (book: B) => string | null | undefined,
+): string[] {
   const set = new Set<string>();
   for (const book of books) {
-    const value = book.publisher?.trim();
+    const value = pick(book)?.trim();
     if (value && value.length > 0) {
       set.add(value);
     }

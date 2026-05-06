@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveDirectories,
+  deriveLanguages,
   derivePublishers,
+  deriveSources,
   deriveTags,
   describeEmptyLibraryState,
   filterVisibleBooks,
@@ -326,5 +328,32 @@ describe("derivePublishers", () => {
         { publisher: "ラムダノート" },
       ]),
     ).toEqual(["オライリー", "ラムダノート", "技術評論社"]);
+  });
+});
+
+describe("deriveLanguages", () => {
+  it("returns distinct non-empty languages", () => {
+    expect(
+      deriveLanguages([
+        { language: "ja" },
+        { language: "en" },
+        { language: "ja" },
+        { language: null },
+        { language: "" },
+      ]),
+    ).toEqual(["en", "ja"]);
+  });
+});
+
+describe("deriveSources", () => {
+  it("returns distinct non-empty source types", () => {
+    expect(
+      deriveSources([
+        { sourceType: "pdf" },
+        { sourceType: "kindle" },
+        { sourceType: "pdf" },
+        { sourceType: "epub" },
+      ]),
+    ).toEqual(["epub", "kindle", "pdf"]);
   });
 });

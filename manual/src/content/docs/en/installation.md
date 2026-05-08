@@ -2,6 +2,16 @@
 title: Installation
 description: How to download and install riida.
 draft: false
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: en_US
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"HowTo","name":"Installation","description":"How to download and install riida.","inLanguage":"en","step":[{"@type":"HowToStep","position":1,"name":"Download","text":"Download the latest .dmg file from the GitHub Releases page."},{"@type":"HowToStep","position":2,"name":"Install","text":"Open the downloaded .dmg file and drag riida.app to your /Applications folder."},{"@type":"HowToStep","position":3,"name":"First Launch","text":"Run xattr -cr /Applications/riida.app in Terminal before launching."}],"url":"https://zonuexe.github.io/riida/en/installation/"}
 ---
 
 ## System Requirements

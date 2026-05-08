@@ -2,6 +2,16 @@
 title: ライブラリの設定
 description: ライブラリルートフォルダの追加・変更方法を説明します。
 draft: false
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: ja_JP
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"HowTo","name":"ライブラリの設定","description":"ライブラリルートフォルダの追加・変更方法を説明します。","inLanguage":"ja","step":[{"@type":"HowToStep","position":1,"name":"設定を開く","text":"サイドバー上部のメニューから設定を開きます。"},{"@type":"HowToStep","position":2,"name":"ライブラリタブを選択","text":"ライブラリタブを選択します。"},{"@type":"HowToStep","position":3,"name":"フォルダを追加","text":"「＋ フォルダを追加」ボタンをクリックしてフォルダを選択します。"}],"url":"https://zonuexe.github.io/riida/library-setup/"}
 ---
 
 riidaはライブラリルートとして登録したフォルダを再帰的にスキャンし、PDFとEPUBを自動でインデックス化します。

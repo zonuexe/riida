@@ -2,6 +2,16 @@
 title: テーマ
 description: riidaの4つの外観テーマについて説明します。
 draft: false
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: ja_JP
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"Article","name":"テーマ","description":"riidaの4つの外観テーマについて説明します。","inLanguage":"ja","about":{"@type":"SoftwareApplication","name":"riida"},"url":"https://zonuexe.github.io/riida/themes/"}
 ---
 
 riidaは4つの外観テーマをサポートしています。サイドバー下部または設定画面からいつでも切り替えられます。

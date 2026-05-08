@@ -2,6 +2,16 @@
 title: About riida
 description: An overview of riida, its features, and design philosophy.
 draft: false
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: en_US
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"TechArticle","name":"About riida","description":"An overview of riida, its features, and design philosophy.","inLanguage":"en","about":{"@type":"SoftwareApplication","name":"riida","applicationCategory":"UtilitiesApplication"},"url":"https://zonuexe.github.io/riida/en/introduction/"}
 ---
 
 riida is a desktop reading app and library manager for your local PDF and EPUB collection.

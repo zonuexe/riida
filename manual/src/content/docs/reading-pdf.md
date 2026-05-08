@@ -2,6 +2,16 @@
 title: PDFを読む
 description: riidaのPDFビューアの使い方、ナビゲーション、設定について説明します。
 draft: false
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: ja_JP
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"HowTo","name":"PDFを読む","description":"riidaのPDFビューアの使い方、ナビゲーション、設定について説明します。","inLanguage":"ja","step":[{"@type":"HowToStep","position":1,"name":"PDFを開く","text":"ライブラリから書籍をクリックしてPDFビューアを開きます。"},{"@type":"HowToStep","position":2,"name":"ナビゲーション","text":"→キーまたはPageDownで次のページ、←キーまたはPageUpで前のページに移動します。"},{"@type":"HowToStep","position":3,"name":"検索","text":"⌘FまたはツールバーのアイコンでPDF内検索を開きます。"}],"url":"https://zonuexe.github.io/riida/reading-pdf/"}
 ---
 
 riidaのPDFビューアはPDF.jsをベースにしており、テキスト選択・リンク・全文検索・読書位置の自動保存に対応しています。
@@ -12,15 +22,15 @@ riidaのPDFビューアはPDF.jsをベースにしており、テキスト選択
 
 | 操作 | 方法 |
 |------|------|
-| 次のページ | → キー / PageDown / スクロール |
-| 前のページ | ← キー / PageUp |
+| 次のページ | <kbd>→</kbd> / <kbd>PageDown</kbd> / スクロール |
+| 前のページ | <kbd>←</kbd> / <kbd>PageUp</kbd> |
 | ページ指定 | ツールバーのページ番号欄に入力 |
-| 先頭ページ | Home キー |
-| 末尾ページ | End キー |
+| 先頭ページ | <kbd>Home</kbd> |
+| 末尾ページ | <kbd>End</kbd> |
 
 ### ナビゲーション
 
-- **戻る / 進む**: ツールバーの ← / → ボタン、または ⌘[ / ⌘]（macOS）
+- **戻る / 進む**: ツールバーの ← / → ボタン、または <kbd>⌘[</kbd> / <kbd>⌘]</kbd>（macOS）
 - **ページ内リンク・外部リンク**: クリックで自動的に移動
 
 ## テキスト選択とコピー
@@ -31,7 +41,7 @@ riidaのPDFビューアはPDF.jsをベースにしており、テキスト選択
 
 ## PDF内検索
 
-ツールバーの検索アイコン（または ⌘F）で検索バーを開きます。ヒットした箇所はハイライト表示されます。
+ツールバーの検索アイコン（または <kbd>⌘F</kbd>）で検索バーを開きます。ヒットした箇所はハイライト表示されます。
 
 ## 読書位置の自動保存
 

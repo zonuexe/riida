@@ -3,6 +3,16 @@ title: riida ユーザーマニュアル
 description: riida — あなたのデジタル書斎のユーザーマニュアル。
 draft: false
 template: splash
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: ja_JP
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"SoftwareApplication","name":"riida","alternateName":"リーダ","description":"ローカルのPDF・EPUBコレクションのためのデスクトップ読書アプリ","applicationCategory":"UtilitiesApplication","operatingSystem":["macOS","Windows","Linux"],"offers":{"@type":"Offer","price":"0"},"inLanguage":["ja","en"],"downloadUrl":"https://github.com/zonuexe/riida/releases","codeRepository":"https://github.com/zonuexe/riida","url":"https://zonuexe.github.io/riida/"}
 hero:
   tagline: 読書のためのデスクトップ蔵書管理アプリ
   actions:
@@ -15,6 +25,12 @@ hero:
       icon: external
       variant: minimal
 ---
+
+<div class="h-card" hidden>
+  <span class="p-name">riida</span>
+  <span class="p-summary">ローカルのPDF・EPUBコレクションのためのデスクトップ読書アプリ</span>
+  <a class="u-url" href="https://github.com/zonuexe/riida" rel="me">https://github.com/zonuexe/riida</a>
+</div>
 
 ## 主な機能
 

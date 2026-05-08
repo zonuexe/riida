@@ -2,6 +2,16 @@
 title: riidaとは
 description: riidaの概要、主な機能、設計思想について説明します。
 draft: false
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: ja_JP
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"TechArticle","name":"riidaとは","description":"riidaの概要、主な機能、設計思想について説明します。","inLanguage":"ja","about":{"@type":"SoftwareApplication","name":"riida","applicationCategory":"UtilitiesApplication"},"url":"https://zonuexe.github.io/riida/introduction/"}
 ---
 
 riida（リーダ）は、ローカルのPDF・EPUBコレクションのためのデスクトップ読書アプリ兼ライブラリマネージャーです。

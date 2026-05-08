@@ -3,6 +3,16 @@ title: riida User Manual
 description: riida — Welcome to your digital reading room.
 draft: false
 template: splash
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: en_US
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"SoftwareApplication","name":"riida","description":"A desktop reading app and library manager for your local PDF and EPUB collection.","applicationCategory":"UtilitiesApplication","operatingSystem":["macOS","Windows","Linux"],"offers":{"@type":"Offer","price":"0"},"inLanguage":["ja","en"],"downloadUrl":"https://github.com/zonuexe/riida/releases","codeRepository":"https://github.com/zonuexe/riida","url":"https://zonuexe.github.io/riida/"}
 hero:
   tagline: A desktop reading app and library manager
   actions:
@@ -15,6 +25,12 @@ hero:
       icon: external
       variant: minimal
 ---
+
+<div class="h-card" hidden>
+  <span class="p-name">riida</span>
+  <span class="p-summary">A desktop reading app and library manager for your local PDF and EPUB collection.</span>
+  <a class="u-url" href="https://github.com/zonuexe/riida" rel="me">https://github.com/zonuexe/riida</a>
+</div>
 
 ## Key Features
 

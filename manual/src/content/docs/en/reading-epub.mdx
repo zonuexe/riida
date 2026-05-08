@@ -2,6 +2,16 @@
 title: Reading EPUBs
 description: How to use riida's EPUB viewer and known limitations.
 draft: false
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: en_US
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"HowTo","name":"Reading EPUBs","description":"How to use riida's EPUB viewer and known limitations.","inLanguage":"en","url":"https://zonuexe.github.io/riida/en/reading-epub/"}
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -16,12 +26,12 @@ The EPUB viewer is currently in development. Basic reading works, but there are 
 
 | Action | Method |
 |--------|--------|
-| Next page | → key / PageDown |
-| Previous page | ← key / PageUp |
+| Next page | <kbd>→</kbd> / <kbd>PageDown</kbd> |
+| Previous page | <kbd>←</kbd> / <kbd>PageUp</kbd> |
 
 ### Reading Position
 
-Your position (CFI) is saved automatically when you close the viewer and restored on next open.
+Your position (<abbr title="Canonical Fragment Identifier">CFI</abbr>) is saved automatically when you close the viewer and restored on next open.
 
 ## Viewer Settings
 

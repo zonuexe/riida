@@ -2,6 +2,16 @@
 title: Themes
 description: riida's four appearance themes and how to switch between them.
 draft: false
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: en_US
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"Article","name":"Themes","description":"riida's four appearance themes and how to switch between them.","inLanguage":"en","about":{"@type":"SoftwareApplication","name":"riida"},"url":"https://zonuexe.github.io/riida/en/themes/"}
 ---
 
 riida supports four appearance themes. Switch between them from the bottom of the sidebar or from Settings.

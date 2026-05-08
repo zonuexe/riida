@@ -2,6 +2,16 @@
 title: 書籍の整理
 description: タグ、メタデータ、シェルフを使った書籍の分類・管理方法を説明します。
 draft: false
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: ja_JP
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"Article","name":"書籍の整理","description":"タグ、メタデータ、シェルフを使った書籍の分類・管理方法を説明します。","inLanguage":"ja","about":{"@type":"SoftwareApplication","name":"riida"},"url":"https://zonuexe.github.io/riida/organizing/"}
 ---
 
 ## タグ
@@ -36,7 +46,7 @@ draft: false
 | 説明 | あらすじなど |
 | カバーURL | カバー画像のURL |
 | URL | 書籍の公式ページ等 |
-| ASIN | AmazonのASIN |
+| <abbr title="Amazon Standard Identification Number">ASIN</abbr> | AmazonのASIN |
 
 ### JSONパッチインポート
 

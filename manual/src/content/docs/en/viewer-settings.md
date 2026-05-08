@@ -2,6 +2,16 @@
 title: Viewer Settings
 description: Display settings for the PDF and EPUB viewer.
 draft: false
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: en_US
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"Article","name":"Viewer Settings","description":"Display settings for the PDF and EPUB viewer.","inLanguage":"en","about":{"@type":"SoftwareApplication","name":"riida"},"url":"https://zonuexe.github.io/riida/en/viewer-settings/"}
 ---
 
 Viewer settings let you customize the reading experience per-file or globally.

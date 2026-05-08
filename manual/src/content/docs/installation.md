@@ -2,6 +2,16 @@
 title: インストール
 description: riidaのダウンロードとインストール方法を説明します。
 draft: false
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: ja_JP
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"HowTo","name":"インストール","description":"riidaのダウンロードとインストール方法を説明します。","inLanguage":"ja","step":[{"@type":"HowToStep","position":1,"name":"ダウンロード","text":"GitHubのリリースページから最新版の.dmgファイルをダウンロードします。"},{"@type":"HowToStep","position":2,"name":"インストール","text":"ダウンロードした.dmgを開き、riida.appを/Applicationsフォルダにドラッグします。"},{"@type":"HowToStep","position":3,"name":"初回起動","text":"ターミナルでxattr -cr /Applications/riida.appを実行してから起動します。"}],"url":"https://zonuexe.github.io/riida/installation/"}
 ---
 
 ## 動作環境

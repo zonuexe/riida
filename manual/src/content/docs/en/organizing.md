@@ -2,6 +2,16 @@
 title: Organizing Your Books
 description: How to use tags, metadata, and shelves to organize your library.
 draft: false
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: en_US
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"Article","name":"Organizing Your Books","description":"How to use tags, metadata, and shelves to organize your library.","inLanguage":"en","about":{"@type":"SoftwareApplication","name":"riida"},"url":"https://zonuexe.github.io/riida/en/organizing/"}
 ---
 
 ## Tags
@@ -36,7 +46,7 @@ Right-click a book and choose **Edit Metadata** to edit:
 | Description | Synopsis, notes, etc. |
 | Cover URL | URL of cover image |
 | URL | Official page or store link |
-| ASIN | Amazon ASIN |
+| <abbr title="Amazon Standard Identification Number">ASIN</abbr> | Amazon Standard Identification Number |
 
 ### JSON Patch Import
 

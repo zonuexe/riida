@@ -2,6 +2,16 @@
 title: ビューア設定
 description: PDFおよびEPUBビューアの表示設定について説明します。
 draft: false
+head:
+  - tag: meta
+    attrs:
+      property: og:locale
+      content: ja_JP
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: |-
+      {"@context":"https://schema.org","@type":"Article","name":"ビューア設定","description":"PDFおよびEPUBビューアの表示設定について説明します。","inLanguage":"ja","about":{"@type":"SoftwareApplication","name":"riida"},"url":"https://zonuexe.github.io/riida/viewer-settings/"}
 ---
 
 ビューア設定では、読書体験をファイルごと・全体でカスタマイズできます。

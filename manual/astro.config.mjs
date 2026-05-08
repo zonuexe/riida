@@ -8,6 +8,28 @@ export default defineConfig({
     starlight({
       title: 'riida',
       description: 'ローカルのPDF・EPUBコレクションのためのデスクトップ読書アプリ',
+      head: [
+        { tag: 'meta', attrs: { property: 'og:type', content: 'website' } },
+        { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary' } },
+        {
+          tag: 'script',
+          attrs: { type: 'application/ld+json' },
+          content: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'WebSite',
+            name: 'riida ユーザーマニュアル',
+            url: 'https://zonuexe.github.io/riida/',
+            description: 'ローカルのPDF・EPUBコレクションのためのデスクトップ読書アプリ',
+            inLanguage: ['ja', 'en'],
+            about: {
+              '@type': 'SoftwareApplication',
+              name: 'riida',
+              applicationCategory: 'UtilitiesApplication',
+              operatingSystem: ['macOS', 'Windows', 'Linux'],
+            },
+          }),
+        },
+      ],
       defaultLocale: 'root',
       locales: {
         root: {

@@ -20,6 +20,9 @@ permissions:
 jobs:
   rust-tests:
     runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-C debuginfo=0"
     steps:
       - uses: actions/checkout@v6
 
@@ -42,6 +45,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Install cargo tools
         uses: taiki-e/install-action@v2

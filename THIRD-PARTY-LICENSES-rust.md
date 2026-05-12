@@ -2,7 +2,7 @@
 
 This file was generated from the currently installed Rust dependencies used by riida.
 
-- Rust dependencies: 461
+- Rust dependencies: 446
 
 _Regenerate with `npm run generate:third-party-licenses` inside the Nix development shell._
 
@@ -1186,6 +1186,40 @@ Redistribution and use in source and binary forms, with or without modification,
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
+### bs58 0.5.1
+
+- License: MIT/Apache-2.0
+- Source: https://github.com/Nullus157/bs58-rs
+
+#### LICENSE-APACHE
+
+_See the [full text of the Apache License 2.0](#apache-20)._
+
+#### LICENSE-MIT
+
+```text
+MIT License
+Copyright (c) 2016 The roaring-rs developers.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ### bstr 1.12.1
 
 - License: MIT OR Apache-2.0
@@ -1565,7 +1599,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### cc 1.2.61
+### cc 1.2.62
 
 - License: MIT OR Apache-2.0
 - Authors: Alex Crichton <alex@alexcrichton.com>
@@ -2038,14 +2072,6 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
-
-### convert_case 0.4.0
-
-- License: MIT
-- Authors: David Purdum <purdum41@gmail.com>
-- Source: https://github.com/rutrum/convert-case
-
-_No local license or notice file was found in the installed package._
 
 ### cookie 0.18.1
 
@@ -2570,7 +2596,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### cssparser 0.29.6
+### cssparser 0.36.0
 
 - License: MPL-2.0
 - Authors: Simon Sapin <simon.sapin@exyr.org>
@@ -3338,7 +3364,27 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
   defined by the Mozilla Public License, v. 2.0.
 ```
 
-### ctor 0.2.9
+### ctor 0.8.0
+
+- License: Apache-2.0 OR MIT
+- Authors: Matt Mastracci <matthew@mastracci.com>
+- Source: https://github.com/mmastrac/rust-ctor
+
+#### LICENSE-APACHE
+
+_See the [full text of the Apache License 2.0](#apache-20)._
+
+#### LICENSE-MIT
+
+```text
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+### ctor-proc-macro 0.0.7
 
 - License: Apache-2.0 OR MIT
 - Authors: Matt Mastracci <matthew@mastracci.com>
@@ -3494,6 +3540,40 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+### dbus 0.9.11
+
+- License: Apache-2.0/MIT
+- Authors: David Henningsson <diwic@ubuntu.com>
+- Source: https://github.com/diwic/dbus-rs
+
+#### LICENSE-APACHE
+
+_See the [full text of the Apache License 2.0](#apache-20)._
+
+#### LICENSE-MIT
+
+```text
+Copyright (c) 2014-2018 David Henningsson <diwic@ubuntu.com> and other contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ### deflate64 0.1.12
 
 - License: MIT
@@ -3563,7 +3643,39 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### derive_more 0.99.20
+### derive_more 2.1.1
+
+- License: MIT
+- Authors: Jelte Fennema <github-tech@jeltef.nl>
+- Source: https://github.com/JelteF/derive_more
+
+#### LICENSE
+
+```text
+The MIT License (MIT)
+
+Copyright (c) 2016 Jelte Fennema
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### derive_more-impl 2.1.1
 
 - License: MIT
 - Authors: Jelte Fennema <github-tech@jeltef.nl>
@@ -3635,7 +3747,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### digest 0.11.2
+### digest 0.11.3
 
 - License: MIT OR Apache-2.0
 - Authors: RustCrypto Developers
@@ -3839,6 +3951,44 @@ _No local license or notice file was found in the installed package._
 - Source: https://github.com/OpenByteDev/dlopen2
 
 _No local license or notice file was found in the installed package._
+
+### dom_query 0.27.0
+
+- License: MIT
+- Authors: niklak <morgenpurple@gmail.com>, importcjj <importcjj@gmail.com>
+- Source: https://github.com/niklak/dom_query
+
+#### LICENSE
+
+```text
+MIT License
+
+Copyright (c) 2023 Mykola Humanov
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+This project contains portions of code and architectural concepts originally 
+derived from the "nipper" project (https://github.com/importcjj/nipper), 
+developed by Chen Jiaju, licensed under the MIT License and the Apache License 2.0 (dual licensed).
+```
 
 ### dpi 0.1.2
 
@@ -4325,6 +4475,46 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
   This Source Code Form is "Incompatible With Secondary Licenses", as
   defined by the Mozilla Public License, v. 2.0.
+```
+
+### dtor 0.3.0
+
+- License: Apache-2.0 OR MIT
+- Authors: Matt Mastracci <matthew@mastracci.com>
+- Source: https://github.com/mmastrac/rust-ctor
+
+#### LICENSE-APACHE
+
+_See the [full text of the Apache License 2.0](#apache-20)._
+
+#### LICENSE-MIT
+
+```text
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+### dtor-proc-macro 0.0.6
+
+- License: Apache-2.0 OR MIT
+- Authors: Matt Mastracci <matthew@mastracci.com>
+- Source: https://github.com/mmastrac/rust-ctor
+
+#### LICENSE-APACHE
+
+_See the [full text of the Apache License 2.0](#apache-20)._
+
+#### LICENSE-MIT
+
+```text
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
 ### dunce 1.0.5
@@ -5203,6 +5393,36 @@ the following restrictions:
 3. This notice may not be removed or altered from any source distribution.
 ```
 
+### foldhash 0.2.0
+
+- License: Zlib
+- Authors: Orson Peters <orsonpeters@gmail.com>
+- Source: https://github.com/orlp/foldhash
+
+#### LICENSE
+
+```text
+Copyright (c) 2024 Orson Peters
+
+This software is provided 'as-is', without any express or implied warranty. In
+no event will the authors be held liable for any damages arising from the use of
+this software.
+
+Permission is granted to anyone to use this software for any purpose, including
+commercial applications, and to alter it and redistribute it freely, subject to
+the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not claim
+    that you wrote the original software. If you use this software in a product,
+    an acknowledgment in the product documentation would be appreciated but is
+    not required.
+
+2. Altered source versions must be plainly marked as such, and must not be
+    misrepresented as being the original software.
+
+3. This notice may not be removed or altered from any source distribution.
+```
+
 ### foreign-types 0.5.0
 
 - License: MIT/Apache-2.0
@@ -5375,46 +5595,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-```
-
-### futf 0.1.5
-
-- License: MIT / Apache-2.0
-- Authors: Keegan McAllister <kmcallister@mozilla.com>
-- Source: https://github.com/servo/futf
-
-#### LICENSE-APACHE
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### LICENSE-MIT
-
-```text
-Copyright (c) 2015 Keegan McAllister
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
 ```
 
 ### futures-channel 0.3.32
@@ -5825,14 +6005,6 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### fxhash 0.2.1
-
-- License: Apache-2.0/MIT
-- Authors: cbreeden <github@u.breeden.cc>
-- Source: https://github.com/cbreeden/fxhash
-
-_No local license or notice file was found in the installed package._
-
 ### gdk 0.18.2
 
 - License: MIT
@@ -6059,88 +6231,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-```
-
-### getrandom 0.1.16
-
-- License: MIT OR Apache-2.0
-- Authors: The Rand Project Developers
-- Source: https://github.com/rust-random/getrandom
-
-#### LICENSE-APACHE
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### LICENSE-MIT
-
-```text
-Copyright 2018 Developers of the Rand project
-Copyright (c) 2014 The Rust Project Developers
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
-
-### getrandom 0.2.17
-
-- License: MIT OR Apache-2.0
-- Authors: The Rand Project Developers
-- Source: https://github.com/rust-random/getrandom
-
-#### LICENSE-APACHE
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### LICENSE-MIT
-
-```text
-Copyright (c) 2018-2024 The rust-random Project Developers
-Copyright (c) 2014 The Rust Project Developers
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
 ```
 
 ### getrandom 0.3.4
@@ -6637,10 +6727,9 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### hashbrown 0.17.0
+### hashbrown 0.17.1
 
 - License: MIT OR Apache-2.0
-- Authors: Amanieu d'Antras <amanieu@gmail.com>
 - Source: https://github.com/rust-lang/hashbrown
 
 #### LICENSE-APACHE
@@ -6872,7 +6961,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### html5ever 0.29.1
+### html5ever 0.38.0
 
 - License: MIT OR Apache-2.0
 - Authors: The html5ever Project Developers
@@ -6984,7 +7073,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### hybrid-array 0.4.11
+### hybrid-array 0.4.12
 
 - License: MIT OR Apache-2.0
 - Authors: RustCrypto Developers
@@ -8116,40 +8205,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### kuchikiki 0.8.8-speedreader
-
-- License: MIT
-- Authors: Brave Authors, Ralph Giles <rgiles@brave.com>, Simon Sapin <simon.sapin@exyr.org>
-- Source: https://github.com/brave/kuchikiki
-
-#### LICENSE
-
-```text
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
-
 ### libappindicator 0.9.0
 
 - License: Apache-2.0 OR MIT
@@ -8191,7 +8246,7 @@ SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### libbz2-rs-sys 0.2.3
+### libbz2-rs-sys 0.2.4
 
 - License: bzip2-1.0.6
 - Source: https://github.com/trifectatechfoundation/libbzip2-rs
@@ -8287,6 +8342,40 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
+```
+
+### libdbus-sys 0.2.7
+
+- License: Apache-2.0/MIT
+- Authors: David Henningsson <diwic@ubuntu.com>
+- Source: https://github.com/diwic/dbus-rs
+
+#### LICENSE-APACHE
+
+_See the [full text of the Apache License 2.0](#apache-20)._
+
+#### LICENSE-MIT
+
+```text
+Copyright (c) 2014-2018 David Henningsson <diwic@ubuntu.com> and other contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
 
 ### libloading 0.7.4
@@ -8530,15 +8619,7 @@ DEALINGS IN THE SOFTWARE.
 
 _See the [full text of the Apache License 2.0](#apache-20)._
 
-### mac 0.1.1
-
-- License: MIT/Apache-2.0
-- Authors: Jonathan Reem <jonathan.reem@gmail.com>
-- Source: https://github.com/reem/rust-mac.git
-
-_No local license or notice file was found in the installed package._
-
-### markup5ever 0.14.1
+### markup5ever 0.38.0
 
 - License: MIT OR Apache-2.0
 - Authors: The html5ever Project Developers
@@ -8552,48 +8633,6 @@ _See the [full text of the Apache License 2.0](#apache-20)._
 
 ```text
 Copyright (c) 2014 The html5ever Project Developers
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
-
-### match_token 0.1.0
-
-- License: MIT OR Apache-2.0
-- Source: https://github.com/servo/html5ever
-
-_No local license or notice file was found in the installed package._
-
-### matches 0.1.10
-
-- License: MIT
-- Source: https://github.com/SimonSapin/rust-std-candidates
-
-#### LICENSE
-
-```text
-Copyright (c) 2014-2016 Simon Sapin
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated
@@ -8842,7 +8881,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### muda 0.17.2
+### muda 0.19.1
 
 - License: Apache-2.0 OR MIT
 - Source: https://github.com/tauri-apps/muda
@@ -8911,46 +8950,6 @@ Creator: Person: Daniel Thompson-Yvetot
 
 ```text
 Copyright (c) 2015 Jonathan Reem
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
-
-### nodrop 0.1.14
-
-- License: MIT/Apache-2.0
-- Authors: bluss
-- Source: https://github.com/bluss/arrayvec
-
-#### LICENSE-APACHE
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### LICENSE-MIT
-
-```text
-Copyright (c) Ulrik Sverdrup "bluss" 2015-2017
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated
@@ -9247,7 +9246,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### open 5.3.4
+### open 5.3.5
 
 - License: MIT
 - Authors: Sebastian Thiel <byronimo@gmail.com>
@@ -10012,15 +10011,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### phf 0.10.1
-
-- License: MIT
-- Authors: Steven Fackler <sfackler@gmail.com>
-- Source: https://github.com/sfackler/rust-phf
-
-_No local license or notice file was found in the installed package._
-
-### phf 0.11.3
+### phf 0.13.1
 
 - License: MIT
 - Authors: Steven Fackler <sfackler@gmail.com>
@@ -10051,15 +10042,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### phf 0.8.0
-
-- License: MIT
-- Authors: Steven Fackler <sfackler@gmail.com>
-- Source: https://github.com/sfackler/rust-phf
-
-_No local license or notice file was found in the installed package._
-
-### phf_codegen 0.11.3
+### phf_codegen 0.13.1
 
 - License: MIT
 - Authors: Steven Fackler <sfackler@gmail.com>
@@ -10090,23 +10073,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### phf_codegen 0.8.0
-
-- License: MIT
-- Authors: Steven Fackler <sfackler@gmail.com>
-- Source: https://github.com/sfackler/rust-phf
-
-_No local license or notice file was found in the installed package._
-
-### phf_generator 0.10.0
-
-- License: MIT
-- Authors: Steven Fackler <sfackler@gmail.com>
-- Source: https://github.com/sfackler/rust-phf
-
-_No local license or notice file was found in the installed package._
-
-### phf_generator 0.11.3
+### phf_generator 0.13.1
 
 - License: MIT
 - Authors: Steven Fackler <sfackler@gmail.com>
@@ -10137,23 +10104,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### phf_generator 0.8.0
-
-- License: MIT
-- Authors: Steven Fackler <sfackler@gmail.com>
-- Source: https://github.com/sfackler/rust-phf
-
-_No local license or notice file was found in the installed package._
-
-### phf_macros 0.10.0
-
-- License: MIT
-- Authors: Steven Fackler <sfackler@gmail.com>
-- Source: https://github.com/sfackler/rust-phf
-
-_No local license or notice file was found in the installed package._
-
-### phf_macros 0.11.3
+### phf_macros 0.13.1
 
 - License: MIT
 - Authors: Steven Fackler <sfackler@gmail.com>
@@ -10184,15 +10135,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### phf_shared 0.10.0
-
-- License: MIT
-- Authors: Steven Fackler <sfackler@gmail.com>
-- Source: https://github.com/sfackler/rust-phf
-
-_No local license or notice file was found in the installed package._
-
-### phf_shared 0.11.3
+### phf_shared 0.13.1
 
 - License: MIT
 - Authors: Steven Fackler <sfackler@gmail.com>
@@ -10222,14 +10165,6 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
-
-### phf_shared 0.8.0
-
-- License: MIT
-- Authors: Steven Fackler <sfackler@gmail.com>
-- Source: https://github.com/sfackler/rust-phf
-
-_No local license or notice file was found in the installed package._
 
 ### pin-project-lite 0.2.17
 
@@ -10377,6 +10312,46 @@ SOFTWARE.
 ```
 
 ### png 0.17.16
+
+- License: MIT OR Apache-2.0
+- Authors: The image-rs Developers
+- Source: https://github.com/image-rs/image-png
+
+#### LICENSE-APACHE
+
+_See the [full text of the Apache License 2.0](#apache-20)._
+
+#### LICENSE-MIT
+
+```text
+Copyright (c) 2015 nwin
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
+### png 0.18.1
 
 - License: MIT OR Apache-2.0
 - Authors: The image-rs Developers
@@ -10953,46 +10928,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### proc-macro-hack 0.5.20+deprecated
-
-- License: MIT OR Apache-2.0
-- Authors: David Tolnay <dtolnay@gmail.com>
-- Source: https://github.com/dtolnay/proc-macro-hack
-
-#### LICENSE-APACHE
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### LICENSE-MIT
-
-```text
-Copyright (c) 2018 David Tolnay
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
-
 ### proc-macro2 1.0.106
 
 - License: MIT OR Apache-2.0
@@ -11105,7 +11040,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### quick-xml 0.39.2
+### quick-xml 0.39.4
 
 - License: MIT
 - Source: https://github.com/tafia/quick-xml
@@ -11176,174 +11111,10 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### rand 0.7.3
-
-- License: MIT OR Apache-2.0
-- Authors: The Rand Project Developers, The Rust Project Developers
-- Source: https://github.com/rust-random/rand
-
-#### LICENSE-APACHE
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### LICENSE-MIT
-
-```text
-Copyright 2018 Developers of the Rand project
-Copyright (c) 2014 The Rust Project Developers
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
-
-### rand 0.8.6
-
-- License: MIT OR Apache-2.0
-- Authors: The Rand Project Developers, The Rust Project Developers
-- Source: https://github.com/rust-random/rand
-
-#### LICENSE-APACHE
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### LICENSE-MIT
-
-```text
-Copyright 2018 Developers of the Rand project
-Copyright (c) 2014 The Rust Project Developers
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
-
 ### rand 0.9.4
 
 - License: MIT OR Apache-2.0
 - Authors: The Rand Project Developers, The Rust Project Developers
-- Source: https://github.com/rust-random/rand
-
-#### LICENSE-APACHE
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### LICENSE-MIT
-
-```text
-Copyright 2018 Developers of the Rand project
-Copyright (c) 2014 The Rust Project Developers
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
-
-### rand_chacha 0.2.2
-
-- License: MIT OR Apache-2.0
-- Authors: The Rand Project Developers, The Rust Project Developers, The CryptoCorrosion Contributors
-- Source: https://github.com/rust-random/rand
-
-#### LICENSE-APACHE
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### LICENSE-MIT
-
-```text
-Copyright 2018 Developers of the Rand project
-Copyright (c) 2014 The Rust Project Developers
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
-
-### rand_chacha 0.3.1
-
-- License: MIT OR Apache-2.0
-- Authors: The Rand Project Developers, The Rust Project Developers, The CryptoCorrosion Contributors
 - Source: https://github.com/rust-random/rand
 
 #### LICENSE-APACHE
@@ -11422,88 +11193,6 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### rand_core 0.5.1
-
-- License: MIT OR Apache-2.0
-- Authors: The Rand Project Developers, The Rust Project Developers
-- Source: https://github.com/rust-random/rand
-
-#### LICENSE-APACHE
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### LICENSE-MIT
-
-```text
-Copyright 2018 Developers of the Rand project
-Copyright (c) 2014 The Rust Project Developers
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
-
-### rand_core 0.6.4
-
-- License: MIT OR Apache-2.0
-- Authors: The Rand Project Developers, The Rust Project Developers
-- Source: https://github.com/rust-random/rand
-
-#### LICENSE-APACHE
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### LICENSE-MIT
-
-```text
-Copyright 2018 Developers of the Rand project
-Copyright (c) 2014 The Rust Project Developers
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
-
 ### rand_core 0.9.5
 
 - License: MIT OR Apache-2.0
@@ -11519,47 +11208,6 @@ _See the [full text of the Apache License 2.0](#apache-20)._
 ```text
 Copyright 2018 Developers of the Rand project
 Copyright (c) 2014 The Rust Project Developers
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
-
-### rand_pcg 0.2.1
-
-- License: MIT OR Apache-2.0
-- Authors: The Rand Project Developers
-- Source: https://github.com/rust-random/rand
-
-#### LICENSE-APACHE
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### LICENSE-MIT
-
-```text
-Copyright (c) 2014-2017 Melissa O'Neill and PCG Project contributors
-Copyright 2018 Developers of the Rand project
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated
@@ -11976,6 +11624,44 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
+### rustc-hash 2.1.2
+
+- License: Apache-2.0 OR MIT
+- Authors: The Rust Project Developers
+- Source: https://github.com/rust-lang/rustc-hash
+
+#### LICENSE-APACHE
+
+_See the [full text of the Apache License 2.0](#apache-20)._
+
+#### LICENSE-MIT
+
+```text
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
 ### rustix 1.1.4
 
 - License: Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
@@ -12266,11 +11952,11 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### selectors 0.24.0
+### selectors 0.36.1
 
 - License: MPL-2.0
 - Authors: The Servo Project Developers
-- Source: https://github.com/servo/servo
+- Source: https://github.com/servo/stylo
 
 _No local license or notice file was found in the installed package._
 
@@ -12606,7 +12292,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### serde_with 3.18.0
+### serde_with 3.20.0
 
 - License: MIT OR Apache-2.0
 - Authors: Jonas Bushart, Marcin Kaźmierczak
@@ -12646,7 +12332,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### serde_with_macros 3.18.0
+### serde_with_macros 3.20.0
 
 - License: MIT OR Apache-2.0
 - Authors: Jonas Bushart
@@ -12796,11 +12482,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### servo_arc 0.2.0
+### servo_arc 0.4.3
 
 - License: MIT OR Apache-2.0
 - Authors: The Servo Project Developers
-- Source: https://github.com/servo/servo
+- Source: https://github.com/servo/stylo
 
 #### LICENSE-APACHE
 
@@ -13041,25 +12727,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### siphasher 0.3.11
-
-- License: MIT/Apache-2.0
-- Authors: Frank Denis <github@pureftpd.org>
-- Source: https://github.com/jedisct1/rust-siphash
-
-#### COPYING
-
-```text
-Copyright 2012-2016 The Rust Project Developers.
-Copyright 2016-2023 Frank Denis.
-
-Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-<LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-option.
-```
-
-### siphasher 1.0.2
+### siphasher 1.0.3
 
 - License: MIT/Apache-2.0
 - Authors: Frank Denis <github@pureftpd.org>
@@ -13329,7 +12997,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### string_cache 0.8.9
+### string_cache 0.9.0
 
 - License: MIT OR Apache-2.0
 - Authors: The Servo Project Developers
@@ -13369,7 +13037,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### string_cache_codegen 0.5.4
+### string_cache_codegen 0.6.1
 
 - License: MIT OR Apache-2.0
 - Authors: The Servo Project Developers
@@ -13609,7 +13277,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### tao 0.34.8
+### tao 0.35.2
 
 - License: Apache-2.0
 - Authors: Tauri Programme within The Commons Conservancy, The winit contributors
@@ -13652,7 +13320,7 @@ Creator: Person: Daniel Thompson-Yvetot
 
 _See the [full text of the Apache License 2.0](#apache-20)._
 
-### tauri 2.10.3
+### tauri 2.11.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13688,7 +13356,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tauri-build 2.5.6
+### tauri-build 2.6.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13724,7 +13392,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tauri-codegen 2.5.5
+### tauri-codegen 2.6.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13760,7 +13428,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tauri-macros 2.5.5
+### tauri-macros 2.6.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13796,7 +13464,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tauri-plugin 2.5.4
+### tauri-plugin 2.6.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13804,7 +13472,7 @@ SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### tauri-plugin-dialog 2.7.0
+### tauri-plugin-dialog 2.7.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13865,7 +13533,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/tauri.git
 Creator: Person: Daniel Thompson-Yvetot
 ```
 
-### tauri-plugin-fs 2.5.0
+### tauri-plugin-fs 2.5.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13926,7 +13594,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/tauri.git
 Creator: Person: Daniel Thompson-Yvetot
 ```
 
-### tauri-plugin-opener 2.5.3
+### tauri-plugin-opener 2.5.4
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13987,7 +13655,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/tauri.git
 Creator: Person: Daniel Thompson-Yvetot
 ```
 
-### tauri-runtime 2.10.1
+### tauri-runtime 2.11.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -14023,7 +13691,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tauri-runtime-wry 2.10.1
+### tauri-runtime-wry 2.11.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -14059,7 +13727,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tauri-utils 2.8.3
+### tauri-utils 2.9.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -14174,11 +13842,11 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### tendril 0.4.3
+### tendril 0.5.0
 
-- License: MIT/Apache-2.0
+- License: MIT OR Apache-2.0
 - Authors: Keegan McAllister <mcallister.keegan@gmail.com>, Simon Sapin <simon.sapin@exyr.org>, Chris Morgan <me@chrismorgan.info>
-- Source: https://github.com/servo/tendril
+- Source: https://github.com/servo/html5ever
 
 #### LICENSE-APACHE
 
@@ -14621,7 +14289,7 @@ freely, subject to the following restrictions:
 3. This notice may not be removed or altered from any source distribution.
 ```
 
-### tokio 1.52.1
+### tokio 1.52.3
 
 - License: MIT
 - Authors: Tokio Contributors <team@tokio.rs>
@@ -15134,7 +14802,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### tray-icon 0.21.3
+### tray-icon 0.23.1
 
 - License: MIT OR Apache-2.0
 - Source: https://github.com/tauri-apps/tray-icon
@@ -15985,6 +15653,46 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+```
+
+### web_atoms 0.2.4
+
+- License: MIT OR Apache-2.0
+- Authors: The html5ever Project Developers
+- Source: https://github.com/servo/html5ever
+
+#### LICENSE-APACHE
+
+_See the [full text of the Apache License 2.0](#apache-20)._
+
+#### LICENSE-MIT
+
+```text
+Copyright (c) 2014 The html5ever Project Developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
 ```
 
 ### webkit2gtk 2.0.2
@@ -17047,7 +16755,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### wry 0.54.4
+### wry 0.55.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -17467,10 +17175,10 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### zerofrom 0.1.7
+### zerofrom 0.1.8
 
 - License: Unicode-3.0
-- Authors: Manish Goregaokar <manishsmail@gmail.com>
+- Authors: The ICU4X Project Developers
 - Source: https://github.com/unicode-org/icu4x
 
 #### LICENSE
@@ -18006,7 +17714,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### zvariant 5.10.1
+### zvariant 5.11.0
 
 - License: MIT
 - Authors: Zeeshan Ali Khan <zeeshanak@gnome.org>
@@ -18042,7 +17750,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### zvariant_derive 5.10.1
+### zvariant_derive 5.11.0
 
 - License: MIT
 - Authors: Zeeshan Ali Khan <zeeshanak@gnome.org>

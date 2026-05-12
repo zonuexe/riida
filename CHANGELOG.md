@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-05-13
+
+### Added
+
+- Time-based search operators for shelves and the search box, following Gmail's query syntax. `newer_than:7d` finds books read in the past seven days; `older_than:1y` finds books last read more than a year ago; `after:2026/01/01` and `before:2026/04/01` filter by an absolute date. The `added_*` variants (`added_newer_than:`, `added_after:`, etc.) apply the same filters to a book's library-added date instead of its last-read date.
+- Online user manual published at <https://zonuexe.github.io/riida/>, covering installation, library setup, organizing, PDF and EPUB reading, themes, and viewer settings. Available in Japanese and English.
+
 ## [0.5.3] - 2026-05-06
 
 ### Added
@@ -356,7 +363,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/zonuexe/riida/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/zonuexe/riida/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/zonuexe/riida/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/zonuexe/riida/compare/v0.5.0...v0.5.1

@@ -3093,7 +3093,7 @@ _See the [full text of the Apache License 2.0](#apache-20)._
 
 _See the [full text of the Apache License 2.0](#apache-20)._
 
-### @tauri-apps/api 2.10.1
+### @tauri-apps/api 2.11.0
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy

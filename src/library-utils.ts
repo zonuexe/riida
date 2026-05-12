@@ -89,6 +89,7 @@ type SearchableBook = {
   publisher?: string | null;
   language?: string | null;
   lastReadAt?: number | null;
+  indexedAt?: number;
 };
 
 export type TagNode = {
@@ -194,10 +195,14 @@ export function deriveDirectories(snapshot: DirectorySnapshot): DirectoryNode[] 
     });
 }
 
-// Returns the threshold in seconds for a read: value, or null if unrecognised.
-function parseReadThresholdSeconds(value: string): number | null | "never" {
+// Parse a relative duration ("7d", "1w", "2m", "1y", or named "today" /
+// "week" / "month" / "year") into seconds. Returns null when unrecognised.
+//
+// The named forms exist for legacy `read:` queries; new Gmail-style
+// operators (newer_than / older_than / added_newer_than / ...) accept
+// the same value shapes for consistency.
+export function parseRelativeDurationSeconds(value: string): number | null {
   const v = value.trim().toLowerCase();
-  if (v === "never") return "never";
   const named: Record<string, number> = {
     today: 86400,
     week: 7 * 86400,
@@ -205,15 +210,85 @@ function parseReadThresholdSeconds(value: string): number | null | "never" {
     year: 365 * 86400,
   };
   if (named[v] !== undefined) return named[v];
-  const m = /^(\d+)(d|w|m)$/.exec(v);
+  const m = /^(\d+)(d|w|m|y)$/.exec(v);
   if (m && m[1] !== undefined) {
     const n = parseInt(m[1], 10);
     const unit = m[2];
     if (unit === "d") return n * 86400;
     if (unit === "w") return n * 7 * 86400;
     if (unit === "m") return n * 30 * 86400;
+    if (unit === "y") return n * 365 * 86400;
   }
   return null;
+}
+
+// Parse "YYYY/MM/DD" or "YYYY-MM-DD" into a UNIX-second timestamp at
+// local midnight. Returns null on malformed or out-of-range input
+// (e.g. "2026-02-30"). Mixing separators is not allowed.
+export function parseAbsoluteDateSeconds(value: string): number | null {
+  const v = value.trim();
+  const slash = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(v);
+  const dash = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(v);
+  const m = slash ?? dash;
+  if (!m) return null;
+  const y = parseInt(m[1] as string, 10);
+  const mo = parseInt(m[2] as string, 10);
+  const d = parseInt(m[3] as string, 10);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const date = new Date(y, mo - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d) {
+    return null;
+  }
+  return Math.floor(date.getTime() / 1000);
+}
+
+type TimeFieldSpec = {
+  timestamp: "lastReadAt" | "indexedAt";
+  // "newer_than" / "older_than" take a relative duration.
+  // "after" / "before" take an absolute date.
+  kind: "newer_than" | "older_than" | "after" | "before";
+};
+
+// Gmail-style time operators. Bare forms target last_read_at; `added_*`
+// variants target indexed_at. `newer` / `older` are Gmail's absolute-date
+// aliases for `after` / `before`.
+const TIME_FIELDS: Record<string, TimeFieldSpec> = {
+  newer_than: { timestamp: "lastReadAt", kind: "newer_than" },
+  older_than: { timestamp: "lastReadAt", kind: "older_than" },
+  after: { timestamp: "lastReadAt", kind: "after" },
+  before: { timestamp: "lastReadAt", kind: "before" },
+  newer: { timestamp: "lastReadAt", kind: "after" },
+  older: { timestamp: "lastReadAt", kind: "before" },
+  added_newer_than: { timestamp: "indexedAt", kind: "newer_than" },
+  added_older_than: { timestamp: "indexedAt", kind: "older_than" },
+  added_after: { timestamp: "indexedAt", kind: "after" },
+  added_before: { timestamp: "indexedAt", kind: "before" },
+  added_newer: { timestamp: "indexedAt", kind: "after" },
+  added_older: { timestamp: "indexedAt", kind: "before" },
+};
+
+function bookTimestamp(book: SearchableBook, key: TimeFieldSpec["timestamp"]): number | null {
+  if (key === "lastReadAt") return book.lastReadAt ?? null;
+  return book.indexedAt ?? null;
+}
+
+function matchTimeField(
+  book: SearchableBook,
+  spec: TimeFieldSpec,
+  value: string,
+  nowSeconds: number,
+): boolean {
+  const ts = bookTimestamp(book, spec.timestamp);
+  if (ts == null) return false;
+  if (spec.kind === "newer_than" || spec.kind === "older_than") {
+    const duration = parseRelativeDurationSeconds(value);
+    if (duration === null) return false;
+    const threshold = nowSeconds - duration;
+    return spec.kind === "newer_than" ? ts >= threshold : ts < threshold;
+  }
+  const cutoff = parseAbsoluteDateSeconds(value);
+  if (cutoff === null) return false;
+  return spec.kind === "after" ? ts >= cutoff : ts < cutoff;
 }
 
 function matchesFieldToken(book: SearchableBook, field: string, value: string): boolean {
@@ -248,16 +323,23 @@ function matchesFieldToken(book: SearchableBook, field: string, value: string): 
     case "source":
       return normalizeSearchText(book.sourceType ?? "").includes(q);
     case "read": {
-      const threshold = parseReadThresholdSeconds(value);
-      if (threshold === null) return false;
-      if (threshold === "never") return book.lastReadAt == null;
+      // `read:never` matches books that have never been opened. Other
+      // values behave as a shorthand for `newer_than:<duration>` against
+      // last_read_at.
+      const v = value.trim().toLowerCase();
+      if (v === "never") return book.lastReadAt == null;
+      const duration = parseRelativeDurationSeconds(value);
+      if (duration === null) return false;
       const lastReadAt = book.lastReadAt;
       if (lastReadAt == null) return false;
       const nowSeconds = Date.now() / 1000;
-      return nowSeconds - lastReadAt <= threshold;
+      return nowSeconds - lastReadAt <= duration;
     }
-    default:
+    default: {
+      const spec = TIME_FIELDS[field];
+      if (spec) return matchTimeField(book, spec, value, Date.now() / 1000);
       return false;
+    }
   }
 }
 

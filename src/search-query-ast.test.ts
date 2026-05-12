@@ -150,6 +150,42 @@ describe("parseSearchQueryAst", () => {
     });
   });
 
+  it("recognises Gmail-style time operators as field tokens", () => {
+    expect(parseSearchQueryAst("newer_than:7d")).toEqual({
+      kind: "field",
+      field: "newer_than",
+      value: "7d",
+    });
+    expect(parseSearchQueryAst("older_than:1y")).toEqual({
+      kind: "field",
+      field: "older_than",
+      value: "1y",
+    });
+    expect(parseSearchQueryAst("after:2026/01/15")).toEqual({
+      kind: "field",
+      field: "after",
+      value: "2026/01/15",
+    });
+    expect(parseSearchQueryAst("before:2026-01-15")).toEqual({
+      kind: "field",
+      field: "before",
+      value: "2026-01-15",
+    });
+  });
+
+  it("recognises added_* variants as field tokens", () => {
+    expect(parseSearchQueryAst("added_newer_than:7d")).toEqual({
+      kind: "field",
+      field: "added_newer_than",
+      value: "7d",
+    });
+    expect(parseSearchQueryAst("added_after:2026/01/15")).toEqual({
+      kind: "field",
+      field: "added_after",
+      value: "2026/01/15",
+    });
+  });
+
   it("throws on unclosed parenthesis", () => {
     expect(() => parseSearchQueryAst("(rust OR go")).toThrow(SyntaxError);
   });

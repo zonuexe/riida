@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deriveDirectories,
   deriveLanguages,
@@ -10,6 +10,8 @@ import {
   formatBookLocation,
   formatFileSize,
   normalizeSearchText,
+  parseAbsoluteDateSeconds,
+  parseRelativeDurationSeconds,
 } from "./library-utils";
 
 describe("formatFileSize", () => {
@@ -355,5 +357,203 @@ describe("deriveSources", () => {
         { sourceType: "epub" },
       ]),
     ).toEqual(["epub", "kindle", "pdf"]);
+  });
+});
+
+describe("parseRelativeDurationSeconds", () => {
+  it("parses Gmail-style d/w/m/y units", () => {
+    expect(parseRelativeDurationSeconds("7d")).toBe(7 * 86400);
+    expect(parseRelativeDurationSeconds("2w")).toBe(2 * 7 * 86400);
+    expect(parseRelativeDurationSeconds("3m")).toBe(3 * 30 * 86400);
+    expect(parseRelativeDurationSeconds("1y")).toBe(365 * 86400);
+  });
+
+  it("parses named aliases", () => {
+    expect(parseRelativeDurationSeconds("today")).toBe(86400);
+    expect(parseRelativeDurationSeconds("week")).toBe(7 * 86400);
+    expect(parseRelativeDurationSeconds("month")).toBe(30 * 86400);
+    expect(parseRelativeDurationSeconds("year")).toBe(365 * 86400);
+  });
+
+  it("is case-insensitive and ignores surrounding whitespace", () => {
+    expect(parseRelativeDurationSeconds("  7D  ")).toBe(7 * 86400);
+    expect(parseRelativeDurationSeconds("WEEK")).toBe(7 * 86400);
+  });
+
+  it("returns null for unrecognised input", () => {
+    expect(parseRelativeDurationSeconds("")).toBeNull();
+    expect(parseRelativeDurationSeconds("7x")).toBeNull();
+    expect(parseRelativeDurationSeconds("never")).toBeNull();
+    expect(parseRelativeDurationSeconds("-1d")).toBeNull();
+    expect(parseRelativeDurationSeconds("1.5d")).toBeNull();
+  });
+});
+
+describe("parseAbsoluteDateSeconds", () => {
+  it("parses YYYY/MM/DD at local midnight", () => {
+    const ts = parseAbsoluteDateSeconds("2026/01/15");
+    expect(ts).not.toBeNull();
+    const d = new Date((ts as number) * 1000);
+    expect(d.getFullYear()).toBe(2026);
+    expect(d.getMonth()).toBe(0);
+    expect(d.getDate()).toBe(15);
+    expect(d.getHours()).toBe(0);
+  });
+
+  it("parses YYYY-MM-DD identically", () => {
+    expect(parseAbsoluteDateSeconds("2026-01-15")).toBe(parseAbsoluteDateSeconds("2026/01/15"));
+  });
+
+  it("accepts single-digit months and days", () => {
+    expect(parseAbsoluteDateSeconds("2026/1/5")).toBe(parseAbsoluteDateSeconds("2026/01/05"));
+  });
+
+  it("rejects mixed separators, malformed input, and impossible dates", () => {
+    expect(parseAbsoluteDateSeconds("2026/01-15")).toBeNull();
+    expect(parseAbsoluteDateSeconds("2026")).toBeNull();
+    expect(parseAbsoluteDateSeconds("2026/13/01")).toBeNull();
+    expect(parseAbsoluteDateSeconds("2026/02/30")).toBeNull();
+    expect(parseAbsoluteDateSeconds("")).toBeNull();
+  });
+});
+
+describe("filterVisibleBooks — time-based operators", () => {
+  // Fixed wall-clock so relative computations are deterministic.
+  const NOW = new Date("2026-05-12T12:00:00").getTime();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const nowSeconds = Math.floor(NOW / 1000);
+  const daysAgo = (n: number) => nowSeconds - n * 86400;
+
+  const books = [
+    {
+      fileName: "Recent.pdf",
+      filePath: "/Books/Recent.pdf",
+      lastReadAt: daysAgo(2),
+      indexedAt: daysAgo(400),
+    },
+    {
+      fileName: "MidWeek.pdf",
+      filePath: "/Books/MidWeek.pdf",
+      lastReadAt: daysAgo(6),
+      indexedAt: daysAgo(100),
+    },
+    {
+      fileName: "Older.pdf",
+      filePath: "/Books/Older.pdf",
+      lastReadAt: daysAgo(60),
+      indexedAt: daysAgo(30),
+    },
+    {
+      fileName: "AncientUnread.pdf",
+      filePath: "/Books/AncientUnread.pdf",
+      lastReadAt: null,
+      indexedAt: daysAgo(800),
+    },
+  ];
+
+  it("newer_than:7d matches books read in the last 7 days", () => {
+    const results = filterVisibleBooks(books, null, null, null, false, "newer_than:7d");
+    expect(results.map((b) => b.fileName)).toEqual(["Recent.pdf", "MidWeek.pdf"]);
+  });
+
+  it("older_than:1m matches books last read more than 30 days ago, excluding never-read", () => {
+    const results = filterVisibleBooks(books, null, null, null, false, "older_than:1m");
+    expect(results.map((b) => b.fileName)).toEqual(["Older.pdf"]);
+  });
+
+  it("after:YYYY/MM/DD matches books read at or after the local-midnight cutoff", () => {
+    // NOW = 2026-05-12, so "after:2026/04/01" includes Recent (2d) and MidWeek (6d).
+    const results = filterVisibleBooks(books, null, null, null, false, "after:2026/04/01");
+    expect(results.map((b) => b.fileName)).toEqual(["Recent.pdf", "MidWeek.pdf"]);
+  });
+
+  it("before:YYYY/MM/DD matches books read strictly before the cutoff", () => {
+    const results = filterVisibleBooks(books, null, null, null, false, "before:2026/04/01");
+    expect(results.map((b) => b.fileName)).toEqual(["Older.pdf"]);
+  });
+
+  it("ISO-style YYYY-MM-DD is accepted equivalently", () => {
+    expect(filterVisibleBooks(books, null, null, null, false, "after:2026-04-01")).toEqual(
+      filterVisibleBooks(books, null, null, null, false, "after:2026/04/01"),
+    );
+  });
+
+  it("newer/older are Gmail-style aliases for after/before", () => {
+    expect(filterVisibleBooks(books, null, null, null, false, "newer:2026/04/01")).toEqual(
+      filterVisibleBooks(books, null, null, null, false, "after:2026/04/01"),
+    );
+    expect(filterVisibleBooks(books, null, null, null, false, "older:2026/04/01")).toEqual(
+      filterVisibleBooks(books, null, null, null, false, "before:2026/04/01"),
+    );
+  });
+
+  it("never-read books are excluded from all time predicates", () => {
+    expect(
+      filterVisibleBooks(books, null, null, null, false, "newer_than:99y").map((b) => b.fileName),
+    ).not.toContain("AncientUnread.pdf");
+    expect(
+      filterVisibleBooks(books, null, null, null, false, "older_than:1d").map((b) => b.fileName),
+    ).not.toContain("AncientUnread.pdf");
+    expect(
+      filterVisibleBooks(books, null, null, null, false, "before:2030/01/01").map(
+        (b) => b.fileName,
+      ),
+    ).not.toContain("AncientUnread.pdf");
+  });
+
+  it("read:never still matches books with no reading history", () => {
+    const results = filterVisibleBooks(books, null, null, null, false, "read:never");
+    expect(results.map((b) => b.fileName)).toEqual(["AncientUnread.pdf"]);
+  });
+
+  it("added_newer_than targets indexed_at, not last_read_at", () => {
+    // Recent.pdf was read 2 days ago but indexed 400 days ago, so it
+    // matches newer_than:1m but not added_newer_than:1m.
+    expect(
+      filterVisibleBooks(books, null, null, null, false, "added_newer_than:1m").map(
+        (b) => b.fileName,
+      ),
+    ).toEqual(["Older.pdf"]);
+  });
+
+  it("added_after targets indexed_at", () => {
+    // Older.pdf indexed 30 days before NOW (≈2026-04-12) → on/after 2026-04-01.
+    const results = filterVisibleBooks(books, null, null, null, false, "added_after:2026/04/01");
+    expect(results.map((b) => b.fileName)).toEqual(["Older.pdf"]);
+  });
+
+  it("composes with AND/OR/NOT and other fields", () => {
+    const results = filterVisibleBooks(
+      books,
+      null,
+      null,
+      null,
+      false,
+      "newer_than:1w AND -file:MidWeek",
+    );
+    expect(results.map((b) => b.fileName)).toEqual(["Recent.pdf"]);
+  });
+
+  it("invalid date values do not match any book and do not throw", () => {
+    expect(filterVisibleBooks(books, null, null, null, false, "after:not-a-date")).toEqual([]);
+    expect(filterVisibleBooks(books, null, null, null, false, "newer_than:7x")).toEqual([]);
+  });
+
+  it("existing read:Nd shorthand keeps working", () => {
+    const results = filterVisibleBooks(books, null, null, null, false, "read:7d");
+    expect(results.map((b) => b.fileName)).toEqual(["Recent.pdf", "MidWeek.pdf"]);
+  });
+
+  it("read:1y now resolves the new y unit", () => {
+    const results = filterVisibleBooks(books, null, null, null, false, "read:1y");
+    expect(results.map((b) => b.fileName)).toEqual(["Recent.pdf", "MidWeek.pdf", "Older.pdf"]);
   });
 });

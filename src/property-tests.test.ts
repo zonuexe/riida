@@ -5,6 +5,7 @@ import {
   normalizeAppTheme,
   parseExcludedPatternsInput,
 } from "./app-config-utils.ts";
+import { parseAbsoluteDateSeconds, parseRelativeDurationSeconds } from "./library-utils.ts";
 import {
   buildNavigationUrl,
   navigationStateSignature,
@@ -313,6 +314,66 @@ describe("clampNoteWindowPosition", () => {
       }),
     );
     expect(true).toBe(true);
+  });
+});
+
+describe("parseRelativeDurationSeconds", () => {
+  it("Nd never returns negative or non-integer seconds", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: 10_000 }), (n) => {
+        const result = parseRelativeDurationSeconds(`${n}d`);
+        return result !== null && result >= 0 && Number.isInteger(result);
+      }),
+    );
+    expect(true).toBe(true);
+  });
+
+  it("ordering is preserved: more days → more seconds", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: 1000 }), fc.integer({ min: 0, max: 1000 }), (a, b) => {
+        const ra = parseRelativeDurationSeconds(`${a}d`) as number;
+        const rb = parseRelativeDurationSeconds(`${b}d`) as number;
+        return a <= b ? ra <= rb : ra > rb;
+      }),
+    );
+    expect(true).toBe(true);
+  });
+
+  it("never throws on arbitrary string input", () => {
+    fc.assert(
+      fc.property(fc.string(), (raw) => {
+        expect(() => parseRelativeDurationSeconds(raw)).not.toThrow();
+      }),
+    );
+  });
+});
+
+describe("parseAbsoluteDateSeconds", () => {
+  const arbDate = fc.record({
+    y: fc.integer({ min: 1971, max: 2100 }),
+    m: fc.integer({ min: 1, max: 12 }),
+    d: fc.integer({ min: 1, max: 28 }),
+  });
+
+  it("round-trips well-formed YYYY/MM/DD inputs to local-midnight seconds", () => {
+    fc.assert(
+      fc.property(arbDate, ({ y, m, d }) => {
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const ts = parseAbsoluteDateSeconds(`${y}/${pad(m)}/${pad(d)}`);
+        if (ts === null) return false;
+        const back = new Date(ts * 1000);
+        return back.getFullYear() === y && back.getMonth() === m - 1 && back.getDate() === d;
+      }),
+    );
+    expect(true).toBe(true);
+  });
+
+  it("never throws on arbitrary string input", () => {
+    fc.assert(
+      fc.property(fc.string(), (raw) => {
+        expect(() => parseAbsoluteDateSeconds(raw)).not.toThrow();
+      }),
+    );
   });
 });
 

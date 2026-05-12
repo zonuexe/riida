@@ -22,6 +22,20 @@ const KNOWN_FIELDS: ReadonlySet<string> = new Set([
   "path",
   "source",
   "read",
+  // Gmail-style time operators. Bare forms target last_read_at; the
+  // `added_*` variants target indexed_at. See docs/ADR-03_time-based-search.md.
+  "newer_than",
+  "older_than",
+  "after",
+  "before",
+  "newer",
+  "older",
+  "added_newer_than",
+  "added_older_than",
+  "added_after",
+  "added_before",
+  "added_newer",
+  "added_older",
 ]);
 
 export type LeafNode =

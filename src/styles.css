@@ -165,6 +165,47 @@ body[data-startup="loading"] .app-shell {
   gap: 24px;
 }
 
+/* Standalone viewer window: each spread sizes to the current window height
+   via 100vh, and CSS scales the rendered canvases to fit. This decouples the
+   render-time canvas resolution from the visible size, so the user can resize
+   or maximize the window without leaving fixed-size pages behind. */
+body[data-window-role="viewer"] .pdfjs-spread {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  height: calc(100vh - 56px);
+  margin: 0;
+  gap: 6px;
+  /* Reset shell grid rules so the flex layout above wins. */
+  grid-template-columns: none;
+  grid-template-rows: none;
+}
+
+body[data-window-role="viewer"] .pdfjs-spread + .pdfjs-spread {
+  margin-top: 24px;
+}
+
+body[data-window-role="viewer"] .pdfjs-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  flex: 0 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+body[data-window-role="viewer"] .pdfjs-page canvas {
+  display: block;
+  max-height: 100%;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
 .two-pane {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);

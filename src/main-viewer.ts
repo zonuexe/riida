@@ -83,25 +83,32 @@ type PdfDocumentLike = Awaited<
 >;
 type PdfPage = Awaited<ReturnType<PdfDocumentLike["getPage"]>>;
 
+// Pick a backing-buffer resolution that stays crisp when CSS upscales it to
+// fit a large window. The viewer window can be maximized after the canvases
+// are rendered, so we give ourselves headroom and let CSS handle the actual
+// display size.
+const CANVAS_RENDER_SCALE = 2.0;
+
 async function renderPdfPageCanvas(
   page: PdfPage,
   pageNumber: number,
-  renderScale: number,
   devicePixelRatio: number,
 ): Promise<HTMLElement> {
-  const viewport = page.getViewport({ scale: renderScale });
+  const viewport = page.getViewport({ scale: CANVAS_RENDER_SCALE });
 
   const pageEl = document.createElement("div");
   pageEl.className = "pdfjs-page";
   pageEl.dataset.pageNumber = String(pageNumber);
-  pageEl.style.width = `${viewport.width}px`;
-  pageEl.style.height = `${viewport.height}px`;
+  // Aspect ratio drives the CSS layout in the standalone viewer window. Width
+  // and height are left for CSS to compute so the page resizes with the
+  // window without re-rendering the canvas.
+  pageEl.style.aspectRatio = `${viewport.width} / ${viewport.height}`;
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.floor(viewport.width * devicePixelRatio);
   canvas.height = Math.floor(viewport.height * devicePixelRatio);
-  canvas.style.width = `${viewport.width}px`;
-  canvas.style.height = `${viewport.height}px`;
+  // Intentionally do not set canvas.style.width / .style.height; CSS in the
+  // viewer-window scope sizes the canvas via max-height / max-width.
   pageEl.appendChild(canvas);
 
   const ctx = canvas.getContext("2d");
@@ -120,6 +127,11 @@ async function renderPdfPageCanvas(
 type SpreadIndexEntry = {
   spreadEl: HTMLElement;
   pageNumbers: readonly number[];
+};
+
+type RenderedPdf = {
+  spreadIndex: SpreadIndexEntry[];
+  bindingDirection: "left" | "right";
 };
 
 function findSpreadForPage(
@@ -214,8 +226,13 @@ function scrollToSpread(
 function installSpreadKeyboardNavigation(
   scrollEl: HTMLElement,
   spreadIndex: readonly SpreadIndexEntry[],
+  bindingDirection: "left" | "right",
 ): void {
   if (spreadIndex.length === 0) return;
+  // For right-bound (typically Japanese tategaki) books, the reader advances
+  // toward the left of the spread, so horizontal arrow semantics flip.
+  const horizontalNext = bindingDirection === "right" ? "ArrowLeft" : "ArrowRight";
+  const horizontalPrev = bindingDirection === "right" ? "ArrowRight" : "ArrowLeft";
   window.addEventListener("keydown", (event) => {
     if (event.defaultPrevented) return;
     const target = event.target as HTMLElement | null;
@@ -225,9 +242,13 @@ function installSpreadKeyboardNavigation(
     const isNext =
       event.key === "PageDown" ||
       (event.key === " " && !event.shiftKey) ||
-      event.key === "ArrowDown";
+      event.key === "ArrowDown" ||
+      event.key === horizontalNext;
     const isPrev =
-      event.key === "PageUp" || (event.key === " " && event.shiftKey) || event.key === "ArrowUp";
+      event.key === "PageUp" ||
+      (event.key === " " && event.shiftKey) ||
+      event.key === "ArrowUp" ||
+      event.key === horizontalPrev;
     const isHome = event.key === "Home";
     const isEnd = event.key === "End";
     if (!isNext && !isPrev && !isHome && !isEnd) return;
@@ -268,15 +289,12 @@ function installReadingPositionPersistence(
   });
 }
 
-// Minimal renderer: build spread groups according to the resolved binding
-// direction, lay them out as .pdfjs-spread rows, and render every page at a
-// fixed scale. Lazy paging, fit-width/fit-height, text layers, search, and
-// per-file viewer settings will follow.
-async function renderPdfAllPages(
-  filePath: string,
-  viewerEl: HTMLElement,
-  scrollEl: HTMLElement,
-): Promise<SpreadIndexEntry[]> {
+// Minimal renderer: detect binding direction, build spread groups, and render
+// every page at a fixed high-resolution backing buffer. CSS in the viewer-
+// window scope handles the visible sizing via 100vh-based fit-height, so the
+// canvases stay sharp when the window is resized. Lazy paging, text layers,
+// search, and per-file viewer settings will follow.
+async function renderPdfAllPages(filePath: string, viewerEl: HTMLElement): Promise<RenderedPdf> {
   const sourceUrl = convertFileSrc(filePath);
   const { getDocument } = await loadPdfJsRuntime();
 
@@ -301,64 +319,14 @@ async function renderPdfAllPages(
   };
   const pageGroups = buildPageGroups(pdfDocument.numPages, layoutSettings);
 
-  // Scale every page to fit the window's height. The shell uses the same
-  // strategy in fit-height + spread mode and falls back to splitting spreads
-  // whose combined width would still overflow the available width.
-  //
-  // Wait one frame so the initial CSS layout has settled (the loading status
-  // banner is mounted before this runs and otherwise pushes scrollEl's
-  // clientHeight reading off by its padding/gap).
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => resolve());
-  });
-  const pageGap = 6;
-  const viewerWidth = Math.max(scrollEl.clientWidth, window.innerWidth, 720);
-  const viewerHeight = Math.max(scrollEl.clientHeight, window.innerHeight, 600);
-  const availableWidth = viewerWidth - pageGap - 32;
-  const targetHeight = Math.max(260, viewerHeight - 56);
-
-  // TODO(v0.6.0): remove after diagnosing fit-height in the viewer window.
-  console.info("[riida] viewer-window fit-height measurement", {
-    scrollClient: { w: scrollEl.clientWidth, h: scrollEl.clientHeight },
-    window: { w: window.innerWidth, h: window.innerHeight },
-    viewerWidth,
-    viewerHeight,
-    availableWidth,
-    targetHeight,
-    devicePixelRatio: window.devicePixelRatio,
-  });
-
-  const layoutGroups: number[][] = [];
-  for (const group of pageGroups) {
-    if (group.length === 2 && group[0] !== undefined && group[1] !== undefined) {
-      const g0 = group[0];
-      const g1 = group[1];
-      const vp0 = (await pdfDocument.getPage(g0)).getViewport({ scale: 1 });
-      const vp1 = (await pdfDocument.getPage(g1)).getViewport({ scale: 1 });
-      const fitScale = targetHeight / Math.max(vp0.height, 1);
-      const combinedWidth = (vp0.width + vp1.width) * fitScale + pageGap;
-      if (combinedWidth > availableWidth) {
-        layoutGroups.push([g0]);
-        layoutGroups.push([g1]);
-        continue;
-      }
-    }
-    layoutGroups.push(group);
-  }
-
   viewerEl.innerHTML = "";
   viewerEl.dataset.filePath = filePath;
-  // Intentionally do NOT set viewerEl.dataset.position. The shell uses
-  // data-position to bias the viewer's flex alignment in single-pane
-  // layouts; in this standalone window we want spreads to stay centered
-  // regardless of binding direction, with binding only affecting page
-  // order within each spread.
   viewerEl.hidden = false;
 
   const devicePixelRatio = window.devicePixelRatio || 1;
   const spreadIndex: SpreadIndexEntry[] = [];
 
-  for (const group of layoutGroups) {
+  for (const group of pageGroups) {
     const visualOrder = getVisualPageOrder(group, layoutSettings);
     const spreadEl = document.createElement("div");
     spreadEl.className = "pdfjs-spread";
@@ -369,13 +337,9 @@ async function renderPdfAllPages(
     }
     viewerEl.appendChild(spreadEl);
 
-    const samplePage = await pdfDocument.getPage(group[0]!);
-    const sampleViewport = samplePage.getViewport({ scale: 1 });
-    const baseScale = targetHeight / Math.max(sampleViewport.height, 1);
-
     for (const pageNumber of visualOrder) {
       const page = await pdfDocument.getPage(pageNumber);
-      const pageEl = await renderPdfPageCanvas(page, pageNumber, baseScale, devicePixelRatio);
+      const pageEl = await renderPdfPageCanvas(page, pageNumber, devicePixelRatio);
       spreadEl.appendChild(pageEl);
     }
 
@@ -383,7 +347,7 @@ async function renderPdfAllPages(
     // without caring about left/right binding.
     spreadIndex.push({ spreadEl, pageNumbers: [...group] });
   }
-  return spreadIndex;
+  return { spreadIndex, bindingDirection: detectedBinding };
 }
 
 async function boot(): Promise<void> {
@@ -414,11 +378,11 @@ async function boot(): Promise<void> {
   }
 
   try {
-    const spreadIndex = await renderPdfAllPages(filePath, viewerEl, scrollEl);
+    const { spreadIndex, bindingDirection } = await renderPdfAllPages(filePath, viewerEl);
     setStatus(null);
     restoreReadingPosition(filePath, scrollEl, spreadIndex);
     installReadingPositionPersistence(filePath, scrollEl, spreadIndex);
-    installSpreadKeyboardNavigation(scrollEl, spreadIndex);
+    installSpreadKeyboardNavigation(scrollEl, spreadIndex, bindingDirection);
   } catch (error) {
     console.error("[riida] viewer window: failed to render PDF:", error);
     setStatus(`Failed to render PDF: ${error instanceof Error ? error.message : String(error)}`);

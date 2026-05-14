@@ -317,6 +317,17 @@ async function renderPdfAllPages(
   const availableWidth = viewerWidth - pageGap - 32;
   const targetHeight = Math.max(260, viewerHeight - 56);
 
+  // TODO(v0.6.0): remove after diagnosing fit-height in the viewer window.
+  console.info("[riida] viewer-window fit-height measurement", {
+    scrollClient: { w: scrollEl.clientWidth, h: scrollEl.clientHeight },
+    window: { w: window.innerWidth, h: window.innerHeight },
+    viewerWidth,
+    viewerHeight,
+    availableWidth,
+    targetHeight,
+    devicePixelRatio: window.devicePixelRatio,
+  });
+
   const layoutGroups: number[][] = [];
   for (const group of pageGroups) {
     if (group.length === 2 && group[0] !== undefined && group[1] !== undefined) {

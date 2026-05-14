@@ -25,17 +25,13 @@
 
   <body data-startup="loading" data-window-role="viewer">
     <main class="app-shell viewer-only">
-      <section class="main-pane viewer-window-placeholder" id="main-pane">
-        <div class="viewer-window-placeholder-content">
-          <h1>riida viewer</h1>
+      <section class="main-pane" id="main-pane">
+        <div id="viewer-window-status" class="viewer-window-status">
           <p id="viewer-window-target" class="viewer-window-target">
             <!-- main-viewer.ts fills this with the requested book path -->
           </p>
-          <p class="viewer-window-hint">
-            This window will host the standalone book viewer in v0.6.0.
-            Implementation in progress.
-          </p>
         </div>
+        <div id="pdfjs-viewer" class="pdfjs-viewer viewer-window-pdfjs" hidden></div>
       </section>
     </main>
   </body>

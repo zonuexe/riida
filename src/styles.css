@@ -139,6 +139,32 @@ body[data-startup="loading"] .app-shell {
   height: 100%;
 }
 
+.app-shell.viewer-only {
+  display: block;
+  height: 100%;
+}
+
+.app-shell.viewer-only > .main-pane {
+  height: 100%;
+  overflow: auto;
+  padding: 0;
+}
+
+.viewer-window-status {
+  padding: 32px 28px;
+  font-size: 0.95rem;
+  color: rgb(var(--ink-rgb) / 0.75);
+  font-family: var(--font-ui, inherit);
+}
+
+.viewer-window-status[hidden] {
+  display: none;
+}
+
+.viewer-window-pdfjs {
+  gap: 24px;
+}
+
 .two-pane {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);

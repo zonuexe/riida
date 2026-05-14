@@ -211,6 +211,17 @@ body[data-window-role="viewer"] .pdfjs-page canvas {
   object-fit: contain;
 }
 
+/* Standalone viewer window: the EPUB iframe fills the entire main pane.
+   The shell version positions absolutely inside a layout that also hosts
+   overlays; here we just want a clean full-window reader surface. */
+body[data-window-role="viewer"] .epub-viewer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 .two-pane {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);

@@ -9,6 +9,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import "./vendor/fontawesome/css/fontawesome.min.css";
 import "./vendor/fontawesome/css/solid.min.css";
 import { applyAppTheme, loadPersistedAppTheme } from "./app-theme";
+import { loadEpubJs } from "./epub-runtime";
 import { detectPdfBindingDirection } from "./pdf-binding-detect";
 import { loadPdfJsRuntime, TauriBinaryDataFactory } from "./pdf-runtime";
 import {
@@ -355,6 +356,116 @@ async function renderPdfAllPages(filePath: string, viewerEl: HTMLElement): Promi
   return { spreadIndex, bindingDirection: detectedBinding };
 }
 
+type EpubRenderResult = {
+  rendition: import("epubjs").Rendition;
+  isRtl: boolean;
+};
+
+function looksLikeEpubPath(filePath: string): boolean {
+  return filePath.toLowerCase().endsWith(".epub");
+}
+
+async function renderEpubBook(filePath: string, viewerEl: HTMLElement): Promise<EpubRenderResult> {
+  const sourceUrl = convertFileSrc(filePath);
+  const EpubModule = await loadEpubJs();
+  const Epub = EpubModule.default;
+  const book = Epub(sourceUrl);
+  await book.ready;
+
+  // DPFJ guide §ページ進行方向の遵守: progression direction comes from the OPF
+  // spine, not from writing-mode. In rtl books (typically Japanese tategaki)
+  // ArrowLeft is "next" and ArrowRight is "previous".
+  const bookInternal = book as unknown as {
+    spine?: { direction?: string };
+    package?: { metadata?: { direction?: string } };
+  };
+  const spineDirection =
+    bookInternal.spine?.direction ?? bookInternal.package?.metadata?.direction ?? "ltr";
+  const isRtl = spineDirection === "rtl";
+
+  viewerEl.innerHTML = "";
+  viewerEl.dataset.filePath = filePath;
+  viewerEl.hidden = false;
+
+  const rendition = book.renderTo(viewerEl, {
+    width: "100%",
+    height: "100%",
+    spread: "auto",
+    flow: "paginated",
+    allowScriptedContent: true,
+  });
+
+  const cached = loadCachedReadingPosition(filePath);
+  const restoreCfi = cached?.cfi ?? undefined;
+  await rendition.display(restoreCfi);
+
+  // WKWebView occasionally renders the first display at zero dimensions when
+  // the iframe attaches before layout has settled. epub.js only re-displays
+  // automatically when rendition.location is set; force a redisplay if that
+  // window opens at 0x0.
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+  const iframeEl = viewerEl.querySelector<HTMLIFrameElement>("iframe");
+  if (!iframeEl || iframeEl.clientWidth === 0 || iframeEl.clientHeight === 0) {
+    try {
+      await rendition.display(restoreCfi);
+    } catch (err) {
+      console.warn("[riida] epub redisplay after resize failed:", err);
+    }
+  }
+
+  rendition.on("relocated", (location: import("epubjs").Location) => {
+    const cfi = location.start.cfi;
+    if (!cfi) return;
+    // Reuse the shared reading-position cache. pageNumber and offsetRatio are
+    // unused for EPUB restore (the cfi field drives navigation), but the
+    // schema requires them.
+    saveCachedReadingPosition({
+      filePath,
+      pageNumber: 1,
+      pageOffsetRatio: 0,
+      cfi,
+      updatedAt: Date.now(),
+    });
+  });
+
+  return { rendition, isRtl };
+}
+
+function installEpubKeyboardNavigation(
+  rendition: import("epubjs").Rendition,
+  isRtl: boolean,
+): void {
+  const horizontalNext = isRtl ? "ArrowLeft" : "ArrowRight";
+  const horizontalPrev = isRtl ? "ArrowRight" : "ArrowLeft";
+  window.addEventListener("keydown", (event) => {
+    if (event.defaultPrevented) return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const target = event.target as HTMLElement | null;
+    if (target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName))) {
+      return;
+    }
+    const isNext =
+      event.key === "PageDown" ||
+      (event.key === " " && !event.shiftKey) ||
+      event.key === "ArrowDown" ||
+      event.key === horizontalNext;
+    const isPrev =
+      event.key === "PageUp" ||
+      (event.key === " " && event.shiftKey) ||
+      event.key === "ArrowUp" ||
+      event.key === horizontalPrev;
+    if (!isNext && !isPrev) return;
+    event.preventDefault();
+    if (isNext) {
+      void rendition.next();
+    } else {
+      void rendition.prev();
+    }
+  });
+}
+
 async function boot(): Promise<void> {
   const cachedTheme = loadPersistedAppTheme();
   if (cachedTheme) {
@@ -375,9 +486,31 @@ async function boot(): Promise<void> {
 
   setStatus(`Loading ${source ? `${filePath} (source: ${source})` : filePath}...`);
 
-  const viewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
   const scrollEl = document.querySelector<HTMLElement>("#main-pane");
-  if (!viewerEl || !scrollEl) {
+  if (!scrollEl) {
+    setStatus("Viewer container is missing from the document.");
+    return;
+  }
+
+  if (looksLikeEpubPath(filePath)) {
+    const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
+    if (!epubViewerEl) {
+      setStatus("EPUB viewer container is missing from the document.");
+      return;
+    }
+    try {
+      const { rendition, isRtl } = await renderEpubBook(filePath, epubViewerEl);
+      setStatus(null);
+      installEpubKeyboardNavigation(rendition, isRtl);
+    } catch (error) {
+      console.error("[riida] viewer window: failed to render EPUB:", error);
+      setStatus(`Failed to render EPUB: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
+
+  const viewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
+  if (!viewerEl) {
     setStatus("Viewer container is missing from the document.");
     return;
   }

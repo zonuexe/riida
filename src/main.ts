@@ -33,6 +33,7 @@ import {
   epubPageNumberFromLocation,
 } from "./epub-page-utils";
 import { loadCachedEpubLocations, saveCachedEpubLocations } from "./epub-locations-cache";
+import { loadEpubJs } from "./epub-runtime";
 import { resolveEpubLinkAction } from "./epub-link-routing";
 import {
   deriveDirectories,
@@ -949,13 +950,6 @@ async function primeHomeDirCache() {
   } catch {
     cachedHomeDir = "";
   }
-}
-
-let epubJsModulePromise: Promise<typeof import("epubjs")> | null = null;
-
-async function loadEpubJs() {
-  epubJsModulePromise ??= import("epubjs");
-  return epubJsModulePromise;
 }
 
 const EPUB_PREVIEW_NOTICE_STORAGE_KEY = "riida.epub.previewNoticeShown";

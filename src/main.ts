@@ -30,6 +30,7 @@ import {
   epubLocationIndexFromPageNumber,
   epubPageNumberFromLocation,
 } from "./epub-page-utils";
+import { loadCachedEpubLocations, saveCachedEpubLocations } from "./epub-locations-cache";
 import { resolveEpubLinkAction } from "./epub-link-routing";
 import {
   deriveDirectories,
@@ -1113,28 +1114,6 @@ async function loadEpubJs() {
 }
 
 const EPUB_PREVIEW_NOTICE_STORAGE_KEY = "riida.epub.previewNoticeShown";
-
-function epubLocationsStorageKey(filePath: string, fileSize: number): string {
-  return `riida:epub-locations:${fileSize}:${filePath}`;
-}
-
-function loadCachedEpubLocations(filePath: string, fileSize: number): string | null {
-  if (!filePath || !Number.isFinite(fileSize) || fileSize <= 0) return null;
-  try {
-    return window.localStorage.getItem(epubLocationsStorageKey(filePath, fileSize));
-  } catch {
-    return null;
-  }
-}
-
-function saveCachedEpubLocations(filePath: string, fileSize: number, serialized: string) {
-  if (!filePath || !Number.isFinite(fileSize) || fileSize <= 0 || !serialized) return;
-  try {
-    window.localStorage.setItem(epubLocationsStorageKey(filePath, fileSize), serialized);
-  } catch {
-    // localStorage full or unavailable — skip caching.
-  }
-}
 
 async function maybeShowEpubPreviewNotice(): Promise<void> {
   try {

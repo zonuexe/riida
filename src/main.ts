@@ -2994,9 +2994,8 @@ function syncBulkActionBar() {
   if (countEl) countEl.textContent = `${n} book${n === 1 ? "" : "s"} selected`;
   shelfEl?.classList.toggle("has-selection", n > 0);
   if (selectAllEl) {
-    selectAllEl.hidden = viewerState.books.every((b) =>
-      bulkSelectState.selectedFilePaths.has(b.filePath),
-    );
+    const visible = lastSnapshot ? visibleBooks(lastSnapshot) : [];
+    selectAllEl.hidden = visible.every((b) => bulkSelectState.selectedFilePaths.has(b.filePath));
   }
 }
 
@@ -6938,7 +6937,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   const bulkDeselectEl = document.querySelector<HTMLButtonElement>("#bulk-deselect");
 
   bulkSelectAllEl?.addEventListener("click", () => {
-    for (const book of viewerState.books) {
+    const visible = lastSnapshot ? visibleBooks(lastSnapshot) : [];
+    for (const book of visible) {
       bulkSelectState.selectedFilePaths.add(book.filePath);
     }
     syncBulkActionBar();

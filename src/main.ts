@@ -6815,6 +6815,19 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
         );
       }
     });
+    itemEl.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      if (!book.isOpenable) {
+        void openBookMetadataEditor(book);
+        return;
+      }
+      void invoke("open_viewer_window", {
+        filePath: book.filePath,
+        source: viewerState.activeExternalSource ?? null,
+      }).catch((error: unknown) => {
+        console.error("Failed to open viewer window:", error);
+      });
+    });
 
     listEl.appendChild(itemEl);
     thumbnailBookByImage.set(thumbEl, book);

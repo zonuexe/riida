@@ -195,6 +195,11 @@ body[data-window-role="viewer"] .pdfjs-page {
   flex: 0 1 auto;
   min-width: 0;
   width: auto;
+  /* The shell's .pdfjs-page rule sets margin-inline: auto so a centered
+     single page sits in the middle of a grid column. In our flex-based
+     spread, auto inline margins absorb every pixel of free space between
+     items and inflate the visible gap, so we reset them here. */
+  margin-inline: 0;
 }
 
 body[data-window-role="viewer"] .pdfjs-page canvas {

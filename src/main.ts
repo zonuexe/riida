@@ -90,9 +90,10 @@ import { validateTagValue } from "./tag-utils";
 import {
   clampReadingPositionOffsetRatio,
   computePageOffsetRatio,
-  parseCachedReadingPosition,
-  readingPositionStorageKey,
+  loadCachedReadingPosition as loadCachedReadingPositionFromStorage,
+  saveCachedReadingPosition,
   selectAnchorPageIndex,
+  selectHeadSidePageInSpread,
 } from "./reading-position-utils";
 import { parseRequestedPageNumber } from "./page-jump-utils";
 import { resolvePdfLinkTarget, type PdfAnnotationRecord } from "./pdf-link-utils";
@@ -4866,27 +4867,25 @@ function captureReadingPositionFromViewer(): ReadingPosition | null {
   );
   const anchorPageEl = pageEls[anchorIndex] ?? pageEls[0]!;
 
-  // When the anchor page sits in a multi-page spread (same offsetTop),
-  // prefer the page with the smallest page number — i.e. the "head-side"
-  // page. This way switching from spread to single-page lands on the page
-  // closer to the start of the book rather than the trailing page.
-  const anchorTop = anchorPageEl.offsetTop;
-  let representativeEl = anchorPageEl;
-  let representativePageNumber = Number(anchorPageEl.dataset.pageNumber ?? "1");
-  for (const el of pageEls) {
-    if (el.offsetTop !== anchorTop) continue;
-    const candidate = Number(el.dataset.pageNumber ?? "0");
-    if (candidate > 0 && candidate < representativePageNumber) {
-      representativePageNumber = candidate;
-      representativeEl = el;
-    }
-  }
+  const candidates = pageEls.map((el) => ({
+    pageNumber: Number(el.dataset.pageNumber ?? "0"),
+    offsetTop: el.offsetTop,
+    offsetHeight: el.offsetHeight,
+    el,
+  }));
+  const anchorCandidate = {
+    pageNumber: Number(anchorPageEl.dataset.pageNumber ?? "1"),
+    offsetTop: anchorPageEl.offsetTop,
+    offsetHeight: anchorPageEl.offsetHeight,
+    el: anchorPageEl,
+  };
+  const representative = selectHeadSidePageInSpread(anchorCandidate, candidates);
 
-  const pageNumber = representativePageNumber;
+  const pageNumber = representative.pageNumber;
   const pageOffsetRatio = computePageOffsetRatio(
     stageEl.scrollTop,
-    representativeEl.offsetTop,
-    representativeEl.offsetHeight,
+    representative.offsetTop,
+    representative.offsetHeight,
   );
 
   return {
@@ -4901,25 +4900,11 @@ function cacheReadingPosition(position: ReadingPosition | null) {
   if (!position) {
     return;
   }
-
-  try {
-    window.localStorage.setItem(
-      readingPositionStorageKey(position.filePath),
-      JSON.stringify(position),
-    );
-  } catch (error) {
-    console.error("Failed to cache reading position:", error);
-  }
+  saveCachedReadingPosition(position);
 }
 
 function loadCachedReadingPosition(filePath: string): ReadingPosition | null {
-  try {
-    const rawValue = window.localStorage.getItem(readingPositionStorageKey(filePath));
-    return parseCachedReadingPosition(rawValue);
-  } catch (error) {
-    console.error("Failed to read cached reading position:", error);
-    return null;
-  }
+  return loadCachedReadingPositionFromStorage(filePath);
 }
 
 async function flushReadingPositionSave() {

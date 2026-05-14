@@ -1,12 +1,28 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import fc from "fast-check";
 import {
   clampReadingPositionOffsetRatio,
   computePageOffsetRatio,
+  loadCachedReadingPosition,
   parseCachedReadingPosition,
   readingPositionStorageKey,
+  saveCachedReadingPosition,
   selectAnchorPageIndex,
+  selectHeadSidePageInSpread,
+  type ReadingPositionLike,
+  type ReadingPositionStorage,
 } from "./reading-position-utils";
+
+function memoryStorage(): ReadingPositionStorage & { store: Map<string, string> } {
+  const store = new Map<string, string>();
+  return {
+    store,
+    getItem: (key: string) => (store.has(key) ? (store.get(key) ?? null) : null),
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+  };
+}
 
 describe("readingPositionStorageKey", () => {
   it("namespaces the file path", () => {
@@ -121,5 +137,118 @@ describe("computePageOffsetRatio", () => {
       ),
     );
     expect(true).toBe(true);
+  });
+});
+
+const sampleReadingPosition: ReadingPositionLike = {
+  filePath: "/Books/Rust.pdf",
+  pageNumber: 12,
+  pageOffsetRatio: 0.5,
+  cfi: null,
+  updatedAt: 1700_000_000,
+};
+
+describe("loadCachedReadingPosition", () => {
+  it("returns the parsed position from storage", () => {
+    const storage = memoryStorage();
+    storage.store.set(
+      readingPositionStorageKey(sampleReadingPosition.filePath),
+      JSON.stringify(sampleReadingPosition),
+    );
+    expect(loadCachedReadingPosition(sampleReadingPosition.filePath, storage)).toEqual(
+      sampleReadingPosition,
+    );
+  });
+
+  it("returns null for an empty file path", () => {
+    expect(loadCachedReadingPosition("", memoryStorage())).toBeNull();
+  });
+
+  it("returns null when no storage is available", () => {
+    expect(loadCachedReadingPosition("/x.pdf", null)).toBeNull();
+  });
+
+  it("returns null when storage access throws", () => {
+    const throwing: ReadingPositionStorage = {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        // unused
+      },
+    };
+    expect(loadCachedReadingPosition("/x.pdf", throwing)).toBeNull();
+  });
+
+  it("returns null when the stored payload is malformed", () => {
+    const storage = memoryStorage();
+    storage.store.set(readingPositionStorageKey("/x.pdf"), "not json");
+    expect(loadCachedReadingPosition("/x.pdf", storage)).toBeNull();
+  });
+});
+
+describe("saveCachedReadingPosition", () => {
+  it("serializes the position into storage under the canonical key", () => {
+    const storage = memoryStorage();
+    saveCachedReadingPosition(sampleReadingPosition, storage);
+    const raw = storage.store.get(readingPositionStorageKey(sampleReadingPosition.filePath));
+    expect(raw).toBeTypeOf("string");
+    expect(JSON.parse(raw!)).toEqual(sampleReadingPosition);
+  });
+
+  it("skips writes for positions without a file path", () => {
+    const storage = memoryStorage();
+    saveCachedReadingPosition({ ...sampleReadingPosition, filePath: "" }, storage);
+    expect(storage.store.size).toBe(0);
+  });
+
+  it("is a no-op when no storage is available", () => {
+    expect(() => saveCachedReadingPosition(sampleReadingPosition, null)).not.toThrow();
+  });
+
+  it("swallows storage errors", () => {
+    const setItem = vi.fn<(key: string, value: string) => void>(() => {
+      throw new Error("quota");
+    });
+    expect(() =>
+      saveCachedReadingPosition(sampleReadingPosition, { getItem: () => null, setItem }),
+    ).not.toThrow();
+    expect(setItem).toHaveBeenCalledOnce();
+  });
+});
+
+describe("selectHeadSidePageInSpread", () => {
+  it("returns the anchor when no candidate shares its offsetTop", () => {
+    const anchor = { pageNumber: 5, offsetTop: 1000 };
+    const candidates = [
+      { pageNumber: 4, offsetTop: 800 },
+      { pageNumber: 6, offsetTop: 1200 },
+    ];
+    expect(selectHeadSidePageInSpread(anchor, candidates)).toBe(anchor);
+  });
+
+  it("picks the smallest page number among entries sharing offsetTop", () => {
+    const anchor = { pageNumber: 7, offsetTop: 1000 };
+    const candidates = [
+      { pageNumber: 6, offsetTop: 1000 },
+      { pageNumber: 7, offsetTop: 1000 },
+      { pageNumber: 8, offsetTop: 1200 },
+    ];
+    expect(selectHeadSidePageInSpread(anchor, candidates).pageNumber).toBe(6);
+  });
+
+  it("ignores non-positive page numbers", () => {
+    const anchor = { pageNumber: 3, offsetTop: 500 };
+    const candidates = [
+      { pageNumber: 0, offsetTop: 500 },
+      { pageNumber: -1, offsetTop: 500 },
+      { pageNumber: 2, offsetTop: 500 },
+    ];
+    expect(selectHeadSidePageInSpread(anchor, candidates).pageNumber).toBe(2);
+  });
+
+  it("returns the anchor unchanged when candidates is empty", () => {
+    const anchor = { pageNumber: 4, offsetTop: 200 };
+    expect(selectHeadSidePageInSpread(anchor, [])).toBe(anchor);
   });
 });

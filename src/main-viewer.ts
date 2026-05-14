@@ -9,7 +9,13 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import "./vendor/fontawesome/css/fontawesome.min.css";
 import "./vendor/fontawesome/css/solid.min.css";
 import { applyAppTheme, loadPersistedAppTheme } from "./app-theme";
+import { detectPdfBindingDirection } from "./pdf-binding-detect";
 import { loadPdfJsRuntime, TauriBinaryDataFactory } from "./pdf-runtime";
+import {
+  buildPageGroups,
+  getVisualPageOrder,
+  type ViewerLayoutSettings,
+} from "./viewer-layout-utils";
 
 type ViewerLaunchParams = {
   filePath: string | null;
@@ -65,9 +71,49 @@ function setStatus(message: string | null): void {
   targetEl.textContent = message;
 }
 
-// Initial minimal renderer: render every page at a fixed scale and stack the
-// canvases vertically. Spread layout, lazy paging, text layers, search,
-// reading-position restore, etc. all come later.
+type PdfDocumentLike = Awaited<
+  ReturnType<Awaited<ReturnType<typeof loadPdfJsRuntime>>["getDocument"]>["promise"]
+>;
+type PdfPage = Awaited<ReturnType<PdfDocumentLike["getPage"]>>;
+
+async function renderPdfPageCanvas(
+  page: PdfPage,
+  pageNumber: number,
+  renderScale: number,
+  devicePixelRatio: number,
+): Promise<HTMLElement> {
+  const viewport = page.getViewport({ scale: renderScale });
+
+  const pageEl = document.createElement("div");
+  pageEl.className = "pdfjs-page";
+  pageEl.dataset.pageNumber = String(pageNumber);
+  pageEl.style.width = `${viewport.width}px`;
+  pageEl.style.height = `${viewport.height}px`;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.floor(viewport.width * devicePixelRatio);
+  canvas.height = Math.floor(viewport.height * devicePixelRatio);
+  canvas.style.width = `${viewport.width}px`;
+  canvas.style.height = `${viewport.height}px`;
+  pageEl.appendChild(canvas);
+
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    await page.render({
+      canvas,
+      canvasContext: ctx,
+      viewport,
+      transform:
+        devicePixelRatio === 1 ? undefined : [devicePixelRatio, 0, 0, devicePixelRatio, 0, 0],
+    }).promise;
+  }
+  return pageEl;
+}
+
+// Minimal renderer: build spread groups according to the resolved binding
+// direction, lay them out as .pdfjs-spread rows, and render every page at a
+// fixed scale. Lazy paging, fit-width/fit-height, text layers, search, and
+// reading-position restore all come later.
 async function renderPdfAllPages(filePath: string, viewerEl: HTMLElement): Promise<void> {
   const sourceUrl = convertFileSrc(filePath);
   const { getDocument } = await loadPdfJsRuntime();
@@ -84,40 +130,39 @@ async function renderPdfAllPages(filePath: string, viewerEl: HTMLElement): Promi
   });
   const pdfDocument = await documentTask.promise;
 
+  const detectedBinding = (await detectPdfBindingDirection(pdfDocument, () => false)) ?? "left";
+
+  const layoutSettings: ViewerLayoutSettings = {
+    pageMode: "spread",
+    bindingDirection: detectedBinding,
+    treatFirstPageAsCover: true,
+  };
+  const pageGroups = buildPageGroups(pdfDocument.numPages, layoutSettings);
+
   viewerEl.innerHTML = "";
   viewerEl.dataset.filePath = filePath;
+  viewerEl.dataset.position = detectedBinding;
   viewerEl.hidden = false;
 
   const devicePixelRatio = window.devicePixelRatio || 1;
   const renderScale = 1.5;
 
-  for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
-    const page = await pdfDocument.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: renderScale });
+  for (const group of pageGroups) {
+    const visualOrder = getVisualPageOrder(group, layoutSettings);
+    const spreadEl = document.createElement("div");
+    spreadEl.className = "pdfjs-spread";
+    spreadEl.dataset.pageCount = String(visualOrder.length);
+    spreadEl.dataset.binding = detectedBinding;
+    if (visualOrder.length === 1 && visualOrder[0] === 1) {
+      spreadEl.dataset.cover = "true";
+    }
+    viewerEl.appendChild(spreadEl);
 
-    const pageEl = document.createElement("div");
-    pageEl.className = "pdfjs-page";
-    pageEl.dataset.pageNumber = String(pageNumber);
-    pageEl.style.width = `${viewport.width}px`;
-    pageEl.style.height = `${viewport.height}px`;
-
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.floor(viewport.width * devicePixelRatio);
-    canvas.height = Math.floor(viewport.height * devicePixelRatio);
-    canvas.style.width = `${viewport.width}px`;
-    canvas.style.height = `${viewport.height}px`;
-    pageEl.appendChild(canvas);
-    viewerEl.appendChild(pageEl);
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) continue;
-    await page.render({
-      canvas,
-      canvasContext: ctx,
-      viewport,
-      transform:
-        devicePixelRatio === 1 ? undefined : [devicePixelRatio, 0, 0, devicePixelRatio, 0, 0],
-    }).promise;
+    for (const pageNumber of visualOrder) {
+      const page = await pdfDocument.getPage(pageNumber);
+      const pageEl = await renderPdfPageCanvas(page, pageNumber, renderScale, devicePixelRatio);
+      spreadEl.appendChild(pageEl);
+    }
   }
 }
 

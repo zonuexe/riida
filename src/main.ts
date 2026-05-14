@@ -15,6 +15,7 @@ import {
   normalizeAppTheme,
   type AppTheme,
 } from "./app-config-utils";
+import { applyAppTheme, persistAppTheme } from "./app-theme";
 import {
   applyBookMetadataImport,
   BOOK_METADATA_IMPORT_EXAMPLE,
@@ -506,18 +507,6 @@ const buildDate = __BUILD_DATE__;
 let cachedLicenseText = "Loading license text...";
 let cachedThirdPartyRustText = "Loading Rust notices...";
 let cachedThirdPartyJsText = "Loading JavaScript notices...";
-const APP_THEME_STORAGE_KEY = "riida.appTheme";
-
-function applyAppTheme(theme: AppTheme) {
-  document.documentElement.dataset.theme = theme;
-  document.documentElement.style.colorScheme =
-    theme === "night-city" || theme === "navy-blue" ? "dark" : "light";
-}
-
-function persistAppTheme(theme: AppTheme) {
-  localStorage.setItem(APP_THEME_STORAGE_KEY, theme);
-}
-
 function currentAppTheme(): AppTheme {
   return normalizeAppTheme(lastAppConfig?.theme ?? "default");
 }

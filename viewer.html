@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      (() => {
+        // Mirror of the early-theme inline script in index.html. The literal
+        // here must stay in sync with APP_THEME_STORAGE_KEY in src/app-theme.ts.
+        const key = "riida.appTheme";
+        const theme = localStorage.getItem(key);
+        if (!theme) {
+          return;
+        }
+
+        const root = document.documentElement;
+        root.dataset.theme = theme;
+        root.style.colorScheme = theme === "night-city" || theme === "navy-blue" ? "dark" : "light";
+      })();
+    </script>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>riida viewer</title>
+    <script type="module" src="/src/main-viewer.ts" defer></script>
+  </head>
+
+  <body data-startup="loading" data-window-role="viewer">
+    <main class="app-shell viewer-only">
+      <section class="main-pane viewer-window-placeholder" id="main-pane">
+        <div class="viewer-window-placeholder-content">
+          <h1>riida viewer</h1>
+          <p id="viewer-window-target" class="viewer-window-target">
+            <!-- main-viewer.ts fills this with the requested book path -->
+          </p>
+          <p class="viewer-window-hint">
+            This window will host the standalone book viewer in v0.6.0.
+            Implementation in progress.
+          </p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

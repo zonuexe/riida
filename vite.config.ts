@@ -1,5 +1,8 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, normalizePath } from "vite";
+
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 import { viteStaticCopy } from "vite-plugin-static-copy";
 
 // @ts-expect-error process is a nodejs global
@@ -9,6 +12,12 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   build: {
     target: "es2024",
+    rollupOptions: {
+      input: {
+        index: path.resolve(projectRoot, "index.html"),
+        viewer: path.resolve(projectRoot, "viewer.html"),
+      },
+    },
   },
   esbuild: {
     target: "es2024",
@@ -50,6 +59,7 @@ export default defineConfig(async () => ({
       include: ["src/**/*.ts"],
       exclude: [
         "src/main.ts",
+        "src/main-viewer.ts",
         "src/note-editor.ts",
         "src/cjk-radical-map.ts",
         "src/search-suggestions.ts",

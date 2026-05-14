@@ -8,6 +8,7 @@ async function main() {
   const targets = entries.filter(
     (entry) =>
       entry.startsWith("index-") ||
+      entry.startsWith("viewer-") ||
       entry.startsWith("pdf.worker-") ||
       entry.startsWith("pdf.worker.min-") ||
       entry.startsWith("pdf-") ||

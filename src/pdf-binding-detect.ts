@@ -60,7 +60,7 @@ export type TextContentBindingDiagnostic = {
   result: BindingDirection | null;
 };
 
-export function summarizeBindingFromTextContent(
+function summarizeBindingFromTextContent(
   samples: ReadonlyArray<TextContentSampleLike>,
 ): TextContentBindingDiagnostic {
   let verticalChars = 0;
@@ -147,6 +147,78 @@ export type PdfPageLike = {
   streamTextContent?: (params?: object) => ReadableStream<TextContentSampleLike>;
   getTextContent?: () => Promise<TextContentSampleLike>;
 };
+
+export type PdfBindingDocumentLike = {
+  numPages: number;
+  getViewerPreferences?: () => Promise<unknown>;
+  getPage: (pageNumber: number) => Promise<PdfPageLike>;
+};
+
+// Sparse-text Japanese tategaki PDFs often place real body content well
+// past the cover and front matter, so the heuristic walks up to this many
+// linear pages before giving up.
+const PDF_BINDING_DETECT_MAX_PAGES = 50;
+
+/**
+ * Resolve a `bindingDirection: "auto"` preference against an actual PDF
+ * document by combining three signals, from highest confidence to lowest:
+ * the catalog's `Direction` viewer preference, the binding hint that falls
+ * out of text-content styles (vertical CMaps), and the geometry heuristic
+ * over consecutive text item positions.
+ *
+ * Returns `null` when detection is inconclusive (e.g. pure-image PDFs).
+ * Callers should fall back to a saved preference or a hard default in that
+ * case.
+ *
+ * `isCancelled` is consulted between async steps so that navigating away
+ * mid-detection (e.g. opening a new book) does not waste work or return a
+ * stale result.
+ */
+export async function detectPdfBindingDirection(
+  pdfDocument: PdfBindingDocumentLike,
+  isCancelled: () => boolean,
+): Promise<BindingDirection | null> {
+  let viewerPreferences: unknown = null;
+  if (typeof pdfDocument.getViewerPreferences === "function") {
+    try {
+      viewerPreferences = await pdfDocument.getViewerPreferences();
+    } catch {
+      viewerPreferences = null;
+    }
+  }
+  if (isCancelled()) return null;
+  const fromPrefs = detectBindingFromViewerPreferences(
+    viewerPreferences as Parameters<typeof detectBindingFromViewerPreferences>[0],
+  );
+  if (fromPrefs !== null) {
+    return fromPrefs;
+  }
+
+  const limit = Math.min(PDF_BINDING_DETECT_MAX_PAGES, pdfDocument.numPages);
+  const samples: TextContentSampleLike[] = [];
+  let firstError: unknown = null;
+  let errorCount = 0;
+  for (let pageNumber = 1; pageNumber <= limit; pageNumber += 1) {
+    if (isCancelled()) return null;
+    try {
+      const page = await pdfDocument.getPage(pageNumber);
+      const content = await readPageTextContentForBinding(page);
+      samples.push(content);
+    } catch (error) {
+      // Best-effort: skip individual page failures, but surface the first
+      // so we can diagnose runtime errors that wipe out every sample.
+      errorCount += 1;
+      if (firstError === null) firstError = error;
+    }
+  }
+  if (errorCount > 0) {
+    console.warn(
+      `[riida] binding-detect: ${errorCount}/${limit} sample pages threw; first error:`,
+      firstError,
+    );
+  }
+  return summarizeBindingFromTextContent(samples).result;
+}
 
 /**
  * Drain a pdf.js page's text content into a single sample. Tauri's

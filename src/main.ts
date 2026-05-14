@@ -103,12 +103,7 @@ import {
   ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
   preserveNoteWindowBottomRightOffset,
 } from "./note-window-utils";
-import {
-  detectBindingFromViewerPreferences,
-  readPageTextContentForBinding,
-  summarizeBindingFromTextContent,
-  type TextContentSampleLike,
-} from "./pdf-binding-detect";
+import { detectPdfBindingDirection } from "./pdf-binding-detect";
 import { buildPageGroups, getVisualPageOrder } from "./viewer-layout-utils";
 import { buildPdfRenderWindowPlan } from "./pdf-render-window-utils";
 import { planPagedKeyAction } from "./pdf-paged-nav-utils";
@@ -954,66 +949,6 @@ async function primeHomeDirCache() {
   } catch {
     cachedHomeDir = "";
   }
-}
-
-type PdfBindingDocumentLike = {
-  numPages: number;
-  getViewerPreferences?: () => Promise<unknown>;
-  getPage: (pageNumber: number) => Promise<{
-    streamTextContent?: (params?: object) => ReadableStream<TextContentSampleLike>;
-    getTextContent?: () => Promise<TextContentSampleLike>;
-  }>;
-};
-
-// Sparse-text Japanese tategaki PDFs often place real body content well
-// past the cover and front matter, so the heuristic walks up to this many
-// linear pages before giving up.
-const PDF_BINDING_DETECT_MAX_PAGES = 50;
-
-async function detectPdfBindingDirection(
-  pdfDocument: PdfBindingDocumentLike,
-  isCancelled: () => boolean,
-): Promise<"left" | "right" | null> {
-  let viewerPreferences: unknown = null;
-  if (typeof pdfDocument.getViewerPreferences === "function") {
-    try {
-      viewerPreferences = await pdfDocument.getViewerPreferences();
-    } catch {
-      viewerPreferences = null;
-    }
-  }
-  if (isCancelled()) return null;
-  const fromPrefs = detectBindingFromViewerPreferences(
-    viewerPreferences as Parameters<typeof detectBindingFromViewerPreferences>[0],
-  );
-  if (fromPrefs !== null) {
-    return fromPrefs;
-  }
-
-  const limit = Math.min(PDF_BINDING_DETECT_MAX_PAGES, pdfDocument.numPages);
-  const samples: TextContentSampleLike[] = [];
-  let firstError: unknown = null;
-  let errorCount = 0;
-  for (let pageNumber = 1; pageNumber <= limit; pageNumber += 1) {
-    if (isCancelled()) return null;
-    try {
-      const page = await pdfDocument.getPage(pageNumber);
-      const content = await readPageTextContentForBinding(page);
-      samples.push(content);
-    } catch (error) {
-      // Best-effort: skip individual page failures, but surface the first
-      // so we can diagnose runtime errors that wipe out every sample.
-      errorCount += 1;
-      if (firstError === null) firstError = error;
-    }
-  }
-  if (errorCount > 0) {
-    console.warn(
-      `[riida] binding-detect: ${errorCount}/${limit} sample pages threw; first error:`,
-      firstError,
-    );
-  }
-  return summarizeBindingFromTextContent(samples).result;
 }
 
 let epubJsModulePromise: Promise<typeof import("epubjs")> | null = null;

@@ -304,9 +304,16 @@ async function renderPdfAllPages(
   // Scale every page to fit the window's height. The shell uses the same
   // strategy in fit-height + spread mode and falls back to splitting spreads
   // whose combined width would still overflow the available width.
+  //
+  // Wait one frame so the initial CSS layout has settled (the loading status
+  // banner is mounted before this runs and otherwise pushes scrollEl's
+  // clientHeight reading off by its padding/gap).
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
   const pageGap = 6;
-  const viewerWidth = Math.max(scrollEl.clientWidth, 720);
-  const viewerHeight = Math.max(scrollEl.clientHeight, 600);
+  const viewerWidth = Math.max(scrollEl.clientWidth, window.innerWidth, 720);
+  const viewerHeight = Math.max(scrollEl.clientHeight, window.innerHeight, 600);
   const availableWidth = viewerWidth - pageGap - 32;
   const targetHeight = Math.max(260, viewerHeight - 56);
 
@@ -330,7 +337,11 @@ async function renderPdfAllPages(
 
   viewerEl.innerHTML = "";
   viewerEl.dataset.filePath = filePath;
-  viewerEl.dataset.position = detectedBinding;
+  // Intentionally do NOT set viewerEl.dataset.position. The shell uses
+  // data-position to bias the viewer's flex alignment in single-pane
+  // layouts; in this standalone window we want spreads to stay centered
+  // regardless of binding direction, with binding only affecting page
+  // order within each spread.
   viewerEl.hidden = false;
 
   const devicePixelRatio = window.devicePixelRatio || 1;

@@ -235,6 +235,11 @@ function installSpreadKeyboardNavigation(
   const horizontalPrev = bindingDirection === "right" ? "ArrowRight" : "ArrowLeft";
   window.addEventListener("keydown", (event) => {
     if (event.defaultPrevented) return;
+    // Let the OS / browser handle Cmd-, Ctrl-, and Alt-combinations
+    // (Spotlight on Cmd+Space, window cycling on Cmd+`, etc.) so we never
+    // accidentally swallow a system shortcut. Shift is allowed because
+    // Shift+Space is our own "previous spread" binding.
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
     const target = event.target as HTMLElement | null;
     if (target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName))) {
       return;

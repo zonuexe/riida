@@ -1,6 +1,6 @@
 [package]
 name = "riida"
-version = "0.5.4"
+version = "0.5.5"
 description = "Tauri-based local PDF library manager for Dropbox-hosted ebooks"
 authors = ["zonuexe"]
 edition = "2021"

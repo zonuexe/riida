@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-05-15
+
+### Added
+
+- Right-click any tag in the sidebar to rename it or remove it from every book. Renames cascade across nested tags (renaming `programming` also rewrites `programming/rust` and similar sub-tags), and the dialog shows how many books and sub-tags will be affected before you commit. Useful for cleaning up accidental bulk tagging.
+
+### Fixed
+
+- The library's "Select all" bulk action now only selects books currently visible under the active search, shelf, directory, tag, or external-source filter, instead of pulling in every book in the library.
+
 ## [0.5.4] - 2026-05-13
 
 ### Added
@@ -363,7 +373,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/zonuexe/riida/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/zonuexe/riida/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/zonuexe/riida/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/zonuexe/riida/compare/v0.5.1...v0.5.2

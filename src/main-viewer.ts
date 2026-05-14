@@ -12,6 +12,13 @@ import { applyAppTheme, loadPersistedAppTheme } from "./app-theme";
 import { detectPdfBindingDirection } from "./pdf-binding-detect";
 import { loadPdfJsRuntime, TauriBinaryDataFactory } from "./pdf-runtime";
 import {
+  clampReadingPositionOffsetRatio,
+  computePageOffsetRatio,
+  loadCachedReadingPosition,
+  saveCachedReadingPosition,
+  selectAnchorPageIndex,
+} from "./reading-position-utils";
+import {
   buildPageGroups,
   getVisualPageOrder,
   type ViewerLayoutSettings,
@@ -110,11 +117,108 @@ async function renderPdfPageCanvas(
   return pageEl;
 }
 
+type SpreadIndexEntry = {
+  spreadEl: HTMLElement;
+  pageNumbers: readonly number[];
+};
+
+function findSpreadForPage(
+  spreadIndex: readonly SpreadIndexEntry[],
+  pageNumber: number,
+): SpreadIndexEntry | null {
+  let fallback: SpreadIndexEntry | null = null;
+  for (const entry of spreadIndex) {
+    if (entry.pageNumbers.includes(pageNumber)) {
+      return entry;
+    }
+    if (entry.pageNumbers.some((p) => p > pageNumber)) {
+      // pages are in document order; remember the first spread past the
+      // target so we can fall back when the saved page number no longer
+      // exists in the current document.
+      fallback ??= entry;
+    }
+  }
+  return fallback ?? spreadIndex[spreadIndex.length - 1] ?? null;
+}
+
+function restoreReadingPosition(
+  filePath: string,
+  scrollEl: HTMLElement,
+  spreadIndex: readonly SpreadIndexEntry[],
+): void {
+  if (spreadIndex.length === 0) return;
+  const cached = loadCachedReadingPosition(filePath);
+  if (!cached) return;
+  const target = findSpreadForPage(spreadIndex, cached.pageNumber);
+  if (!target) return;
+  const ratio = clampReadingPositionOffsetRatio(cached.pageOffsetRatio);
+  scrollEl.scrollTop = target.spreadEl.offsetTop + ratio * target.spreadEl.offsetHeight;
+}
+
+function capturePositionFromScroll(
+  filePath: string,
+  scrollEl: HTMLElement,
+  spreadIndex: readonly SpreadIndexEntry[],
+): void {
+  if (spreadIndex.length === 0) return;
+  const anchorLine = scrollEl.scrollTop + 24;
+  const anchorIndex = selectAnchorPageIndex(
+    spreadIndex.map((entry) => entry.spreadEl.offsetTop),
+    anchorLine,
+  );
+  const anchor = spreadIndex[anchorIndex] ?? spreadIndex[0];
+  if (!anchor) return;
+  // Multiple page numbers share a spread; use the smallest one so switching
+  // from spread to single-page would land on the head-side page.
+  const headPageNumber = anchor.pageNumbers.reduce(
+    (best, candidate) => (candidate > 0 && candidate < best ? candidate : best),
+    anchor.pageNumbers[0] ?? 1,
+  );
+  const pageOffsetRatio = computePageOffsetRatio(
+    scrollEl.scrollTop,
+    anchor.spreadEl.offsetTop,
+    anchor.spreadEl.offsetHeight,
+  );
+  saveCachedReadingPosition({
+    filePath,
+    pageNumber: headPageNumber,
+    pageOffsetRatio,
+    cfi: null,
+    updatedAt: Date.now(),
+  });
+}
+
+function installReadingPositionPersistence(
+  filePath: string,
+  scrollEl: HTMLElement,
+  spreadIndex: readonly SpreadIndexEntry[],
+): void {
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  const SAVE_DEBOUNCE_MS = 600;
+
+  const scheduleSave = () => {
+    if (saveTimer !== null) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      capturePositionFromScroll(filePath, scrollEl, spreadIndex);
+    }, SAVE_DEBOUNCE_MS);
+  };
+
+  scrollEl.addEventListener("scroll", scheduleSave, { passive: true });
+  window.addEventListener("beforeunload", () => {
+    if (saveTimer !== null) clearTimeout(saveTimer);
+    capturePositionFromScroll(filePath, scrollEl, spreadIndex);
+  });
+}
+
 // Minimal renderer: build spread groups according to the resolved binding
 // direction, lay them out as .pdfjs-spread rows, and render every page at a
 // fixed scale. Lazy paging, fit-width/fit-height, text layers, search, and
-// reading-position restore all come later.
-async function renderPdfAllPages(filePath: string, viewerEl: HTMLElement): Promise<void> {
+// per-file viewer settings will follow.
+async function renderPdfAllPages(
+  filePath: string,
+  viewerEl: HTMLElement,
+): Promise<SpreadIndexEntry[]> {
   const sourceUrl = convertFileSrc(filePath);
   const { getDocument } = await loadPdfJsRuntime();
 
@@ -146,6 +250,7 @@ async function renderPdfAllPages(filePath: string, viewerEl: HTMLElement): Promi
 
   const devicePixelRatio = window.devicePixelRatio || 1;
   const renderScale = 1.5;
+  const spreadIndex: SpreadIndexEntry[] = [];
 
   for (const group of pageGroups) {
     const visualOrder = getVisualPageOrder(group, layoutSettings);
@@ -163,7 +268,12 @@ async function renderPdfAllPages(filePath: string, viewerEl: HTMLElement): Promi
       const pageEl = await renderPdfPageCanvas(page, pageNumber, renderScale, devicePixelRatio);
       spreadEl.appendChild(pageEl);
     }
+
+    // Record pages in document order so callers can match a saved page number
+    // without caring about left/right binding.
+    spreadIndex.push({ spreadEl, pageNumbers: [...group] });
   }
+  return spreadIndex;
 }
 
 async function boot(): Promise<void> {
@@ -187,14 +297,17 @@ async function boot(): Promise<void> {
   setStatus(`Loading ${source ? `${filePath} (source: ${source})` : filePath}...`);
 
   const viewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
-  if (!viewerEl) {
+  const scrollEl = document.querySelector<HTMLElement>("#main-pane");
+  if (!viewerEl || !scrollEl) {
     setStatus("Viewer container is missing from the document.");
     return;
   }
 
   try {
-    await renderPdfAllPages(filePath, viewerEl);
+    const spreadIndex = await renderPdfAllPages(filePath, viewerEl);
     setStatus(null);
+    restoreReadingPosition(filePath, scrollEl, spreadIndex);
+    installReadingPositionPersistence(filePath, scrollEl, spreadIndex);
   } catch (error) {
     console.error("[riida] viewer window: failed to render PDF:", error);
     setStatus(`Failed to render PDF: ${error instanceof Error ? error.message : String(error)}`);

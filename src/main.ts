@@ -110,7 +110,17 @@ import { buildPdfRenderWindowPlan } from "./pdf-render-window-utils";
 import { planPagedKeyAction } from "./pdf-paged-nav-utils";
 import {
   applyViewerSettingsPayloadToState,
+  normalizeViewerSourceType,
+  preferredExplicitViewerBackgroundMode,
   switchViewerSettingsScopeInState,
+  viewerColorPaletteForMode,
+  viewerExtraVerticalGap,
+  type ViewerBackgroundMode,
+  type ViewerColorPalette,
+  type ViewerSettings,
+  type ViewerSettingsPayload,
+  type ViewerSettingsScope,
+  type ViewerSourceType,
 } from "./viewer-settings-utils";
 import {
   buildPdfSearchPageIndex,
@@ -223,35 +233,6 @@ type AppConfigPayload = {
   theme: AppTheme;
   enabledExternalSources: string[];
 };
-
-type ViewerSourceType = "pdf" | "epub";
-type ViewerBackgroundMode = "inherit-theme" | "default" | "snow-white" | "night-city" | "navy-blue";
-type ViewerColorPalette = {
-  background: string;
-  foreground: string;
-  link: string;
-};
-
-type ViewerSettings = {
-  pageMode: "single" | "spread";
-  bindingDirection: "left" | "right" | "auto";
-  zoomMode: "fit-width" | "fit-height" | "original";
-  alignMode: "left" | "center" | "right";
-  verticalGapMode: "wide" | "compact" | "none";
-  treatFirstPageAsCover: boolean;
-  backgroundMode: ViewerBackgroundMode;
-  scrollMode: "continuous" | "paged";
-  epubFontSize: number;
-};
-
-type ViewerSettingsPayload = {
-  global: ViewerSettings;
-  file: ViewerSettings | null;
-  effective: ViewerSettings;
-  usesFileOverride: boolean;
-};
-
-type ViewerSettingsScope = "global" | "file";
 
 type ViewerSettingsState = ViewerSettings & {
   globalDraft: ViewerSettings;
@@ -536,8 +517,8 @@ function persistAppTheme(theme: AppTheme) {
   localStorage.setItem(APP_THEME_STORAGE_KEY, theme);
 }
 
-function normalizeViewerSourceType(sourceType: string | null | undefined): ViewerSourceType {
-  return sourceType === "epub" ? "epub" : "pdf";
+function currentAppTheme(): AppTheme {
+  return normalizeAppTheme(lastAppConfig?.theme ?? "default");
 }
 
 function currentViewerSettingsSourceType(): ViewerSourceType | null {
@@ -549,47 +530,8 @@ function currentViewerSettingsSourceType(): ViewerSourceType | null {
   return normalizeViewerSourceType(currentBook.sourceType);
 }
 
-function resolveViewerThemeMode(
-  backgroundMode: ViewerBackgroundMode,
-): Exclude<ViewerBackgroundMode, "inherit-theme"> {
-  if (backgroundMode !== "inherit-theme") {
-    return backgroundMode;
-  }
-
-  return normalizeAppTheme(lastAppConfig?.theme ?? "default");
-}
-
-function viewerColorPaletteForMode(backgroundMode: ViewerBackgroundMode): ViewerColorPalette {
-  switch (resolveViewerThemeMode(backgroundMode)) {
-    case "snow-white":
-      return {
-        background: "#f5f5f7",
-        foreground: "#222226",
-        link: "#006ee6",
-      };
-    case "night-city":
-      return {
-        background: "#101114",
-        foreground: "#f2f2f7",
-        link: "#5db2ff",
-      };
-    case "navy-blue":
-      return {
-        background: "#18314f",
-        foreground: "#e5edf7",
-        link: "#9fc5ff",
-      };
-    default:
-      return {
-        background: "rgb(244 234 212)",
-        foreground: "#2b2118",
-        link: "#7d4e21",
-      };
-  }
-}
-
 function applyPdfViewerBackground(backgroundMode: ViewerBackgroundMode) {
-  const palette = viewerColorPaletteForMode(backgroundMode);
+  const palette = viewerColorPaletteForMode(backgroundMode, currentAppTheme());
 
   const applyBackgroundStyles = (el: HTMLElement | null) => {
     if (!el) {
@@ -713,17 +655,6 @@ function syncEpubCoverOverlay(epubViewerEl: HTMLElement) {
   overlay.alt = coverAlt;
 }
 
-function viewerExtraVerticalGap(mode: ViewerSettings["verticalGapMode"]): number {
-  switch (mode) {
-    case "wide":
-      return 40;
-    case "compact":
-      return 16;
-    default:
-      return 0;
-  }
-}
-
 function applyViewerVerticalGapMode(mode: ViewerSettings["verticalGapMode"]) {
   const extraGap = viewerExtraVerticalGap(mode);
   const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
@@ -745,7 +676,7 @@ function applyViewerVerticalGapMode(mode: ViewerSettings["verticalGapMode"]) {
 function applyEpubViewerColors(backgroundMode: ViewerBackgroundMode) {
   const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
   const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
-  const palette = viewerColorPaletteForMode(backgroundMode);
+  const palette = viewerColorPaletteForMode(backgroundMode, currentAppTheme());
 
   if (backgroundMode === "inherit-theme") {
     mainPaneEl?.style.removeProperty("background-color");
@@ -783,12 +714,6 @@ function setCheckedViewerBackgroundOption(groupName: string, value: ViewerBackgr
   }
 }
 
-function preferredExplicitViewerBackgroundMode(
-  backgroundMode: ViewerBackgroundMode,
-): Exclude<ViewerBackgroundMode, "inherit-theme"> {
-  return resolveViewerThemeMode(backgroundMode);
-}
-
 function syncViewerBackgroundControls(
   groupName: string,
   inheritCheckboxId: string,
@@ -797,7 +722,7 @@ function syncViewerBackgroundControls(
   const inheritCheckbox = document.querySelector<HTMLInputElement>(`#${inheritCheckboxId}`);
   const group = document.querySelector<HTMLElement>(`#${groupName}`);
   const isInherited = backgroundMode === "inherit-theme";
-  const explicitMode = preferredExplicitViewerBackgroundMode(backgroundMode);
+  const explicitMode = preferredExplicitViewerBackgroundMode(backgroundMode, currentAppTheme());
 
   if (inheritCheckbox) {
     inheritCheckbox.checked = isInherited;
@@ -5501,21 +5426,25 @@ async function renderCurrentPage() {
         allowScriptedContent: true,
       });
 
+      const epubThemePalette = viewerColorPaletteForMode(
+        viewerSettings.backgroundMode,
+        currentAppTheme(),
+      );
       rendition.themes.default({
         html: {
-          "background-color": `${viewerColorPaletteForMode(viewerSettings.backgroundMode).background} !important`,
-          color: `${viewerColorPaletteForMode(viewerSettings.backgroundMode).foreground} !important`,
+          "background-color": `${epubThemePalette.background} !important`,
+          color: `${epubThemePalette.foreground} !important`,
         },
         // DPFJ guide §ページメディアの余白: RS should not add its own margins to body.
         // epub.js injects padding by default; suppress it so the book's own CSS controls spacing.
         body: {
-          "background-color": `${viewerColorPaletteForMode(viewerSettings.backgroundMode).background} !important`,
-          color: `${viewerColorPaletteForMode(viewerSettings.backgroundMode).foreground} !important`,
+          "background-color": `${epubThemePalette.background} !important`,
+          color: `${epubThemePalette.foreground} !important`,
           padding: "0 !important",
           margin: "0 !important",
         },
         a: {
-          color: `${viewerColorPaletteForMode(viewerSettings.backgroundMode).link} !important`,
+          color: `${epubThemePalette.link} !important`,
         },
         pre: {
           "white-space": "pre-wrap !important",
@@ -5539,7 +5468,7 @@ async function renderCurrentPage() {
           if (contents.document) {
             applyEpubColorsToDocument(
               contents.document,
-              viewerColorPaletteForMode(viewerSettings.backgroundMode),
+              viewerColorPaletteForMode(viewerSettings.backgroundMode, currentAppTheme()),
             );
             injectEpubWritingModeCSS(contents.document);
           }
@@ -8039,7 +7968,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         mutateEditingViewerSettings((preferences) => {
           preferences.backgroundMode = viewerBackgroundInheritEl.checked
             ? "inherit-theme"
-            : preferredExplicitViewerBackgroundMode(preferences.backgroundMode);
+            : preferredExplicitViewerBackgroundMode(preferences.backgroundMode, currentAppTheme());
         });
       },
       { rerenderPdf: false },

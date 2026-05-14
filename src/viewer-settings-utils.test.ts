@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   applyViewerSettingsPayloadToState,
+  normalizeViewerSourceType,
+  preferredExplicitViewerBackgroundMode,
+  resolveViewerThemeMode,
   switchViewerSettingsScopeInState,
+  viewerColorPaletteForMode,
+  viewerExtraVerticalGap,
   type ViewerSettings,
 } from "./viewer-settings-utils";
 
@@ -86,5 +91,75 @@ describe("switchViewerSettingsScopeInState", () => {
 
     expect(state.scope).toBe("file");
     expect(state.fileDraft.bindingDirection).toBe("right");
+  });
+});
+
+describe("normalizeViewerSourceType", () => {
+  it("returns 'epub' for the epub literal", () => {
+    expect(normalizeViewerSourceType("epub")).toBe("epub");
+  });
+
+  it("defaults to 'pdf' for unknown, null, or undefined values", () => {
+    expect(normalizeViewerSourceType("pdf")).toBe("pdf");
+    expect(normalizeViewerSourceType("native")).toBe("pdf");
+    expect(normalizeViewerSourceType(null)).toBe("pdf");
+    expect(normalizeViewerSourceType(undefined)).toBe("pdf");
+    expect(normalizeViewerSourceType("")).toBe("pdf");
+  });
+});
+
+describe("resolveViewerThemeMode", () => {
+  it("returns the explicit mode when not inherited", () => {
+    expect(resolveViewerThemeMode("snow-white", "night-city")).toBe("snow-white");
+    expect(resolveViewerThemeMode("night-city", "default")).toBe("night-city");
+    expect(resolveViewerThemeMode("navy-blue", null)).toBe("navy-blue");
+    expect(resolveViewerThemeMode("default", "snow-white")).toBe("default");
+  });
+
+  it("falls back to the supplied app theme when set to inherit", () => {
+    expect(resolveViewerThemeMode("inherit-theme", "snow-white")).toBe("snow-white");
+    expect(resolveViewerThemeMode("inherit-theme", "night-city")).toBe("night-city");
+    expect(resolveViewerThemeMode("inherit-theme", "navy-blue")).toBe("navy-blue");
+    expect(resolveViewerThemeMode("inherit-theme", "default")).toBe("default");
+  });
+
+  it("treats nullish or unknown app themes as 'default' when inheriting", () => {
+    expect(resolveViewerThemeMode("inherit-theme", null)).toBe("default");
+    expect(resolveViewerThemeMode("inherit-theme", undefined)).toBe("default");
+    expect(resolveViewerThemeMode("inherit-theme", "nonsense")).toBe("default");
+  });
+});
+
+describe("preferredExplicitViewerBackgroundMode", () => {
+  it("is an alias of resolveViewerThemeMode for inherited values", () => {
+    expect(preferredExplicitViewerBackgroundMode("inherit-theme", "night-city")).toBe(
+      resolveViewerThemeMode("inherit-theme", "night-city"),
+    );
+    expect(preferredExplicitViewerBackgroundMode("snow-white", "default")).toBe("snow-white");
+  });
+});
+
+describe("viewerColorPaletteForMode", () => {
+  it("returns a palette per resolved theme", () => {
+    expect(viewerColorPaletteForMode("snow-white", "default").background).toBe("#f5f5f7");
+    expect(viewerColorPaletteForMode("night-city", "default").foreground).toBe("#f2f2f7");
+    expect(viewerColorPaletteForMode("navy-blue", "default").link).toBe("#9fc5ff");
+  });
+
+  it("follows the supplied app theme when set to inherit", () => {
+    expect(viewerColorPaletteForMode("inherit-theme", "night-city")).toEqual(
+      viewerColorPaletteForMode("night-city", "default"),
+    );
+    expect(viewerColorPaletteForMode("inherit-theme", null)).toEqual(
+      viewerColorPaletteForMode("default", "default"),
+    );
+  });
+});
+
+describe("viewerExtraVerticalGap", () => {
+  it("maps gap modes to pixel offsets", () => {
+    expect(viewerExtraVerticalGap("wide")).toBe(40);
+    expect(viewerExtraVerticalGap("compact")).toBe(16);
+    expect(viewerExtraVerticalGap("none")).toBe(0);
   });
 });

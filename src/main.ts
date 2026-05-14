@@ -304,6 +304,16 @@ type TagEditorState = {
   statusMessage: string;
 };
 
+type TagManagerState = {
+  isOpen: boolean;
+  tagId: string;
+  affectedBooks: number;
+  affectedTags: string[];
+  renameInput: string;
+  statusMessage: string;
+  statusTone: "info" | "error";
+};
+
 type MetadataFieldPolicy = "fill-empty" | "overwrite-all";
 
 type BookMetadataEditorState = {
@@ -851,6 +861,16 @@ const tagEditorState: TagEditorState = {
   input: "",
   statusMessage: "",
 };
+const tagManagerState: TagManagerState = {
+  isOpen: false,
+  tagId: "",
+  affectedBooks: 0,
+  affectedTags: [],
+  renameInput: "",
+  statusMessage: "",
+  statusTone: "info",
+};
+let isTagManagerComposing = false;
 const bookMetadataEditorState: BookMetadataEditorState = {
   isOpen: false,
   filePath: null,
@@ -2675,6 +2695,191 @@ function syncTagEditorUi() {
     chipEl.appendChild(labelEl);
     chipEl.appendChild(removeEl);
     listEl.appendChild(chipEl);
+  }
+}
+
+function countBooksWithTagOrDescendants(tagId: string): {
+  bookCount: number;
+  affectedTags: string[];
+} {
+  const books = lastSnapshot?.books ?? viewerState.books;
+  const prefix = `${tagId}/`;
+  const affectedTagSet = new Set<string>();
+  const affectedBookSet = new Set<string>();
+  for (const book of books) {
+    for (const tag of book.tags ?? []) {
+      if (tag === tagId || tag.startsWith(prefix)) {
+        affectedTagSet.add(tag);
+        affectedBookSet.add(book.filePath);
+      }
+    }
+  }
+  return {
+    bookCount: affectedBookSet.size,
+    affectedTags: [...affectedTagSet].sort((a, b) => a.localeCompare(b, "ja")),
+  };
+}
+
+function openTagManager(tagId: string) {
+  const stats = countBooksWithTagOrDescendants(tagId);
+  tagManagerState.isOpen = true;
+  tagManagerState.tagId = tagId;
+  tagManagerState.affectedBooks = stats.bookCount;
+  tagManagerState.affectedTags = stats.affectedTags;
+  tagManagerState.renameInput = tagId;
+  tagManagerState.statusMessage = "";
+  tagManagerState.statusTone = "info";
+  syncTagManagerUi();
+  setTimeout(() => {
+    const inputEl = document.querySelector<HTMLInputElement>("#tag-manager-rename-input");
+    inputEl?.focus();
+    inputEl?.select();
+  }, 0);
+}
+
+function closeTagManager() {
+  tagManagerState.isOpen = false;
+  syncTagManagerUi();
+}
+
+function setTagManagerStatus(message: string, tone: "info" | "error" = "info") {
+  tagManagerState.statusMessage = message;
+  tagManagerState.statusTone = tone;
+  syncTagManagerUi();
+}
+
+function syncTagManagerUi() {
+  const modalEl = document.querySelector<HTMLElement>("#tag-manager-modal");
+  const tagEl = document.querySelector<HTMLElement>("#tag-manager-tag");
+  const infoEl = document.querySelector<HTMLElement>("#tag-manager-info");
+  const inputEl = document.querySelector<HTMLInputElement>("#tag-manager-rename-input");
+  const statusEl = document.querySelector<HTMLElement>("#tag-manager-status");
+  const renameBtn = document.querySelector<HTMLButtonElement>("#tag-manager-rename");
+  const deleteBtn = document.querySelector<HTMLButtonElement>("#tag-manager-delete");
+
+  if (modalEl) {
+    modalEl.hidden = !tagManagerState.isOpen;
+  }
+  if (tagEl) {
+    tagEl.textContent = tagManagerState.tagId;
+  }
+  if (infoEl) {
+    const bookCount = tagManagerState.affectedBooks;
+    const tagCount = tagManagerState.affectedTags.length;
+    if (bookCount === 0) {
+      infoEl.textContent = "No books currently use this tag.";
+    } else {
+      const booksPart = `${bookCount} book${bookCount === 1 ? "" : "s"}`;
+      if (tagCount <= 1) {
+        infoEl.textContent = `This affects ${booksPart}.`;
+      } else {
+        infoEl.textContent =
+          `This affects ${booksPart} and ${tagCount} tags ` +
+          `(including sub-tags: ${tagManagerState.affectedTags.slice(0, 5).join(", ")}` +
+          `${tagCount > 5 ? ", …" : ""}).`;
+      }
+    }
+  }
+  if (inputEl && document.activeElement !== inputEl) {
+    inputEl.value = tagManagerState.renameInput;
+  }
+  if (statusEl) {
+    const hasStatus = tagManagerState.statusMessage.length > 0;
+    statusEl.hidden = !hasStatus;
+    statusEl.textContent = tagManagerState.statusMessage;
+    statusEl.dataset.tone = tagManagerState.statusTone;
+  }
+  const canAct = tagManagerState.affectedBooks > 0;
+  if (renameBtn) {
+    renameBtn.disabled = !canAct;
+  }
+  if (deleteBtn) {
+    deleteBtn.disabled = !canAct;
+  }
+}
+
+async function renameTagFromManager() {
+  const oldTag = tagManagerState.tagId;
+  const newTag = tagManagerState.renameInput.trim();
+  const validation = validateTagValue(newTag);
+  if (!validation.ok) {
+    setTagManagerStatus(validation.message, "error");
+    return;
+  }
+  if (validation.value === oldTag) {
+    setTagManagerStatus("Enter a different name to rename the tag.", "error");
+    return;
+  }
+  try {
+    const affected = await invoke<number>("rename_tag_globally", {
+      oldTag,
+      newTag: validation.value,
+    });
+    await refreshSnapshot();
+    remapActiveTagAfterRename(oldTag, validation.value);
+    closeTagManager();
+    renderApp();
+    void message(
+      `Renamed "${oldTag}" to "${validation.value}" on ${affected} book${
+        affected === 1 ? "" : "s"
+      }.`,
+      { title: "Tag renamed" },
+    );
+  } catch (error) {
+    setTagManagerStatus(`Failed to rename: ${String(error)}`, "error");
+  }
+}
+
+async function deleteTagFromManager() {
+  const target = tagManagerState.tagId;
+  const bookCount = tagManagerState.affectedBooks;
+  const tagCount = tagManagerState.affectedTags.length;
+  const detail =
+    tagCount > 1
+      ? ` This will also remove ${tagCount - 1} sub-tag${tagCount - 1 === 1 ? "" : "s"}.`
+      : "";
+  const confirmed = await confirm(
+    `Remove "${target}" from ${bookCount} book${bookCount === 1 ? "" : "s"}?${detail}`,
+    {
+      title: "Delete tag",
+      kind: "warning",
+      okLabel: "Delete",
+      cancelLabel: "Cancel",
+    },
+  );
+  if (!confirmed) {
+    return;
+  }
+  try {
+    const affected = await invoke<number>("delete_tag_globally", { tag: target });
+    await refreshSnapshot();
+    clearActiveTagAfterDelete(target);
+    closeTagManager();
+    renderApp();
+    void message(`Removed "${target}" from ${affected} book${affected === 1 ? "" : "s"}.`, {
+      title: "Tag deleted",
+    });
+  } catch (error) {
+    setTagManagerStatus(`Failed to delete: ${String(error)}`, "error");
+  }
+}
+
+function remapActiveTagAfterRename(oldTag: string, newTag: string) {
+  const active = viewerState.activeTag;
+  if (!active) return;
+  if (active === oldTag) {
+    viewerState.activeTag = newTag;
+  } else if (active.startsWith(`${oldTag}/`)) {
+    viewerState.activeTag = `${newTag}${active.slice(oldTag.length)}`;
+  }
+}
+
+function clearActiveTagAfterDelete(tag: string) {
+  const active = viewerState.activeTag;
+  if (!active) return;
+  if (active === tag || active.startsWith(`${tag}/`)) {
+    viewerState.activeTag = null;
+    viewerState.activeTagDirectOnly = false;
   }
 }
 
@@ -6007,6 +6212,10 @@ function populateTagsSection(sectionEl: HTMLElement, snapshot: LibrarySnapshot) 
       );
       ensureExpandedTag(tag.id);
     });
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      openTagManager(tag.id);
+    });
     row.appendChild(button);
 
     sectionEl.appendChild(row);
@@ -6970,6 +7179,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   const tagEditorSaveEl = document.querySelector<HTMLButtonElement>("#tag-editor-save");
   const tagEditorAddEl = document.querySelector<HTMLButtonElement>("#tag-editor-add");
   const tagEditorInputEl = document.querySelector<HTMLInputElement>("#tag-editor-input");
+  const tagManagerBackdropEl = document.querySelector<HTMLElement>("#tag-manager-backdrop");
+  const tagManagerCloseEl = document.querySelector<HTMLButtonElement>("#tag-manager-close");
+  const tagManagerCancelEl = document.querySelector<HTMLButtonElement>("#tag-manager-cancel");
+  const tagManagerRenameEl = document.querySelector<HTMLButtonElement>("#tag-manager-rename");
+  const tagManagerDeleteEl = document.querySelector<HTMLButtonElement>("#tag-manager-delete");
+  const tagManagerInputEl = document.querySelector<HTMLInputElement>("#tag-manager-rename-input");
   const bookMetadataBackdropEl = document.querySelector<HTMLElement>("#book-metadata-backdrop");
   const bookMetadataCloseEl = document.querySelector<HTMLButtonElement>("#book-metadata-close");
   const bookMetadataCancelEl = document.querySelector<HTMLButtonElement>("#book-metadata-cancel");
@@ -7533,6 +7748,35 @@ window.addEventListener("DOMContentLoaded", async () => {
   tagEditorAddEl?.addEventListener("click", addTagFromEditorInput);
   tagEditorSaveEl?.addEventListener("click", () => {
     void saveTagEditorChanges();
+  });
+  tagManagerCloseEl?.addEventListener("click", closeTagManager);
+  tagManagerCancelEl?.addEventListener("click", closeTagManager);
+  tagManagerBackdropEl?.addEventListener("click", closeTagManager);
+  tagManagerRenameEl?.addEventListener("click", () => {
+    void renameTagFromManager();
+  });
+  tagManagerDeleteEl?.addEventListener("click", () => {
+    void deleteTagFromManager();
+  });
+  tagManagerInputEl?.addEventListener("input", () => {
+    tagManagerState.renameInput = tagManagerInputEl.value;
+  });
+  tagManagerInputEl?.addEventListener("compositionstart", () => {
+    isTagManagerComposing = true;
+  });
+  tagManagerInputEl?.addEventListener("compositionend", () => {
+    isTagManagerComposing = false;
+  });
+  tagManagerInputEl?.addEventListener("keydown", (event) => {
+    if (
+      event.key === "Enter" &&
+      !event.isComposing &&
+      !isTagManagerComposing &&
+      event.keyCode !== 229
+    ) {
+      event.preventDefault();
+      void renameTagFromManager();
+    }
   });
   bookMetadataCloseEl?.addEventListener("click", closeBookMetadataEditor);
   bookMetadataCancelEl?.addEventListener("click", closeBookMetadataEditor);

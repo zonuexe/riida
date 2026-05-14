@@ -2748,6 +2748,49 @@ fn delete_book_tag(connection: &Connection, tag: &str) -> Result<u64, String> {
 }
 
 #[tauri::command]
+fn open_viewer_window(
+    app: AppHandle,
+    file_path: String,
+    source: Option<String>,
+) -> Result<String, String> {
+    if file_path.is_empty() {
+        return Err("file_path is required".to_string());
+    }
+
+    let now_nanos = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let label = format!("viewer-{}", now_nanos);
+
+    // Pass launch parameters via an initialization script. Setting them on
+    // window.__RIIDA_LAUNCH_PARAMS__ before any other script runs avoids the
+    // cross-platform pitfalls of stuffing a query string into WebviewUrl::App.
+    let payload = serde_json::json!({
+        "filePath": file_path,
+        "source": source,
+    });
+    let init_script = format!(
+        "window.__RIIDA_LAUNCH_PARAMS__ = Object.freeze({});",
+        payload,
+    );
+
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        &label,
+        tauri::WebviewUrl::App(PathBuf::from("viewer.html")),
+    )
+    .title("riida viewer")
+    .inner_size(1320.0, 860.0)
+    .min_inner_size(960.0, 640.0)
+    .initialization_script(&init_script)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    Ok(label)
+}
+
+#[tauri::command]
 fn rename_tag_globally(old_tag: String, new_tag: String) -> Result<u64, String> {
     let mut connection = open_database()?;
     rename_book_tag(&mut connection, &old_tag, &new_tag)
@@ -3493,7 +3536,8 @@ pub fn run() {
             save_file_viewer_preferences,
             clear_file_viewer_preferences,
             get_pdf_password,
-            save_pdf_password
+            save_pdf_password,
+            open_viewer_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

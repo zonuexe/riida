@@ -15,13 +15,39 @@ type ViewerLaunchParams = {
   source: string | null;
 };
 
-function readLaunchParams(search: string): ViewerLaunchParams {
+// The Rust open_viewer_window command injects an initialization script that
+// sets this global on the new window before any other script runs. It is the
+// authoritative source of spawn-time parameters; the query-string fallback is
+// for tests and direct URL access during local development.
+type InjectedLaunchParams = {
+  filePath?: unknown;
+  source?: unknown;
+};
+
+declare global {
+  interface Window {
+    __RIIDA_LAUNCH_PARAMS__?: InjectedLaunchParams;
+  }
+}
+
+function coerceLaunchString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function readLaunchParams(
+  search: string,
+  injected: InjectedLaunchParams | undefined = undefined,
+): ViewerLaunchParams {
+  if (injected) {
+    return {
+      filePath: coerceLaunchString(injected.filePath),
+      source: coerceLaunchString(injected.source),
+    };
+  }
   const params = new URLSearchParams(search);
-  const filePath = params.get("file");
-  const source = params.get("source");
   return {
-    filePath: filePath && filePath.length > 0 ? filePath : null,
-    source: source && source.length > 0 ? source : null,
+    filePath: coerceLaunchString(params.get("file")),
+    source: coerceLaunchString(params.get("source")),
   };
 }
 
@@ -44,7 +70,7 @@ function boot(): void {
     applyAppTheme(cachedTheme);
   }
 
-  renderPlaceholder(readLaunchParams(window.location.search));
+  renderPlaceholder(readLaunchParams(window.location.search, window.__RIIDA_LAUNCH_PARAMS__));
 
   document.body.dataset.startup = "ready";
 }

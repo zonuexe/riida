@@ -188,6 +188,63 @@ function capturePositionFromScroll(
   });
 }
 
+function findCurrentSpreadIndex(
+  scrollEl: HTMLElement,
+  spreadIndex: readonly SpreadIndexEntry[],
+): number {
+  if (spreadIndex.length === 0) return -1;
+  const anchorLine = scrollEl.scrollTop + 24;
+  return selectAnchorPageIndex(
+    spreadIndex.map((entry) => entry.spreadEl.offsetTop),
+    anchorLine,
+  );
+}
+
+function scrollToSpread(
+  scrollEl: HTMLElement,
+  spreadIndex: readonly SpreadIndexEntry[],
+  index: number,
+): void {
+  const clamped = Math.max(0, Math.min(index, spreadIndex.length - 1));
+  const target = spreadIndex[clamped];
+  if (!target) return;
+  scrollEl.scrollTo({ top: target.spreadEl.offsetTop, behavior: "smooth" });
+}
+
+function installSpreadKeyboardNavigation(
+  scrollEl: HTMLElement,
+  spreadIndex: readonly SpreadIndexEntry[],
+): void {
+  if (spreadIndex.length === 0) return;
+  window.addEventListener("keydown", (event) => {
+    if (event.defaultPrevented) return;
+    const target = event.target as HTMLElement | null;
+    if (target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName))) {
+      return;
+    }
+    const isNext =
+      event.key === "PageDown" ||
+      (event.key === " " && !event.shiftKey) ||
+      event.key === "ArrowDown";
+    const isPrev =
+      event.key === "PageUp" || (event.key === " " && event.shiftKey) || event.key === "ArrowUp";
+    const isHome = event.key === "Home";
+    const isEnd = event.key === "End";
+    if (!isNext && !isPrev && !isHome && !isEnd) return;
+    event.preventDefault();
+    const current = findCurrentSpreadIndex(scrollEl, spreadIndex);
+    if (isHome) {
+      scrollToSpread(scrollEl, spreadIndex, 0);
+    } else if (isEnd) {
+      scrollToSpread(scrollEl, spreadIndex, spreadIndex.length - 1);
+    } else if (isNext) {
+      scrollToSpread(scrollEl, spreadIndex, current + 1);
+    } else {
+      scrollToSpread(scrollEl, spreadIndex, current - 1);
+    }
+  });
+}
+
 function installReadingPositionPersistence(
   filePath: string,
   scrollEl: HTMLElement,
@@ -218,6 +275,7 @@ function installReadingPositionPersistence(
 async function renderPdfAllPages(
   filePath: string,
   viewerEl: HTMLElement,
+  scrollEl: HTMLElement,
 ): Promise<SpreadIndexEntry[]> {
   const sourceUrl = convertFileSrc(filePath);
   const { getDocument } = await loadPdfJsRuntime();
@@ -243,16 +301,42 @@ async function renderPdfAllPages(
   };
   const pageGroups = buildPageGroups(pdfDocument.numPages, layoutSettings);
 
+  // Scale every page to fit the window's height. The shell uses the same
+  // strategy in fit-height + spread mode and falls back to splitting spreads
+  // whose combined width would still overflow the available width.
+  const pageGap = 6;
+  const viewerWidth = Math.max(scrollEl.clientWidth, 720);
+  const viewerHeight = Math.max(scrollEl.clientHeight, 600);
+  const availableWidth = viewerWidth - pageGap - 32;
+  const targetHeight = Math.max(260, viewerHeight - 56);
+
+  const layoutGroups: number[][] = [];
+  for (const group of pageGroups) {
+    if (group.length === 2 && group[0] !== undefined && group[1] !== undefined) {
+      const g0 = group[0];
+      const g1 = group[1];
+      const vp0 = (await pdfDocument.getPage(g0)).getViewport({ scale: 1 });
+      const vp1 = (await pdfDocument.getPage(g1)).getViewport({ scale: 1 });
+      const fitScale = targetHeight / Math.max(vp0.height, 1);
+      const combinedWidth = (vp0.width + vp1.width) * fitScale + pageGap;
+      if (combinedWidth > availableWidth) {
+        layoutGroups.push([g0]);
+        layoutGroups.push([g1]);
+        continue;
+      }
+    }
+    layoutGroups.push(group);
+  }
+
   viewerEl.innerHTML = "";
   viewerEl.dataset.filePath = filePath;
   viewerEl.dataset.position = detectedBinding;
   viewerEl.hidden = false;
 
   const devicePixelRatio = window.devicePixelRatio || 1;
-  const renderScale = 1.5;
   const spreadIndex: SpreadIndexEntry[] = [];
 
-  for (const group of pageGroups) {
+  for (const group of layoutGroups) {
     const visualOrder = getVisualPageOrder(group, layoutSettings);
     const spreadEl = document.createElement("div");
     spreadEl.className = "pdfjs-spread";
@@ -263,9 +347,13 @@ async function renderPdfAllPages(
     }
     viewerEl.appendChild(spreadEl);
 
+    const samplePage = await pdfDocument.getPage(group[0]!);
+    const sampleViewport = samplePage.getViewport({ scale: 1 });
+    const baseScale = targetHeight / Math.max(sampleViewport.height, 1);
+
     for (const pageNumber of visualOrder) {
       const page = await pdfDocument.getPage(pageNumber);
-      const pageEl = await renderPdfPageCanvas(page, pageNumber, renderScale, devicePixelRatio);
+      const pageEl = await renderPdfPageCanvas(page, pageNumber, baseScale, devicePixelRatio);
       spreadEl.appendChild(pageEl);
     }
 
@@ -304,10 +392,11 @@ async function boot(): Promise<void> {
   }
 
   try {
-    const spreadIndex = await renderPdfAllPages(filePath, viewerEl);
+    const spreadIndex = await renderPdfAllPages(filePath, viewerEl, scrollEl);
     setStatus(null);
     restoreReadingPosition(filePath, scrollEl, spreadIndex);
     installReadingPositionPersistence(filePath, scrollEl, spreadIndex);
+    installSpreadKeyboardNavigation(scrollEl, spreadIndex);
   } catch (error) {
     console.error("[riida] viewer window: failed to render PDF:", error);
     setStatus(`Failed to render PDF: ${error instanceof Error ? error.message : String(error)}`);

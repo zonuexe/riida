@@ -454,6 +454,13 @@ const thumbnailBookByImage = new WeakMap<HTMLImageElement, BookSummary>();
 let noteEditor: NoteEditorHandle | null = null;
 let noteSaveTimer: number | null = null;
 let noteLoadToken = 0;
+// Suppress scheduleNoteSave callbacks that fire while we are tearing down the
+// Milkdown editor. Without this guard, Milkdown's listener plugin emits a
+// final markdownUpdated event during editor.destroy() while the editor still
+// has focus, which calls syncNoteUi → DOM mutation → ProseMirror's
+// MutationObserver → another markdownUpdated → infinite re-entry, freezing the
+// renderer. See https://github.com/Milkdown/milkdown/issues for related reports.
+let isDestroyingNoteEditor = false;
 let pdfRenderToken = 0;
 let pdfRenderResizeTimer: number | null = null;
 let pdfRenderInProgress = false;
@@ -3866,8 +3873,23 @@ async function destroyNoteEditor() {
     return;
   }
 
-  await noteEditor.destroy();
+  // Drop focus from inside the editor before teardown. With the contenteditable
+  // still active, Milkdown's destroy() interleaves with synchronous input/
+  // selection events and can hang the renderer (see isDestroyingNoteEditor).
+  const noteEditorEl = document.querySelector<HTMLElement>("#note-editor");
+  const activeEl = document.activeElement;
+  if (activeEl instanceof HTMLElement && noteEditorEl?.contains(activeEl)) {
+    activeEl.blur();
+  }
+
+  const editor = noteEditor;
   noteEditor = null;
+  isDestroyingNoteEditor = true;
+  try {
+    await editor.destroy();
+  } finally {
+    isDestroyingNoteEditor = false;
+  }
 }
 
 async function saveNoteNow() {
@@ -3897,6 +3919,13 @@ async function saveNoteNow() {
 }
 
 function scheduleNoteSave(markdown: string) {
+  // Milkdown emits a final markdownUpdated event during destroy() while the
+  // editor still has focus. Bail out so the teardown does not re-enter
+  // syncNoteUi → DOM mutation → ProseMirror MutationObserver → another
+  // markdownUpdated, which previously hung the renderer.
+  if (isDestroyingNoteEditor) {
+    return;
+  }
   noteState.currentContent = markdown;
   noteState.statusMessage = "Waiting to save...";
   syncNoteUi();

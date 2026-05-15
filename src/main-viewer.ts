@@ -533,6 +533,9 @@ let noteSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingNoteSave: { filePath: string; content: string } | null = null;
 let activeBookFilePath: string | null = null;
 let lastNoteViewport: { width: number; height: number } | null = null;
+// See src/main.ts for the rationale: Milkdown can re-enter scheduleNoteSave
+// during destroy() and freeze the renderer.
+let isDestroyingNoteEditor = false;
 
 async function loadNoteEditorModule() {
   noteEditorModulePromise ??= import("./note-editor");
@@ -593,6 +596,7 @@ async function saveNoteNow(): Promise<void> {
 }
 
 function scheduleNoteSave(markdown: string): void {
+  if (isDestroyingNoteEditor) return;
   if (!noteState.activeFilePath) return;
   noteState.currentContent = markdown;
   pendingNoteSave = { filePath: noteState.activeFilePath, content: markdown };
@@ -615,12 +619,22 @@ async function flushPendingNoteSave(): Promise<void> {
 
 async function destroyNoteEditor(): Promise<void> {
   if (!noteEditor) return;
+  // Match the shell's teardown: drop focus from inside the editor and suppress
+  // re-entrant scheduleNoteSave calls while Milkdown is unmounting.
+  const noteEditorEl = document.querySelector<HTMLElement>("#note-editor");
+  const activeEl = document.activeElement;
+  if (activeEl instanceof HTMLElement && noteEditorEl?.contains(activeEl)) {
+    activeEl.blur();
+  }
   const editor = noteEditor;
   noteEditor = null;
+  isDestroyingNoteEditor = true;
   try {
     await editor.destroy();
   } catch (error) {
     console.warn("[riida] failed to destroy note editor:", error);
+  } finally {
+    isDestroyingNoteEditor = false;
   }
 }
 

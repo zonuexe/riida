@@ -33,6 +33,33 @@
         </div>
         <div id="pdfjs-viewer" class="pdfjs-viewer viewer-window-pdfjs" hidden></div>
         <div id="epub-viewer" class="epub-viewer viewer-window-epub" hidden></div>
+
+        <button id="note-toggle" class="note-toggle-button" type="button" hidden>
+          <i class="fa-solid fa-note-sticky" aria-hidden="true"></i>
+          <span>Notes</span>
+        </button>
+        <aside id="note-panel" class="note-panel" hidden>
+          <div class="note-panel-header" id="note-drag-handle">
+            <p class="note-panel-label">Notes</p>
+            <button
+              id="note-close"
+              class="note-close-button"
+              type="button"
+              aria-label="Close notes"
+            >
+              ×
+            </button>
+          </div>
+          <div id="note-editor" class="note-editor"></div>
+          <div class="note-resize-handle note-resize-handle-n" data-resize="n"></div>
+          <div class="note-resize-handle note-resize-handle-e" data-resize="e"></div>
+          <div class="note-resize-handle note-resize-handle-s" data-resize="s"></div>
+          <div class="note-resize-handle note-resize-handle-w" data-resize="w"></div>
+          <div class="note-resize-handle note-resize-handle-ne" data-resize="ne"></div>
+          <div class="note-resize-handle note-resize-handle-se" data-resize="se"></div>
+          <div class="note-resize-handle note-resize-handle-sw" data-resize="sw"></div>
+          <div class="note-resize-handle note-resize-handle-nw" data-resize="nw"></div>
+        </aside>
       </section>
     </main>
   </body>

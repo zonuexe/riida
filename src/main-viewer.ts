@@ -5,11 +5,17 @@
 // notes, search, spread layout, lazy paging, and reading-position
 // persistence will be migrated out of src/main.ts in follow-up commits.
 
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import "./vendor/fontawesome/css/fontawesome.min.css";
 import "./vendor/fontawesome/css/solid.min.css";
 import { applyAppTheme, loadPersistedAppTheme } from "./app-theme";
 import { loadEpubJs } from "./epub-runtime";
+import type { NoteEditorHandle } from "./note-editor";
+import {
+  clampNoteWindowPosition,
+  ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
+  preserveNoteWindowBottomRightOffset,
+} from "./note-window-utils";
 import { detectPdfBindingDirection } from "./pdf-binding-detect";
 import { loadPdfJsRuntime, TauriBinaryDataFactory } from "./pdf-runtime";
 import {
@@ -466,6 +472,331 @@ function installEpubKeyboardNavigation(
   });
 }
 
+type NoteDocument = {
+  filePath: string;
+  format: string;
+  content: string;
+  updatedAt: number | null;
+};
+
+type NoteState = {
+  isOpen: boolean;
+  isLoading: boolean;
+  activeFilePath: string | null;
+  currentContent: string;
+  x: number | null;
+  y: number | null;
+  width: number;
+  height: number;
+};
+
+type NoteInteractionState = {
+  mode: "drag" | "resize" | null;
+  edge: string | null;
+  startX: number;
+  startY: number;
+  startLeft: number;
+  startTop: number;
+  startWidth: number;
+  startHeight: number;
+};
+
+const NOTE_MIN_WIDTH = 280;
+const NOTE_MIN_HEIGHT = 220;
+const NOTE_SAVE_DEBOUNCE_MS = 800;
+
+const noteState: NoteState = {
+  isOpen: false,
+  isLoading: false,
+  activeFilePath: null,
+  currentContent: "",
+  x: null,
+  y: null,
+  width: 420,
+  height: 540,
+};
+
+const noteInteractionState: NoteInteractionState = {
+  mode: null,
+  edge: null,
+  startX: 0,
+  startY: 0,
+  startLeft: 0,
+  startTop: 0,
+  startWidth: 0,
+  startHeight: 0,
+};
+
+let noteEditor: NoteEditorHandle | null = null;
+let noteEditorModulePromise: Promise<typeof import("./note-editor")> | null = null;
+let noteSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingNoteSave: { filePath: string; content: string } | null = null;
+let activeBookFilePath: string | null = null;
+let lastNoteViewport: { width: number; height: number } | null = null;
+
+async function loadNoteEditorModule() {
+  noteEditorModulePromise ??= import("./note-editor");
+  return noteEditorModulePromise;
+}
+
+function clampNoteWindow(): void {
+  const next = clampNoteWindowPosition(noteState, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+  noteState.x = next.x;
+  noteState.y = next.y;
+}
+
+function ensureNoteWindowPlacement(): void {
+  const next = ensureNoteWindowPlacementForViewport(noteState, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+  noteState.x = next.x;
+  noteState.y = next.y;
+}
+
+function syncNoteUi(): void {
+  const noteToggleEl = document.querySelector<HTMLButtonElement>("#note-toggle");
+  const notePanelEl = document.querySelector<HTMLElement>("#note-panel");
+  const hasBook = activeBookFilePath !== null;
+
+  if (noteToggleEl) {
+    noteToggleEl.hidden = !hasBook || noteState.isOpen;
+  }
+
+  if (notePanelEl) {
+    notePanelEl.hidden = !hasBook || !noteState.isOpen;
+    if (!notePanelEl.hidden) {
+      ensureNoteWindowPlacement();
+      notePanelEl.style.left = `${noteState.x}px`;
+      notePanelEl.style.top = `${noteState.y}px`;
+      notePanelEl.style.width = `${noteState.width}px`;
+      notePanelEl.style.height = `${noteState.height}px`;
+    }
+  }
+}
+
+async function saveNoteNow(): Promise<void> {
+  if (!pendingNoteSave) return;
+  const payload = pendingNoteSave;
+  pendingNoteSave = null;
+  try {
+    await invoke<NoteDocument>("save_note", {
+      filePath: payload.filePath,
+      content: payload.content,
+    });
+  } catch (error) {
+    console.error("[riida] failed to save note:", error);
+  }
+}
+
+function scheduleNoteSave(markdown: string): void {
+  if (!noteState.activeFilePath) return;
+  noteState.currentContent = markdown;
+  pendingNoteSave = { filePath: noteState.activeFilePath, content: markdown };
+  if (noteSaveTimer !== null) {
+    clearTimeout(noteSaveTimer);
+  }
+  noteSaveTimer = setTimeout(() => {
+    noteSaveTimer = null;
+    void saveNoteNow();
+  }, NOTE_SAVE_DEBOUNCE_MS);
+}
+
+async function flushPendingNoteSave(): Promise<void> {
+  if (noteSaveTimer !== null) {
+    clearTimeout(noteSaveTimer);
+    noteSaveTimer = null;
+  }
+  await saveNoteNow();
+}
+
+async function destroyNoteEditor(): Promise<void> {
+  if (!noteEditor) return;
+  const editor = noteEditor;
+  noteEditor = null;
+  try {
+    await editor.destroy();
+  } catch (error) {
+    console.warn("[riida] failed to destroy note editor:", error);
+  }
+}
+
+async function loadNoteForBook(filePath: string): Promise<void> {
+  const noteRootEl = document.querySelector<HTMLElement>("#note-editor");
+  if (!noteRootEl) return;
+  if (noteState.activeFilePath === filePath && noteEditor) return;
+
+  await flushPendingNoteSave();
+  await destroyNoteEditor();
+
+  noteState.isLoading = true;
+  noteState.activeFilePath = filePath;
+  noteState.currentContent = "";
+  syncNoteUi();
+
+  try {
+    const note = await invoke<NoteDocument>("load_note", { filePath });
+    noteState.activeFilePath = note.filePath;
+    noteState.currentContent = note.content;
+
+    const { mountNoteEditor } = await loadNoteEditorModule();
+    noteEditor = await mountNoteEditor({
+      root: noteRootEl,
+      initialMarkdown: note.content,
+      onMarkdownChange: (markdown) => {
+        scheduleNoteSave(markdown);
+      },
+    });
+  } catch (error) {
+    console.error("[riida] failed to load note:", error);
+  } finally {
+    noteState.isLoading = false;
+    syncNoteUi();
+  }
+}
+
+function beginNoteDrag(event: PointerEvent): void {
+  const target = event.target as HTMLElement | null;
+  if (!target || target.closest("#note-close")) return;
+  event.preventDefault();
+  ensureNoteWindowPlacement();
+  noteInteractionState.mode = "drag";
+  noteInteractionState.edge = null;
+  noteInteractionState.startX = event.clientX;
+  noteInteractionState.startY = event.clientY;
+  noteInteractionState.startLeft = noteState.x ?? 0;
+  noteInteractionState.startTop = noteState.y ?? 0;
+}
+
+function beginNoteResize(event: PointerEvent, edge: string): void {
+  event.preventDefault();
+  ensureNoteWindowPlacement();
+  noteInteractionState.mode = "resize";
+  noteInteractionState.edge = edge;
+  noteInteractionState.startX = event.clientX;
+  noteInteractionState.startY = event.clientY;
+  noteInteractionState.startLeft = noteState.x ?? 0;
+  noteInteractionState.startTop = noteState.y ?? 0;
+  noteInteractionState.startWidth = noteState.width;
+  noteInteractionState.startHeight = noteState.height;
+}
+
+function updateNoteInteraction(event: PointerEvent): void {
+  if (!noteInteractionState.mode) return;
+  const dx = event.clientX - noteInteractionState.startX;
+  const dy = event.clientY - noteInteractionState.startY;
+
+  if (noteInteractionState.mode === "drag") {
+    noteState.x = noteInteractionState.startLeft + dx;
+    noteState.y = noteInteractionState.startTop + dy;
+    clampNoteWindow();
+    syncNoteUi();
+    return;
+  }
+
+  const edge = noteInteractionState.edge ?? "";
+  let nextLeft = noteInteractionState.startLeft;
+  let nextTop = noteInteractionState.startTop;
+  let nextWidth = noteInteractionState.startWidth;
+  let nextHeight = noteInteractionState.startHeight;
+
+  if (edge.includes("e")) {
+    nextWidth = Math.max(NOTE_MIN_WIDTH, noteInteractionState.startWidth + dx);
+  }
+  if (edge.includes("s")) {
+    nextHeight = Math.max(NOTE_MIN_HEIGHT, noteInteractionState.startHeight + dy);
+  }
+  if (edge.includes("w")) {
+    nextWidth = Math.max(NOTE_MIN_WIDTH, noteInteractionState.startWidth - dx);
+    nextLeft = noteInteractionState.startLeft + dx;
+    if (nextWidth === NOTE_MIN_WIDTH) {
+      nextLeft =
+        noteInteractionState.startLeft + (noteInteractionState.startWidth - NOTE_MIN_WIDTH);
+    }
+  }
+  if (edge.includes("n")) {
+    nextHeight = Math.max(NOTE_MIN_HEIGHT, noteInteractionState.startHeight - dy);
+    nextTop = noteInteractionState.startTop + dy;
+    if (nextHeight === NOTE_MIN_HEIGHT) {
+      nextTop =
+        noteInteractionState.startTop + (noteInteractionState.startHeight - NOTE_MIN_HEIGHT);
+    }
+  }
+
+  noteState.width = Math.min(nextWidth, window.innerWidth - 24);
+  noteState.height = Math.min(nextHeight, window.innerHeight - 24);
+  noteState.x = nextLeft;
+  noteState.y = nextTop;
+  clampNoteWindow();
+  syncNoteUi();
+}
+
+function endNoteInteraction(): void {
+  noteInteractionState.mode = null;
+  noteInteractionState.edge = null;
+}
+
+function attachNotePanelInteractions(): void {
+  const noteToggleEl = document.querySelector<HTMLButtonElement>("#note-toggle");
+  const noteCloseEl = document.querySelector<HTMLButtonElement>("#note-close");
+  const noteDragHandleEl = document.querySelector<HTMLElement>("#note-drag-handle");
+  const notePanelEl = document.querySelector<HTMLElement>("#note-panel");
+
+  noteToggleEl?.addEventListener("click", () => {
+    if (!activeBookFilePath) return;
+    noteState.isOpen = true;
+    ensureNoteWindowPlacement();
+    syncNoteUi();
+    void loadNoteForBook(activeBookFilePath);
+  });
+
+  noteCloseEl?.addEventListener("click", () => {
+    noteState.isOpen = false;
+    void flushPendingNoteSave();
+    syncNoteUi();
+  });
+
+  noteDragHandleEl?.addEventListener("pointerdown", (event) => {
+    beginNoteDrag(event);
+  });
+
+  notePanelEl?.querySelectorAll<HTMLElement>(".note-resize-handle").forEach((handleEl) => {
+    handleEl.addEventListener("pointerdown", (event) => {
+      const edge = handleEl.dataset.resize ?? "";
+      if (!edge) return;
+      beginNoteResize(event, edge);
+    });
+  });
+
+  window.addEventListener("pointermove", (event) => {
+    updateNoteInteraction(event);
+  });
+
+  window.addEventListener("pointerup", () => {
+    endNoteInteraction();
+  });
+
+  lastNoteViewport = { width: window.innerWidth, height: window.innerHeight };
+  window.addEventListener("resize", () => {
+    const next = { width: window.innerWidth, height: window.innerHeight };
+    if (lastNoteViewport) {
+      const moved = preserveNoteWindowBottomRightOffset(noteState, lastNoteViewport, next);
+      noteState.x = moved.x;
+      noteState.y = moved.y;
+    }
+    lastNoteViewport = next;
+    clampNoteWindow();
+    syncNoteUi();
+  });
+
+  window.addEventListener("beforeunload", () => {
+    void flushPendingNoteSave();
+  });
+}
+
 async function boot(): Promise<void> {
   const cachedTheme = loadPersistedAppTheme();
   if (cachedTheme) {
@@ -492,6 +823,8 @@ async function boot(): Promise<void> {
     return;
   }
 
+  attachNotePanelInteractions();
+
   if (looksLikeEpubPath(filePath)) {
     const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
     if (!epubViewerEl) {
@@ -502,6 +835,8 @@ async function boot(): Promise<void> {
       const { rendition, isRtl } = await renderEpubBook(filePath, epubViewerEl);
       setStatus(null);
       installEpubKeyboardNavigation(rendition, isRtl);
+      activeBookFilePath = filePath;
+      syncNoteUi();
     } catch (error) {
       console.error("[riida] viewer window: failed to render EPUB:", error);
       setStatus(`Failed to render EPUB: ${error instanceof Error ? error.message : String(error)}`);
@@ -521,6 +856,8 @@ async function boot(): Promise<void> {
     restoreReadingPosition(filePath, scrollEl, spreadIndex);
     installReadingPositionPersistence(filePath, scrollEl, spreadIndex);
     installSpreadKeyboardNavigation(scrollEl, spreadIndex, bindingDirection);
+    activeBookFilePath = filePath;
+    syncNoteUi();
   } catch (error) {
     console.error("[riida] viewer window: failed to render PDF:", error);
     setStatus(`Failed to render PDF: ${error instanceof Error ? error.message : String(error)}`);

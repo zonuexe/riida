@@ -6644,12 +6644,15 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
       });
     }
 
-    itemEl.addEventListener("click", () => {
-      if (!book.isOpenable) {
-        void openBookMetadataEditor(book);
-        return;
-      }
-
+    const openBookInNewWindow = () => {
+      void invoke("open_viewer_window", {
+        filePath: book.filePath,
+        source: viewerState.activeExternalSource ?? null,
+      }).catch((error: unknown) => {
+        console.error("Failed to open viewer window:", error);
+      });
+    };
+    const openBookInPlace = () => {
       void navigateToState(
         {
           bookFilePath: book.filePath,
@@ -6662,6 +6665,24 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
         },
         "push",
       );
+    };
+    // Use the platform-conventional modifier for "open in new window": Cmd
+    // on macOS, Ctrl elsewhere. Ctrl on macOS is reserved for the system
+    // context menu so we must not treat it as a new-window trigger.
+    const isMacPlatform = navigator.platform.toUpperCase().includes("MAC");
+    const wantsNewWindow = (event: MouseEvent | KeyboardEvent): boolean =>
+      isMacPlatform ? event.metaKey : event.ctrlKey;
+
+    itemEl.addEventListener("click", (event) => {
+      if (!book.isOpenable) {
+        void openBookMetadataEditor(book);
+        return;
+      }
+      if (wantsNewWindow(event)) {
+        openBookInNewWindow();
+        return;
+      }
+      openBookInPlace();
     });
     itemEl.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
@@ -6670,32 +6691,18 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
           void openBookMetadataEditor(book);
           return;
         }
-        void navigateToState(
-          {
-            bookFilePath: book.filePath,
-            activeDirectory: viewerState.activeDirectory,
-            activeTag: viewerState.activeTag,
-            activeExternalSource: viewerState.activeExternalSource,
-            activeShelf: viewerState.activeShelf,
-            activeTagDirectOnly: viewerState.activeTagDirectOnly,
-            searchQuery: viewerState.searchQuery,
-          },
-          "push",
-        );
+        if (wantsNewWindow(event)) {
+          openBookInNewWindow();
+          return;
+        }
+        openBookInPlace();
       }
     });
     itemEl.addEventListener("contextmenu", (event) => {
       event.preventDefault();
       if (!book.isOpenable) {
         void openBookMetadataEditor(book);
-        return;
       }
-      void invoke("open_viewer_window", {
-        filePath: book.filePath,
-        source: viewerState.activeExternalSource ?? null,
-      }).catch((error: unknown) => {
-        console.error("Failed to open viewer window:", error);
-      });
     });
 
     listEl.appendChild(itemEl);

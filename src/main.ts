@@ -3869,6 +3869,7 @@ async function loadViewerSettingsForCurrentBook() {
 }
 
 async function destroyNoteEditor() {
+  console.info("[riida-debug] destroyNoteEditor: enter, noteEditor=", noteEditor !== null);
   if (!noteEditor) {
     return;
   }
@@ -3878,6 +3879,12 @@ async function destroyNoteEditor() {
   // selection events and can hang the renderer (see isDestroyingNoteEditor).
   const noteEditorEl = document.querySelector<HTMLElement>("#note-editor");
   const activeEl = document.activeElement;
+  console.info(
+    "[riida-debug] destroyNoteEditor: activeElement=",
+    activeEl?.tagName,
+    "isInsideEditor=",
+    activeEl instanceof HTMLElement && noteEditorEl?.contains(activeEl),
+  );
   if (activeEl instanceof HTMLElement && noteEditorEl?.contains(activeEl)) {
     activeEl.blur();
   }
@@ -3885,14 +3892,18 @@ async function destroyNoteEditor() {
   const editor = noteEditor;
   noteEditor = null;
   isDestroyingNoteEditor = true;
+  console.info("[riida-debug] destroyNoteEditor: calling editor.destroy()");
   try {
     await editor.destroy();
+    console.info("[riida-debug] destroyNoteEditor: editor.destroy() resolved");
   } finally {
     isDestroyingNoteEditor = false;
+    console.info("[riida-debug] destroyNoteEditor: flag cleared");
   }
 }
 
 async function saveNoteNow() {
+  console.info("[riida-debug] saveNoteNow: enter, activeFilePath=", noteState.activeFilePath);
   if (!noteState.activeFilePath) {
     return;
   }
@@ -3903,10 +3914,12 @@ async function saveNoteNow() {
   syncNoteUi();
 
   try {
+    console.info("[riida-debug] saveNoteNow: invoking save_note");
     const note = await invoke<NoteDocument>("save_note", {
       filePath: noteState.activeFilePath,
       content: noteState.currentContent,
     });
+    console.info("[riida-debug] saveNoteNow: save_note resolved");
 
     noteState.savedContent = note.content;
     noteState.statusMessage = "Saved";
@@ -4005,10 +4018,15 @@ async function loadNoteForCurrentBook() {
 }
 
 async function clearCurrentBookSelection() {
+  console.info("[riida-debug] clearCurrentBookSelection: enter");
   activeReadingPosition = captureReadingPositionFromViewer();
+  console.info("[riida-debug] clearCurrentBookSelection: captured position");
   await flushReadingPositionSave();
+  console.info("[riida-debug] clearCurrentBookSelection: reading position flushed");
   await flushPendingNoteSave();
+  console.info("[riida-debug] clearCurrentBookSelection: note save flushed");
   await destroyNoteEditor();
+  console.info("[riida-debug] clearCurrentBookSelection: note editor destroyed");
   noteState.activeFilePath = null;
   noteState.currentContent = "";
   noteState.savedContent = "";

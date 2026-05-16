@@ -762,7 +762,6 @@ function finishStartupPhase() {
   document.body.dataset.startup = "ready";
 }
 let isTagEditorComposing = false;
-let debugHeartbeatStarted = false;
 let noteEditorModulePromise: Promise<typeof import("./note-editor")> | null = null;
 const viewerPageJumpState: ViewerPageJumpState = {
   input: "",
@@ -3870,39 +3869,21 @@ async function loadViewerSettingsForCurrentBook() {
 }
 
 async function destroyNoteEditor() {
-  console.info("[riida-debug] destroyNoteEditor: enter, noteEditor=", noteEditor !== null);
   if (!noteEditor) {
     return;
-  }
-
-  // Drop focus from inside the editor before teardown. With the contenteditable
-  // still active, Milkdown's destroy() interleaves with synchronous input/
-  // selection events and can hang the renderer (see isDestroyingNoteEditor).
-  const noteEditorEl = document.querySelector<HTMLElement>("#note-editor");
-  const activeEl = document.activeElement;
-  console.info(
-    "[riida-debug] destroyNoteEditor: activeElement=",
-    activeEl?.tagName,
-    "isInsideEditor=",
-    activeEl instanceof HTMLElement && noteEditorEl?.contains(activeEl),
-  );
-  if (activeEl instanceof HTMLElement && noteEditorEl?.contains(activeEl)) {
-    activeEl.blur();
   }
 
   const editor = noteEditor;
   noteEditor = null;
   isDestroyingNoteEditor = true;
-  console.info("[riida-debug] destroyNoteEditor: SKIPPING editor.destroy() for diagnosis");
-  // EXPERIMENT: skip the actual destroy call to test whether it is the trigger
-  // of the post-navigation renderer freeze. If the freeze goes away, the root
-  // cause sits inside Milkdown's destroy path.
-  isDestroyingNoteEditor = false;
-  void editor; // mark as intentionally unused
+  try {
+    await editor.destroy();
+  } finally {
+    isDestroyingNoteEditor = false;
+  }
 }
 
 async function saveNoteNow() {
-  console.info("[riida-debug] saveNoteNow: enter, activeFilePath=", noteState.activeFilePath);
   if (!noteState.activeFilePath) {
     return;
   }
@@ -3913,12 +3894,10 @@ async function saveNoteNow() {
   syncNoteUi();
 
   try {
-    console.info("[riida-debug] saveNoteNow: invoking save_note");
     const note = await invoke<NoteDocument>("save_note", {
       filePath: noteState.activeFilePath,
       content: noteState.currentContent,
     });
-    console.info("[riida-debug] saveNoteNow: save_note resolved");
 
     noteState.savedContent = note.content;
     noteState.statusMessage = "Saved";
@@ -4017,31 +3996,21 @@ async function loadNoteForCurrentBook() {
 }
 
 async function clearCurrentBookSelection() {
-  console.info("[riida-debug] clearCurrentBookSelection: enter");
   activeReadingPosition = captureReadingPositionFromViewer();
-  console.info("[riida-debug] clearCurrentBookSelection: captured position");
   await flushReadingPositionSave();
-  console.info("[riida-debug] clearCurrentBookSelection: reading position flushed");
   await flushPendingNoteSave();
-  console.info("[riida-debug] clearCurrentBookSelection: note save flushed");
   await destroyNoteEditor();
-  console.info("[riida-debug] clearCurrentBookSelection: note editor destroyed");
   noteState.activeFilePath = null;
   noteState.currentContent = "";
   noteState.savedContent = "";
   noteState.statusMessage = "Notes are saved automatically.";
   viewerState.currentBook = null;
-  console.info("[riida-debug] clearCurrentBookSelection: before applyPdfViewerBackground");
   applyPdfViewerBackground("inherit-theme");
-  console.info("[riida-debug] clearCurrentBookSelection: before applyViewerPreferences");
   applyViewerPreferences(DEFAULT_VIEWER_SETTINGS, "global", false, "pdf");
   viewerSettings.globalDraft = { ...DEFAULT_VIEWER_SETTINGS };
   viewerSettings.fileDraft = { ...DEFAULT_VIEWER_SETTINGS };
-  console.info("[riida-debug] clearCurrentBookSelection: before syncNoteUi");
   syncNoteUi();
-  console.info("[riida-debug] clearCurrentBookSelection: before syncViewerSettingsUi");
   syncViewerSettingsUi();
-  console.info("[riida-debug] clearCurrentBookSelection: done");
 }
 
 function beginNoteDrag(event: PointerEvent) {
@@ -4333,20 +4302,7 @@ async function applyNavigationState(state: NavigationState) {
   }
 
   await clearCurrentBookSelection();
-  console.info("[riida-debug] applyNavigationState: before renderApp");
   renderApp();
-  console.info("[riida-debug] applyNavigationState: after renderApp");
-  // After navigation completes, start a heartbeat so we can tell whether the
-  // JS event loop continues running. If the renderer freezes between Home
-  // clicks and the user's next interaction, the heartbeat will stop too.
-  if (!debugHeartbeatStarted) {
-    debugHeartbeatStarted = true;
-    let beat = 0;
-    setInterval(() => {
-      beat += 1;
-      console.info("[riida-debug] heartbeat", beat);
-    }, 1000);
-  }
 }
 
 function syncNavigationControlsUi() {
@@ -6882,20 +6838,14 @@ function renderMain(snapshot: LibrarySnapshot) {
 }
 
 function renderApp() {
-  console.info("[riida-debug] renderApp: enter");
   if (!lastSnapshot) {
     return;
   }
 
-  console.info("[riida-debug] renderApp: before renderSidebar");
   renderSidebar(lastSnapshot);
-  console.info("[riida-debug] renderApp: before renderMain");
   renderMain(lastSnapshot);
-  console.info("[riida-debug] renderApp: before syncTagEditorUi");
   syncTagEditorUi();
-  console.info("[riida-debug] renderApp: before syncBookMetadataEditorUi");
   syncBookMetadataEditorUi();
-  console.info("[riida-debug] renderApp: done");
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -7939,28 +7889,6 @@ window.addEventListener("DOMContentLoaded", async () => {
       syncViewerSettingsUi();
     }
   });
-
-  // Diagnostic: log every keydown and pointerdown at capture phase so we can
-  // tell whether the renderer still receives input after the suspected freeze.
-  window.addEventListener(
-    "keydown",
-    (event) => {
-      console.info("[riida-debug] window keydown (capture)", event.key, {
-        metaKey: event.metaKey,
-        ctrlKey: event.ctrlKey,
-        altKey: event.altKey,
-      });
-    },
-    { capture: true },
-  );
-  window.addEventListener(
-    "pointerdown",
-    (event) => {
-      const target = event.target as Element | null;
-      console.info("[riida-debug] window pointerdown (capture)", target?.tagName, target?.id);
-    },
-    { capture: true },
-  );
 
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && tagEditorState.isOpen) {

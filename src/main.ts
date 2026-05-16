@@ -4032,12 +4032,17 @@ async function clearCurrentBookSelection() {
   noteState.savedContent = "";
   noteState.statusMessage = "Notes are saved automatically.";
   viewerState.currentBook = null;
+  console.info("[riida-debug] clearCurrentBookSelection: before applyPdfViewerBackground");
   applyPdfViewerBackground("inherit-theme");
+  console.info("[riida-debug] clearCurrentBookSelection: before applyViewerPreferences");
   applyViewerPreferences(DEFAULT_VIEWER_SETTINGS, "global", false, "pdf");
   viewerSettings.globalDraft = { ...DEFAULT_VIEWER_SETTINGS };
   viewerSettings.fileDraft = { ...DEFAULT_VIEWER_SETTINGS };
+  console.info("[riida-debug] clearCurrentBookSelection: before syncNoteUi");
   syncNoteUi();
+  console.info("[riida-debug] clearCurrentBookSelection: before syncViewerSettingsUi");
   syncViewerSettingsUi();
+  console.info("[riida-debug] clearCurrentBookSelection: done");
 }
 
 function beginNoteDrag(event: PointerEvent) {
@@ -4329,7 +4334,9 @@ async function applyNavigationState(state: NavigationState) {
   }
 
   await clearCurrentBookSelection();
+  console.info("[riida-debug] applyNavigationState: before renderApp");
   renderApp();
+  console.info("[riida-debug] applyNavigationState: after renderApp");
 }
 
 function syncNavigationControlsUi() {
@@ -6865,14 +6872,20 @@ function renderMain(snapshot: LibrarySnapshot) {
 }
 
 function renderApp() {
+  console.info("[riida-debug] renderApp: enter");
   if (!lastSnapshot) {
     return;
   }
 
+  console.info("[riida-debug] renderApp: before renderSidebar");
   renderSidebar(lastSnapshot);
+  console.info("[riida-debug] renderApp: before renderMain");
   renderMain(lastSnapshot);
+  console.info("[riida-debug] renderApp: before syncTagEditorUi");
   syncTagEditorUi();
+  console.info("[riida-debug] renderApp: before syncBookMetadataEditorUi");
   syncBookMetadataEditorUi();
+  console.info("[riida-debug] renderApp: done");
 }
 
 window.addEventListener("DOMContentLoaded", async () => {

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-16
+
+### Added
+
+- Books can now be opened in a standalone viewer window. Cmd-click on macOS (Ctrl-click on Windows and Linux) on any library row pops the book out into its own window — the same convention web browsers use for "open link in new window" — while a plain click keeps opening books inside the main window as before. The viewer window renders both PDF and EPUB, scales pages to the window height as you resize it, lays out spreads with automatic binding-direction detection (right-bound Japanese books read right-to-left), restores the saved reading position, and hosts the same floating notes panel as the library shell. Notes, reading position, and tags stay in sync across windows because both share the same local SQLite store.
+- Keyboard navigation in the viewer window: PageUp / PageDown, Shift+Space / Space, and the arrow keys all advance or rewind by one spread. In right-bound books, ArrowLeft advances and ArrowRight goes back so the keys follow reading order. Home and End jump to the first and last spread. System shortcuts such as Cmd+Space continue to reach the OS without being captured by the viewer.
+
+### Fixed
+
+- Editing notes and then navigating away from the current book (Home, Back, or picking another book in the library) on macOS no longer freezes the app. The renderer previously hung hard enough that Cmd+Q stopped working; the new teardown keeps each Milkdown editor instance in memory for the rest of the session instead of unmounting it.
+
 ## [0.5.5] - 2026-05-15
 
 ### Added
@@ -373,7 +384,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.5.5...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/zonuexe/riida/compare/v0.5.5...v0.6.0
 [0.5.5]: https://github.com/zonuexe/riida/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/zonuexe/riida/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/zonuexe/riida/compare/v0.5.2...v0.5.3

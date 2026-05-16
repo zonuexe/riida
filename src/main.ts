@@ -762,6 +762,7 @@ function finishStartupPhase() {
   document.body.dataset.startup = "ready";
 }
 let isTagEditorComposing = false;
+let debugHeartbeatStarted = false;
 let noteEditorModulePromise: Promise<typeof import("./note-editor")> | null = null;
 const viewerPageJumpState: ViewerPageJumpState = {
   input: "",
@@ -4337,6 +4338,17 @@ async function applyNavigationState(state: NavigationState) {
   console.info("[riida-debug] applyNavigationState: before renderApp");
   renderApp();
   console.info("[riida-debug] applyNavigationState: after renderApp");
+  // After navigation completes, start a heartbeat so we can tell whether the
+  // JS event loop continues running. If the renderer freezes between Home
+  // clicks and the user's next interaction, the heartbeat will stop too.
+  if (!debugHeartbeatStarted) {
+    debugHeartbeatStarted = true;
+    let beat = 0;
+    setInterval(() => {
+      beat += 1;
+      console.info("[riida-debug] heartbeat", beat);
+    }, 1000);
+  }
 }
 
 function syncNavigationControlsUi() {
@@ -7929,6 +7941,28 @@ window.addEventListener("DOMContentLoaded", async () => {
       syncViewerSettingsUi();
     }
   });
+
+  // Diagnostic: log every keydown and pointerdown at capture phase so we can
+  // tell whether the renderer still receives input after the suspected freeze.
+  window.addEventListener(
+    "keydown",
+    (event) => {
+      console.info("[riida-debug] window keydown (capture)", event.key, {
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey,
+      });
+    },
+    { capture: true },
+  );
+  window.addEventListener(
+    "pointerdown",
+    (event) => {
+      const target = event.target as Element | null;
+      console.info("[riida-debug] window pointerdown (capture)", target?.tagName, target?.id);
+    },
+    { capture: true },
+  );
 
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && tagEditorState.isOpen) {

@@ -20,11 +20,27 @@ export async function mountNoteEditor({
   initialMarkdown,
   onMarkdownChange,
 }: MountNoteEditorOptions): Promise<NoteEditorHandle> {
-  root.innerHTML = "";
+  // Hide any previously mounted editor wrappers that are still attached to
+  // this root. We intentionally do not remove them — see the destroy comment
+  // below for the reason.
+  for (const sibling of Array.from(root.children)) {
+    if (sibling instanceof HTMLElement) {
+      sibling.style.display = "none";
+    }
+  }
+
+  // Mount Milkdown into a dedicated wrapper rather than into `root` directly.
+  // This isolates each editor instance's DOM (and its ProseMirror
+  // MutationObserver) from sibling wrappers so subsequent mount/destroy
+  // cycles don't perturb DOM that an earlier instance is still watching.
+  const wrapper = document.createElement("div");
+  wrapper.className = "note-editor-instance";
+  wrapper.style.cssText = "display: flex; flex-direction: column; height: 100%; min-height: 0;";
+  root.appendChild(wrapper);
 
   const editor = await Editor.make()
     .config((ctx) => {
-      ctx.set(rootCtx, root);
+      ctx.set(rootCtx, wrapper);
       ctx.set(defaultValueCtx, initialMarkdown);
       nord(ctx);
       ctx.get(listenerCtx).markdownUpdated((_, markdown) => {
@@ -37,21 +53,23 @@ export async function mountNoteEditor({
 
   return {
     destroy: async () => {
-      // Intentionally avoid calling editor.destroy(). Under Tauri 2 on macOS
-      // (WKWebView), invoking Milkdown / ProseMirror's destroy() inside a
-      // navigation teardown causes the renderer to freeze a moment after the
-      // current task queue drains — even hanging the JS event loop hard
-      // enough to make Cmd+Q unresponsive. The destroy() promise itself
-      // resolves cleanly; the freeze comes from work it schedules onto the
-      // renderer thread (likely a CSS recalc or layout cascade triggered by
-      // ProseMirror's DOM cleanup).
+      // Under Tauri 2 on macOS (WKWebView), every form of teardown we tried
+      // freezes the renderer a moment after the current task queue drains:
+      //   - calling editor.destroy() (Milkdown / ProseMirror's own teardown)
+      //   - clearing root.innerHTML while Milkdown's MutationObserver is
+      //     still watching the editor DOM
+      //   - removing the wrapper from the DOM tree
+      // The promises resolve cleanly, but a follow-up paint or CSS recalc
+      // never returns and Cmd+Q stops working.
       //
-      // We work around it by removing the editor's DOM but leaving the
-      // Editor instance in memory until the page unloads. The remaining
-      // instances are small relative to the rest of the app and bounded by
-      // the number of books opened in a single session.
+      // We work around it by leaving the Milkdown instance and its DOM
+      // exactly where they are and simply hiding the wrapper. The next
+      // mount appends a fresh wrapper next to it. The instances leak for
+      // the lifetime of the page, but the leak is bounded by the number of
+      // books opened in a session and is a fair price for a renderer that
+      // does not freeze on Home / Back / book switch.
       void editor;
-      root.innerHTML = "";
+      wrapper.style.display = "none";
     },
   };
 }

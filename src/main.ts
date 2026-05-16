@@ -3893,14 +3893,12 @@ async function destroyNoteEditor() {
   const editor = noteEditor;
   noteEditor = null;
   isDestroyingNoteEditor = true;
-  console.info("[riida-debug] destroyNoteEditor: calling editor.destroy()");
-  try {
-    await editor.destroy();
-    console.info("[riida-debug] destroyNoteEditor: editor.destroy() resolved");
-  } finally {
-    isDestroyingNoteEditor = false;
-    console.info("[riida-debug] destroyNoteEditor: flag cleared");
-  }
+  console.info("[riida-debug] destroyNoteEditor: SKIPPING editor.destroy() for diagnosis");
+  // EXPERIMENT: skip the actual destroy call to test whether it is the trigger
+  // of the post-navigation renderer freeze. If the freeze goes away, the root
+  // cause sits inside Milkdown's destroy path.
+  isDestroyingNoteEditor = false;
+  void editor; // mark as intentionally unused
 }
 
 async function saveNoteNow() {

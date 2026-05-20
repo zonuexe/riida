@@ -726,6 +726,8 @@ async function installViewerSettingsPanel(
 
     payload = updated;
     applyLive(updated.effective);
+    // Frosted chrome samples the background; nudge it to drop the stale blur.
+    refreshViewerChromeBackdrop();
   };
 
   toggleEl.addEventListener("click", () => {
@@ -1471,6 +1473,28 @@ function applyEpubColorsToDocument(doc: Document, palette: ViewerColorPalette): 
   for (const linkEl of doc.querySelectorAll<HTMLElement>("a[href]")) {
     linkEl.style.setProperty("color", palette.link, "important");
   }
+}
+
+// WKWebView caches the backdrop sampled by translucent `backdrop-filter`
+// chrome, so when the viewer background changes underneath, the frosted chrome
+// (TOC button, settings panel, overlays) keeps showing the previous colour.
+// Briefly dropping backdrop-filter forces the next frame to re-sample.
+function refreshViewerChromeBackdrop(): void {
+  const chromeEls = Array.from(
+    document.querySelectorAll<HTMLElement>(
+      ".navigation-button, .viewer-page-jump-input, .viewer-page-jump-go," +
+        " .epub-toc-toggle, .epub-toc-panel, .viewer-settings-toggle," +
+        " .viewer-tags-button, .viewer-settings-panel, .note-toggle-button, .note-panel",
+    ),
+  );
+  for (const el of chromeEls) {
+    el.style.backdropFilter = "none";
+  }
+  requestAnimationFrame(() => {
+    for (const el of chromeEls) {
+      el.style.removeProperty("backdrop-filter");
+    }
+  });
 }
 
 // Build empty spread placeholders, then render page canvases outward from the

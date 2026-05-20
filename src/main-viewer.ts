@@ -31,6 +31,11 @@ import {
   getVisualPageOrder,
   type ViewerLayoutSettings,
 } from "./viewer-layout-utils";
+import {
+  DEFAULT_VIEWER_SETTINGS,
+  type ViewerSettings,
+  type ViewerSettingsPayload,
+} from "./viewer-settings-utils";
 
 type ViewerLaunchParams = {
   filePath: string | null;
@@ -339,12 +344,29 @@ function installReadingPositionPersistence(
   });
 }
 
-// Detect binding direction, build empty spread placeholders, then render page
-// canvases outward from the spread the reader left off at, so the requested
-// page paints before the rest of the document. Every spread has a fixed
-// 100vh-based height (see styles.css), so the scroll layout is final before
-// any canvas is painted and appending canvases later never shifts it. Lazy
-// paging, text layers, search, and per-file viewer settings will follow.
+// The viewer window has no settings UI yet, so it inherits whatever the in-app
+// viewer resolved for this book: a per-file override if one exists, otherwise
+// the global preference, otherwise the built-in defaults. Mirrors
+// loadViewerSettingsForCurrentBook() in src/main.ts.
+async function loadEffectiveViewerSettings(filePath: string): Promise<ViewerSettings> {
+  try {
+    const payload = await invoke<ViewerSettingsPayload>("load_viewer_preferences", {
+      filePath,
+      sourceType: "pdf",
+    });
+    return payload.effective;
+  } catch (error) {
+    console.warn("[riida] viewer window: failed to load viewer preferences:", error);
+    return DEFAULT_VIEWER_SETTINGS;
+  }
+}
+
+// Build empty spread placeholders, then render page canvases outward from the
+// spread the reader left off at, so the requested page paints before the rest
+// of the document. Every spread has a fixed 100vh-based height (see
+// styles.css), so the scroll layout is final before any canvas is painted and
+// appending canvases later never shifts it. Layout and scroll behaviour follow
+// the book's effective viewer preferences. Text layers and search will follow.
 async function renderPdfDocument(
   filePath: string,
   viewerEl: HTMLElement,
@@ -363,14 +385,22 @@ async function renderPdfDocument(
     BinaryDataFactory: TauriBinaryDataFactory,
     useWorkerFetch: false,
   });
-  const pdfDocument = await documentTask.promise;
+  const [pdfDocument, preferences] = await Promise.all([
+    documentTask.promise,
+    loadEffectiveViewerSettings(filePath),
+  ]);
 
-  const detectedBinding = (await detectPdfBindingDirection(pdfDocument, () => false)) ?? "left";
+  // bindingDirection is tri-state: "auto" runs the detector, while an explicit
+  // left/right preference short-circuits it (mirrors the in-app pdfjs path).
+  const resolvedBinding =
+    preferences.bindingDirection === "auto"
+      ? ((await detectPdfBindingDirection(pdfDocument, () => false)) ?? "left")
+      : preferences.bindingDirection;
 
   const layoutSettings: ViewerLayoutSettings = {
-    pageMode: "spread",
-    bindingDirection: detectedBinding,
-    treatFirstPageAsCover: true,
+    pageMode: preferences.pageMode,
+    bindingDirection: resolvedBinding,
+    treatFirstPageAsCover: preferences.treatFirstPageAsCover,
   };
   const pageGroups = buildPageGroups(pdfDocument.numPages, layoutSettings);
 
@@ -390,7 +420,7 @@ async function renderPdfDocument(
     const spreadEl = document.createElement("div");
     spreadEl.className = "pdfjs-spread";
     spreadEl.dataset.pageCount = String(visualOrder.length);
-    spreadEl.dataset.binding = detectedBinding;
+    spreadEl.dataset.binding = resolvedBinding;
     if (visualOrder.length === 1 && visualOrder[0] === 1) {
       spreadEl.dataset.cover = "true";
     }
@@ -437,6 +467,9 @@ async function renderPdfDocument(
   // The status overlay sits above the viewer in normal flow; hide it before
   // measuring spread offsets so the restored scroll position is accurate.
   setStatus(null);
+  // "paged" turns on the CSS scroll-snap behaviour (see styles.css); the value
+  // comes from the book's effective viewer preferences.
+  scrollEl.dataset.scrollMode = preferences.scrollMode;
   restoreScrollAfterRender(scrollEl, cached, targetEntry);
 
   void (async () => {
@@ -449,7 +482,7 @@ async function renderPdfDocument(
     }
   })();
 
-  return { spreadIndex, bindingDirection: detectedBinding };
+  return { spreadIndex, bindingDirection: resolvedBinding };
 }
 
 type EpubRenderResult = {

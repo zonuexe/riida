@@ -16,6 +16,21 @@ export type ViewerSettings = {
 
 export type ViewerBackgroundMode = ViewerSettings["backgroundMode"];
 
+// Built-in viewer preferences applied when a book has neither a per-file
+// override nor a global preference saved. Shared by the in-app viewer and the
+// standalone viewer window so both fall back to identical defaults.
+export const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
+  pageMode: "spread",
+  bindingDirection: "auto",
+  zoomMode: "fit-height",
+  alignMode: "center",
+  verticalGapMode: "compact",
+  treatFirstPageAsCover: true,
+  backgroundMode: "inherit-theme",
+  scrollMode: "paged",
+  epubFontSize: 100,
+};
+
 export type ViewerColorPalette = {
   background: string;
   foreground: string;

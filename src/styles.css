@@ -211,6 +211,17 @@ body[data-window-role="viewer"] .pdfjs-page canvas {
   object-fit: contain;
 }
 
+/* Paged scroll mode: the scroll container snaps each spread to the top of the
+   window, mirroring the in-app viewer's data-scroll-mode="paged" behaviour. */
+.app-shell.viewer-only > .main-pane[data-scroll-mode="paged"] {
+  scroll-snap-type: y mandatory;
+}
+
+.app-shell.viewer-only > .main-pane[data-scroll-mode="paged"] .pdfjs-spread {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
 /* Standalone viewer window: the EPUB iframe fills the entire main pane.
    The shell version positions absolutely inside a layout that also hosts
    overlays; here we just want a clean full-window reader surface. */

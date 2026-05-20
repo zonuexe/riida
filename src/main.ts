@@ -110,6 +110,7 @@ import { buildPdfRenderWindowPlan } from "./pdf-render-window-utils";
 import { planPagedKeyAction } from "./pdf-paged-nav-utils";
 import {
   applyViewerSettingsPayloadToState,
+  DEFAULT_VIEWER_SETTINGS,
   normalizeViewerSourceType,
   preferredExplicitViewerBackgroundMode,
   switchViewerSettingsScopeInState,
@@ -383,18 +384,6 @@ const viewerState: ViewerState = {
   isAboutOpen: false,
   libraryErrorMessage: null,
   shelves: [],
-};
-
-const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
-  pageMode: "spread",
-  bindingDirection: "auto",
-  zoomMode: "fit-height",
-  alignMode: "center",
-  verticalGapMode: "compact",
-  treatFirstPageAsCover: true,
-  backgroundMode: "inherit-theme",
-  scrollMode: "paged",
-  epubFontSize: 100,
 };
 
 const viewerSettings: ViewerSettingsState = {

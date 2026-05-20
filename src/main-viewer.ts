@@ -16,7 +16,13 @@ import {
   ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
   preserveNoteWindowBottomRightOffset,
 } from "./note-window-utils";
+import { parseRequestedPageNumber } from "./page-jump-utils";
 import { detectPdfBindingDirection } from "./pdf-binding-detect";
+import {
+  resolvePdfLinkTarget,
+  type PdfAnnotationRecord,
+  type PdfLinkResolver,
+} from "./pdf-link-utils";
 import { buildPdfRenderWindowPlan } from "./pdf-render-window-utils";
 import { loadPdfJsRuntime, TauriBinaryDataFactory } from "./pdf-runtime";
 import {
@@ -106,6 +112,8 @@ async function renderPdfPageCanvas(
   page: PdfPage,
   pageNumber: number,
   devicePixelRatio: number,
+  pdfDocument: PdfDocumentLike,
+  onInternalLink: (pageNumber: number) => void,
 ): Promise<HTMLElement> {
   const viewport = page.getViewport({ scale: CANVAS_RENDER_SCALE });
 
@@ -134,7 +142,210 @@ async function renderPdfPageCanvas(
         devicePixelRatio === 1 ? undefined : [devicePixelRatio, 0, 0, devicePixelRatio, 0, 0],
     }).promise;
   }
+
+  const linkLayer = await buildPdfLinkLayer(
+    page,
+    viewport,
+    pageNumber,
+    pdfDocument,
+    onInternalLink,
+  );
+  if (linkLayer) {
+    pageEl.appendChild(linkLayer);
+  }
   return pageEl;
+}
+
+type PdfLinkViewport = {
+  width: number;
+  height: number;
+  convertToViewportRectangle: (rect: number[]) => number[];
+};
+
+// Build the clickable overlay layer for a PDF page's in-document links. Only
+// document-internal links (table-of-contents jumps, cross-references) are
+// wired; external URLs are intentionally left inert because WKWebView link
+// handling is unreliable (see AGENTS.md). Returns null when the page has no
+// internal links so no empty layer is appended.
+async function buildPdfLinkLayer(
+  page: PdfPage,
+  viewport: PdfLinkViewport,
+  currentPageNumber: number,
+  resolver: PdfDocumentLike,
+  onInternalLink: (pageNumber: number) => void,
+): Promise<HTMLElement | null> {
+  const annotations = (await page.getAnnotations()) as PdfAnnotationRecord[];
+  const layer = document.createElement("div");
+  layer.className = "pdfjs-link-layer";
+
+  for (const annotation of annotations) {
+    if (annotation.subtype !== "Link" || !Array.isArray(annotation.rect)) {
+      continue;
+    }
+    // PdfDocumentProxy structurally satisfies PdfLinkResolver; the cast only
+    // bridges getPageIndex's stricter pdf.js RefProxy parameter type.
+    const target = await resolvePdfLinkTarget(
+      annotation,
+      currentPageNumber,
+      resolver as unknown as PdfLinkResolver,
+    );
+    if (target?.type !== "internal") {
+      continue;
+    }
+
+    const rect = viewport.convertToViewportRectangle(annotation.rect as number[]);
+    const x1 = rect[0] ?? 0;
+    const y1 = rect[1] ?? 0;
+    const x2 = rect[2] ?? 0;
+    const y2 = rect[3] ?? 0;
+    const width = Math.abs(x2 - x1);
+    const height = Math.abs(y2 - y1);
+    if (width < 2 || height < 2) {
+      continue;
+    }
+
+    // Percentage geometry so the link scales with the canvas; the layer itself
+    // is sized to the canvas by syncPdfLinkLayers.
+    const targetPage = target.pageNumber;
+    const linkEl = document.createElement("a");
+    linkEl.className = "pdfjs-link";
+    linkEl.href = `#page=${targetPage}`;
+    linkEl.title = `Go to page ${targetPage}`;
+    linkEl.style.left = `${(Math.min(x1, x2) / viewport.width) * 100}%`;
+    linkEl.style.top = `${(Math.min(y1, y2) / viewport.height) * 100}%`;
+    linkEl.style.width = `${(width / viewport.width) * 100}%`;
+    linkEl.style.height = `${(height / viewport.height) * 100}%`;
+    linkEl.addEventListener("click", (event) => {
+      event.preventDefault();
+      onInternalLink(targetPage);
+    });
+    layer.appendChild(linkEl);
+  }
+
+  return layer.childElementCount > 0 ? layer : null;
+}
+
+// The link layer is absolutely positioned inside .pdfjs-page; size and place it
+// to exactly cover the page canvas so the percentage-positioned links line up.
+// Called after each spread renders and on window resize, since the canvas
+// display size tracks the window.
+function syncPdfLinkLayers(root: ParentNode = document): void {
+  for (const layer of root.querySelectorAll<HTMLElement>(".pdfjs-link-layer")) {
+    const canvas = layer.parentElement?.querySelector("canvas");
+    if (!canvas) {
+      continue;
+    }
+    layer.style.left = `${canvas.offsetLeft}px`;
+    layer.style.top = `${canvas.offsetTop}px`;
+    layer.style.width = `${canvas.offsetWidth}px`;
+    layer.style.height = `${canvas.offsetHeight}px`;
+  }
+}
+
+type PdfNavigationController = {
+  jumpToPage: (pageNumber: number) => void;
+};
+
+// Wire the navigation overlay — back/forward history plus page-number jump —
+// for a rendered PDF. The history records document scroll offsets visited via
+// explicit jumps (in-page link clicks, page-number entry); plain scrolling is
+// not recorded, matching how a desktop PDF reader's back/forward behaves.
+function createPdfNavigation(
+  scrollEl: HTMLElement,
+  spreadIndex: readonly SpreadIndexEntry[],
+  totalPages: number,
+): PdfNavigationController {
+  const backStack: number[] = [];
+  const forwardStack: number[] = [];
+
+  const navBackEl = document.querySelector<HTMLButtonElement>("#nav-back");
+  const navForwardEl = document.querySelector<HTMLButtonElement>("#nav-forward");
+  const pageJumpEl = document.querySelector<HTMLElement>("#viewer-page-jump");
+  const pageJumpFormEl = document.querySelector<HTMLFormElement>("#viewer-page-jump-form");
+  const pageJumpInputEl = document.querySelector<HTMLInputElement>("#viewer-page-jump-input");
+  const pageJumpTotalEl = document.querySelector<HTMLElement>("#viewer-page-jump-total");
+
+  const syncButtons = (): void => {
+    if (navBackEl) navBackEl.disabled = backStack.length === 0;
+    if (navForwardEl) navForwardEl.disabled = forwardStack.length === 0;
+  };
+
+  const currentPageNumber = (): number => {
+    const entry = spreadIndex[findCurrentSpreadIndex(scrollEl, spreadIndex)] ?? spreadIndex[0];
+    if (!entry) return 1;
+    // Smallest page in the spread, so the indicator shows the head-side page.
+    return entry.pageNumbers.reduce(
+      (best, candidate) => (candidate > 0 && candidate < best ? candidate : best),
+      entry.pageNumbers[0] ?? 1,
+    );
+  };
+
+  const syncPageIndicator = (): void => {
+    if (pageJumpTotalEl) {
+      pageJumpTotalEl.textContent = `/ ${totalPages}`;
+    }
+    if (pageJumpInputEl && document.activeElement !== pageJumpInputEl) {
+      pageJumpInputEl.value = String(currentPageNumber());
+    }
+  };
+
+  const jumpToPage = (pageNumber: number): void => {
+    const entry = findSpreadForPage(spreadIndex, pageNumber);
+    if (!entry) return;
+    backStack.push(scrollEl.scrollTop);
+    forwardStack.length = 0;
+    scrollEl.scrollTo({ top: entry.spreadEl.offsetTop, behavior: "smooth" });
+    syncButtons();
+  };
+
+  const goBack = (): void => {
+    const previous = backStack.pop();
+    if (previous === undefined) return;
+    forwardStack.push(scrollEl.scrollTop);
+    scrollEl.scrollTo({ top: previous, behavior: "smooth" });
+    syncButtons();
+  };
+
+  const goForward = (): void => {
+    const next = forwardStack.pop();
+    if (next === undefined) return;
+    backStack.push(scrollEl.scrollTop);
+    scrollEl.scrollTo({ top: next, behavior: "smooth" });
+    syncButtons();
+  };
+
+  navBackEl?.addEventListener("click", goBack);
+  navForwardEl?.addEventListener("click", goForward);
+
+  if (pageJumpEl) {
+    pageJumpEl.hidden = false;
+  }
+  pageJumpInputEl?.addEventListener("focus", () => pageJumpInputEl.select());
+  pageJumpInputEl?.addEventListener("blur", () => syncPageIndicator());
+  pageJumpInputEl?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      syncPageIndicator();
+      pageJumpInputEl.blur();
+    }
+  });
+  pageJumpFormEl?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const requested = parseRequestedPageNumber(pageJumpInputEl?.value ?? "");
+    if (requested === null) {
+      syncPageIndicator();
+      return;
+    }
+    jumpToPage(Math.min(requested, Math.max(totalPages, 1)));
+    pageJumpInputEl?.blur();
+  });
+
+  scrollEl.addEventListener("scroll", () => syncPageIndicator(), { passive: true });
+
+  syncButtons();
+  syncPageIndicator();
+
+  return { jumpToPage };
 }
 
 type SpreadIndexEntry = {
@@ -431,6 +642,21 @@ async function renderPdfDocument(
     spreadVisualOrders.push(visualOrder);
   }
 
+  // Wire the navigation overlay (back/forward history, page-number jump). PDF
+  // in-page links jump through the same controller so they share its history.
+  const navigation = createPdfNavigation(scrollEl, spreadIndex, pdfDocument.numPages);
+
+  // Keep the link overlays aligned with their canvases as the window resizes.
+  let linkLayerSyncScheduled = false;
+  window.addEventListener("resize", () => {
+    if (linkLayerSyncScheduled) return;
+    linkLayerSyncScheduled = true;
+    requestAnimationFrame(() => {
+      linkLayerSyncScheduled = false;
+      syncPdfLinkLayers();
+    });
+  });
+
   // Resolve which spread the reader left off at so it can be rendered first.
   const cached = loadCachedReadingPosition(filePath);
   const targetEntry = cached ? findSpreadForPage(spreadIndex, cached.pageNumber) : null;
@@ -442,9 +668,18 @@ async function renderPdfDocument(
     if (!entry || !visualOrder) return;
     for (const pageNumber of visualOrder) {
       const page = await pdfDocument.getPage(pageNumber);
-      const pageEl = await renderPdfPageCanvas(page, pageNumber, devicePixelRatio);
+      const pageEl = await renderPdfPageCanvas(
+        page,
+        pageNumber,
+        devicePixelRatio,
+        pdfDocument,
+        navigation.jumpToPage,
+      );
       entry.spreadEl.appendChild(pageEl);
     }
+    // Both pages of the spread are in the DOM, so the canvases have their final
+    // size; align the link overlays to them.
+    syncPdfLinkLayers(entry.spreadEl);
   };
 
   // buildPdfRenderWindowPlan with a radius spanning every spread yields a

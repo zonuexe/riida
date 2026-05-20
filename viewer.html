@@ -26,6 +26,41 @@
   <body data-startup="loading" data-window-role="viewer">
     <main class="app-shell viewer-only">
       <section class="main-pane" id="main-pane">
+        <div class="viewer-navigation-overlay">
+          <div class="navigation-controls" aria-label="History">
+            <button id="nav-back" class="navigation-button" type="button" aria-label="Back" disabled>
+              <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+            </button>
+            <button
+              id="nav-forward"
+              class="navigation-button"
+              type="button"
+              aria-label="Forward"
+              disabled
+            >
+              <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+            </button>
+          </div>
+          <div id="viewer-page-jump" class="viewer-page-jump" hidden>
+            <form id="viewer-page-jump-form" class="viewer-page-jump-form">
+              <input
+                id="viewer-page-jump-input"
+                class="viewer-page-jump-input"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                spellcheck="false"
+                aria-label="Page number"
+              />
+              <span
+                id="viewer-page-jump-total"
+                class="viewer-page-jump-total"
+                aria-hidden="true"
+              ></span>
+              <button id="viewer-page-jump-go" class="viewer-page-jump-go" type="submit">Go</button>
+            </form>
+          </div>
+        </div>
         <div id="viewer-window-status" class="viewer-window-status">
           <p id="viewer-window-target" class="viewer-window-target">
             <!-- main-viewer.ts fills this with the requested book path -->

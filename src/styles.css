@@ -200,6 +200,8 @@ body[data-window-role="viewer"] .pdfjs-page {
   flex: 0 1 auto;
   min-width: 0;
   width: auto;
+  /* Positioning context for the absolutely-placed link overlay layer. */
+  position: relative;
   /* The shell's .pdfjs-page rule sets margin-inline: auto so a centered
      single page sits in the middle of a grid column. In our flex-based
      spread, auto inline margins absorb every pixel of free space between
@@ -227,6 +229,32 @@ body[data-window-role="viewer"] .pdfjs-page canvas {
 .app-shell.viewer-only > .main-pane[data-scroll-mode="paged"] .pdfjs-spread {
   scroll-snap-align: start;
   scroll-snap-stop: always;
+}
+
+/* The in-app viewer anchors the navigation overlay inside a non-scrolling
+   stage; the viewer window's .main-pane is itself the scroll container, so the
+   overlay must be fixed to the viewport to stay put while reading. */
+body[data-window-role="viewer"] .viewer-navigation-overlay {
+  position: fixed;
+}
+
+/* Clickable overlay for PDF in-page links. The layer is sized to the page
+   canvas in JS (see syncPdfLinkLayers); each link is positioned within it as a
+   percentage of the page so it scales with the canvas. */
+body[data-window-role="viewer"] .pdfjs-link-layer {
+  position: absolute;
+  pointer-events: none;
+}
+
+body[data-window-role="viewer"] .pdfjs-link-layer .pdfjs-link {
+  position: absolute;
+  display: block;
+  pointer-events: auto;
+  border-radius: 2px;
+}
+
+body[data-window-role="viewer"] .pdfjs-link-layer .pdfjs-link:hover {
+  background: rgb(var(--warn-rgb) / 0.18);
 }
 
 /* Standalone viewer window: the EPUB iframe fills the entire main pane.

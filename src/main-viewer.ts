@@ -51,6 +51,9 @@ import {
 } from "./viewer-layout-utils";
 import {
   DEFAULT_VIEWER_SETTINGS,
+  viewerColorPaletteForMode,
+  type ViewerBackgroundMode,
+  type ViewerColorPalette,
   type ViewerSettings,
   type ViewerSettingsPayload,
   type ViewerSettingsScope,
@@ -1367,20 +1370,50 @@ function installReadingPositionPersistence(
   });
 }
 
-// The viewer window has no settings UI yet, so it inherits whatever the in-app
-// viewer resolved for this book: a per-file override if one exists, otherwise
-// the global preference, otherwise the built-in defaults. Mirrors
+// The viewer window inherits whatever viewer preferences were resolved for
+// this book: a per-file override if one exists, otherwise the global
+// preference, otherwise the built-in defaults. Mirrors
 // loadViewerSettingsForCurrentBook() in src/main.ts.
-async function loadEffectiveViewerSettings(filePath: string): Promise<ViewerSettings> {
+async function loadEffectiveViewerSettings(
+  filePath: string,
+  sourceType: ViewerSourceType,
+): Promise<ViewerSettings> {
   try {
     const payload = await invoke<ViewerSettingsPayload>("load_viewer_preferences", {
       filePath,
-      sourceType: "pdf",
+      sourceType,
     });
     return payload.effective;
   } catch (error) {
     console.warn("[riida] viewer window: failed to load viewer preferences:", error);
     return DEFAULT_VIEWER_SETTINGS;
+  }
+}
+
+// Paint the PDF reading surface with the resolved viewer background. The pages
+// themselves are opaque canvases; this colours the empty space around them
+// (see DESIGN.md). "inherit-theme" clears the override so the app theme shows.
+function applyPdfViewerBackground(backgroundMode: ViewerBackgroundMode): void {
+  const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
+  if (!mainPaneEl) return;
+  if (backgroundMode === "inherit-theme") {
+    mainPaneEl.style.removeProperty("background-color");
+    return;
+  }
+  const palette = viewerColorPaletteForMode(backgroundMode, loadPersistedAppTheme());
+  mainPaneEl.style.backgroundColor = palette.background;
+}
+
+// Paint an EPUB section document with the viewer colour palette — background,
+// body text, and link colours — all !important so the book's own CSS does not
+// win. Re-applied per section through a content hook.
+function applyEpubColorsToDocument(doc: Document, palette: ViewerColorPalette): void {
+  for (const el of [doc.documentElement, doc.body]) {
+    el?.style.setProperty("background-color", palette.background, "important");
+    el?.style.setProperty("color", palette.foreground, "important");
+  }
+  for (const linkEl of doc.querySelectorAll<HTMLElement>("a[href]")) {
+    linkEl.style.setProperty("color", palette.link, "important");
   }
 }
 
@@ -1410,8 +1443,10 @@ async function renderPdfDocument(
   });
   const [pdfDocument, preferences] = await Promise.all([
     documentTask.promise,
-    loadEffectiveViewerSettings(filePath),
+    loadEffectiveViewerSettings(filePath, "pdf"),
   ]);
+
+  applyPdfViewerBackground(preferences.backgroundMode);
 
   // bindingDirection is tri-state: "auto" runs the detector, while an explicit
   // left/right preference short-circuits it (mirrors the in-app pdfjs path).
@@ -1573,6 +1608,24 @@ async function renderEpubBook(filePath: string, viewerEl: HTMLElement): Promise<
     spread: "auto",
     flow: "paginated",
     allowScriptedContent: true,
+  });
+
+  // Apply the resolved viewer background: the container surfaces plus, via a
+  // content hook, every EPUB section as it renders.
+  const backgroundMode = (await loadEffectiveViewerSettings(filePath, "epub")).backgroundMode;
+  const palette = viewerColorPaletteForMode(backgroundMode, loadPersistedAppTheme());
+  const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
+  if (backgroundMode === "inherit-theme") {
+    mainPaneEl?.style.removeProperty("background-color");
+    viewerEl.style.removeProperty("background-color");
+  } else {
+    if (mainPaneEl) {
+      mainPaneEl.style.backgroundColor = palette.background;
+    }
+    viewerEl.style.backgroundColor = palette.background;
+  }
+  rendition.hooks.content.register((contents: import("epubjs").Contents) => {
+    applyEpubColorsToDocument(contents.document, palette);
   });
 
   const cached = loadCachedReadingPosition(filePath);

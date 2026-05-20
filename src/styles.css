@@ -231,10 +231,12 @@ body[data-window-role="viewer"] .pdfjs-page canvas {
   scroll-snap-stop: always;
 }
 
-/* The in-app viewer anchors the navigation overlay inside a non-scrolling
-   stage; the viewer window's .main-pane is itself the scroll container, so the
-   overlay must be fixed to the viewport to stay put while reading. */
-body[data-window-role="viewer"] .viewer-navigation-overlay {
+/* The in-app viewer anchors overlay chrome inside a non-scrolling stage; the
+   viewer window's .main-pane is itself the scroll container, so the overlay
+   chrome must be fixed to the viewport to stay put while reading. */
+body[data-window-role="viewer"] .viewer-navigation-overlay,
+body[data-window-role="viewer"] .epub-toc-toggle,
+body[data-window-role="viewer"] .epub-toc-panel {
   position: fixed;
 }
 

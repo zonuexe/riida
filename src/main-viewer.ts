@@ -348,6 +348,125 @@ function createPdfNavigation(
   return { jumpToPage };
 }
 
+type PdfOutlineNode = {
+  title: string;
+  dest: string | unknown[] | null;
+  items: PdfOutlineNode[];
+};
+
+type EpubTocItem = {
+  label: string;
+  href: string;
+  subitems?: EpubTocItem[];
+};
+
+// Wire the table-of-contents toggle button and panel. Returns a handle whose
+// close() collapses the panel — used after a TOC entry is chosen.
+function installTocToggle(
+  toggleEl: HTMLButtonElement,
+  panelEl: HTMLElement,
+): { close: () => void } {
+  let isOpen = false;
+  const sync = (): void => {
+    toggleEl.setAttribute("aria-expanded", String(isOpen));
+    panelEl.hidden = !isOpen;
+  };
+  toggleEl.hidden = false;
+  toggleEl.addEventListener("click", () => {
+    isOpen = !isOpen;
+    sync();
+  });
+  sync();
+  return {
+    close: () => {
+      isOpen = false;
+      sync();
+    },
+  };
+}
+
+// Populate the TOC panel from the PDF outline. Each entry resolves its
+// destination to a page and jumps there through the navigation controller, so
+// outline jumps share the back/forward history. No-op when the PDF has no
+// outline.
+async function installPdfToc(
+  pdfDocument: PdfDocumentLike,
+  jumpToPage: (pageNumber: number) => void,
+): Promise<void> {
+  const outline = (await pdfDocument.getOutline()) as PdfOutlineNode[] | null;
+  if (!outline || outline.length === 0) return;
+
+  const listEl = document.querySelector<HTMLElement>("#epub-toc-list");
+  const toggleEl = document.querySelector<HTMLButtonElement>("#epub-toc-toggle");
+  const panelEl = document.querySelector<HTMLElement>("#epub-toc-panel");
+  if (!listEl || !toggleEl || !panelEl) return;
+
+  const toc = installTocToggle(toggleEl, panelEl);
+
+  const appendItems = (items: readonly PdfOutlineNode[], depth: number): void => {
+    for (const item of items) {
+      const itemEl = document.createElement("button");
+      itemEl.type = "button";
+      itemEl.className = "epub-toc-item";
+      itemEl.dataset.depth = String(depth);
+      itemEl.textContent = item.title;
+      itemEl.addEventListener("click", () => {
+        toc.close();
+        void (async () => {
+          // An outline node carries the same kind of destination as an
+          // internal link annotation, so the link resolver handles both.
+          const target = await resolvePdfLinkTarget(
+            { dest: item.dest },
+            1,
+            pdfDocument as unknown as PdfLinkResolver,
+          );
+          if (target?.type === "internal") {
+            jumpToPage(target.pageNumber);
+          }
+        })();
+      });
+      listEl.appendChild(itemEl);
+      if (item.items.length > 0) {
+        appendItems(item.items, depth + 1);
+      }
+    }
+  };
+  appendItems(outline, 0);
+}
+
+// Populate the TOC panel from the EPUB navigation document. Entries navigate
+// via epub.js's rendition.display(). No-op when the book has no TOC.
+function installEpubToc(book: import("epubjs").Book, rendition: import("epubjs").Rendition): void {
+  const navToc = (book.navigation as { toc?: EpubTocItem[] } | undefined)?.toc;
+  if (!navToc || navToc.length === 0) return;
+
+  const listEl = document.querySelector<HTMLElement>("#epub-toc-list");
+  const toggleEl = document.querySelector<HTMLButtonElement>("#epub-toc-toggle");
+  const panelEl = document.querySelector<HTMLElement>("#epub-toc-panel");
+  if (!listEl || !toggleEl || !panelEl) return;
+
+  const toc = installTocToggle(toggleEl, panelEl);
+
+  const appendItems = (items: readonly EpubTocItem[], depth: number): void => {
+    for (const item of items) {
+      const itemEl = document.createElement("button");
+      itemEl.type = "button";
+      itemEl.className = "epub-toc-item";
+      itemEl.dataset.depth = String(depth);
+      itemEl.textContent = item.label.trim();
+      itemEl.addEventListener("click", () => {
+        toc.close();
+        void rendition.display(item.href);
+      });
+      listEl.appendChild(itemEl);
+      if (item.subitems && item.subitems.length > 0) {
+        appendItems(item.subitems, depth + 1);
+      }
+    }
+  };
+  appendItems(navToc, 0);
+}
+
 type SpreadIndexEntry = {
   spreadEl: HTMLElement;
   pageNumbers: readonly number[];
@@ -646,6 +765,10 @@ async function renderPdfDocument(
   // in-page links jump through the same controller so they share its history.
   const navigation = createPdfNavigation(scrollEl, spreadIndex, pdfDocument.numPages);
 
+  // Populate the table-of-contents panel from the PDF outline (fire-and-forget;
+  // it must not delay the first page paint).
+  void installPdfToc(pdfDocument, navigation.jumpToPage);
+
   // Keep the link overlays aligned with their canvases as the window resizes.
   let linkLayerSyncScheduled = false;
   window.addEventListener("resize", () => {
@@ -793,6 +916,8 @@ async function renderEpubBook(filePath: string, viewerEl: HTMLElement): Promise<
       updatedAt: Date.now(),
     });
   });
+
+  installEpubToc(book, rendition);
 
   return { rendition, isRtl };
 }

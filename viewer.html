@@ -61,6 +61,12 @@
             </form>
           </div>
         </div>
+        <button id="epub-toc-toggle" class="epub-toc-toggle" type="button" aria-label="目次" hidden>
+          <i class="fa-solid fa-list-ol" aria-hidden="true"></i>
+        </button>
+        <div id="epub-toc-panel" class="epub-toc-panel" hidden>
+          <div id="epub-toc-list" class="epub-toc-list"></div>
+        </div>
         <div id="viewer-window-status" class="viewer-window-status">
           <p id="viewer-window-target" class="viewer-window-target">
             <!-- main-viewer.ts fills this with the requested book path -->

@@ -6,9 +6,20 @@
 // persistence will be migrated out of src/main.ts in follow-up commits.
 
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import "./vendor/fontawesome/css/fontawesome.min.css";
 import "./vendor/fontawesome/css/solid.min.css";
 import { applyAppTheme, loadPersistedAppTheme } from "./app-theme";
+import {
+  applyBookMetadataImport,
+  BOOK_METADATA_IMPORT_EXAMPLE,
+  isBookMetadataDraftEmpty,
+  joinMetadataAuthors,
+  normalizeMetadataAuthorsText,
+  parseBookMetadataImport,
+  validateBookMetadataDraft,
+  type BookMetadataDraft,
+} from "./book-metadata-utils";
 import { loadEpubJs } from "./epub-runtime";
 import type { NoteEditorHandle } from "./note-editor";
 import {
@@ -890,6 +901,247 @@ function installTagEditor(filePath: string): void {
   saveEl.addEventListener("click", () => void save());
 }
 
+type BookMetadataPayload = {
+  filePath: string;
+  title: string;
+  authors: string[];
+  description: string;
+  publisher: string;
+  releaseDate: string;
+  language: string;
+  url: string;
+  asin: string;
+  coverUrl: string;
+  updatedAt: number | null;
+};
+
+const EMPTY_BOOK_METADATA_DRAFT: BookMetadataDraft = {
+  title: "",
+  authorsText: "",
+  description: "",
+  publisher: "",
+  releaseDate: "",
+  language: "",
+  url: "",
+  asin: "",
+  coverUrl: "",
+};
+
+// Wire the book metadata editor modal: load the saved metadata, edit the
+// fields directly or via a JSON patch, and save with save_book_metadata or
+// clear with delete_book_metadata. The viewer window only ever opens real
+// indexed files, so the save input's sourceType is always null (the backend
+// keys the storage table on the file path, not on sourceType).
+function installMetadataEditor(filePath: string): void {
+  const openEl = document.querySelector<HTMLButtonElement>("#viewer-metadata-open");
+  const modalEl = document.querySelector<HTMLElement>("#book-metadata-modal");
+  const backdropEl = document.querySelector<HTMLElement>("#book-metadata-backdrop");
+  const bookEl = document.querySelector<HTMLElement>("#book-metadata-book");
+  const titleEl = document.querySelector<HTMLInputElement>("#book-metadata-title");
+  const authorsEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-authors");
+  const descriptionEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-description");
+  const publisherEl = document.querySelector<HTMLInputElement>("#book-metadata-publisher");
+  const releaseDateEl = document.querySelector<HTMLInputElement>("#book-metadata-release-date");
+  const languageEl = document.querySelector<HTMLInputElement>("#book-metadata-language");
+  const urlEl = document.querySelector<HTMLInputElement>("#book-metadata-url");
+  const asinEl = document.querySelector<HTMLInputElement>("#book-metadata-asin");
+  const coverUrlEl = document.querySelector<HTMLInputElement>("#book-metadata-cover-url");
+  const importEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-import");
+  const importApplyEl = document.querySelector<HTMLButtonElement>("#book-metadata-import-apply");
+  const exampleEl = document.querySelector<HTMLElement>("#book-metadata-import-example");
+  const statusEl = document.querySelector<HTMLElement>("#book-metadata-status");
+  const deleteEl = document.querySelector<HTMLButtonElement>("#book-metadata-delete");
+  const cancelEl = document.querySelector<HTMLButtonElement>("#book-metadata-cancel");
+  const saveEl = document.querySelector<HTMLButtonElement>("#book-metadata-save");
+  const closeEl = document.querySelector<HTMLButtonElement>("#book-metadata-close");
+  if (
+    !openEl ||
+    !modalEl ||
+    !backdropEl ||
+    !bookEl ||
+    !titleEl ||
+    !authorsEl ||
+    !descriptionEl ||
+    !publisherEl ||
+    !releaseDateEl ||
+    !languageEl ||
+    !urlEl ||
+    !asinEl ||
+    !coverUrlEl ||
+    !importEl ||
+    !importApplyEl ||
+    !exampleEl ||
+    !statusEl ||
+    !deleteEl ||
+    !cancelEl ||
+    !saveEl ||
+    !closeEl
+  ) {
+    return;
+  }
+
+  // Bumped on open/close so a slow load that resolves after the editor was
+  // dismissed (or reopened) does not overwrite the current form.
+  let loadToken = 0;
+
+  const setStatus = (message: string, tone: "neutral" | "success" | "error" = "neutral"): void => {
+    statusEl.hidden = message.length === 0;
+    statusEl.textContent = message;
+    if (tone === "neutral") {
+      delete statusEl.dataset.tone;
+    } else {
+      statusEl.dataset.tone = tone;
+    }
+  };
+
+  const readForm = (): BookMetadataDraft => ({
+    title: titleEl.value,
+    authorsText: authorsEl.value,
+    description: descriptionEl.value,
+    publisher: publisherEl.value,
+    releaseDate: releaseDateEl.value,
+    language: languageEl.value,
+    url: urlEl.value,
+    asin: asinEl.value,
+    coverUrl: coverUrlEl.value,
+  });
+
+  const writeForm = (draft: BookMetadataDraft): void => {
+    titleEl.value = draft.title;
+    authorsEl.value = draft.authorsText;
+    descriptionEl.value = draft.description;
+    publisherEl.value = draft.publisher;
+    releaseDateEl.value = draft.releaseDate;
+    languageEl.value = draft.language;
+    urlEl.value = draft.url;
+    asinEl.value = draft.asin;
+    coverUrlEl.value = draft.coverUrl;
+  };
+
+  const close = (): void => {
+    modalEl.hidden = true;
+    loadToken += 1;
+  };
+
+  const open = async (): Promise<void> => {
+    loadToken += 1;
+    const token = loadToken;
+    const book = await loadViewerBookContext(filePath);
+    bookEl.textContent = book.fileName;
+    writeForm(EMPTY_BOOK_METADATA_DRAFT);
+    importEl.value = "";
+    exampleEl.textContent = BOOK_METADATA_IMPORT_EXAMPLE;
+    setStatus("Loading metadata...");
+    modalEl.hidden = false;
+    try {
+      const payload = await invoke<BookMetadataPayload>("load_book_metadata", { filePath });
+      if (token !== loadToken) return;
+      writeForm({
+        title: payload.title,
+        authorsText: joinMetadataAuthors(payload.authors),
+        description: payload.description,
+        publisher: payload.publisher,
+        releaseDate: payload.releaseDate,
+        language: payload.language,
+        url: payload.url,
+        asin: payload.asin,
+        coverUrl: payload.coverUrl,
+      });
+      setStatus("");
+    } catch (error) {
+      if (token !== loadToken) return;
+      setStatus(`Failed to load metadata: ${String(error)}`, "error");
+    }
+  };
+
+  const applyJson = (): void => {
+    const parsed = parseBookMetadataImport(importEl.value);
+    if (!parsed.ok) {
+      setStatus(parsed.message, "error");
+      return;
+    }
+    const next = applyBookMetadataImport(readForm(), parsed.patch);
+    const validation = validateBookMetadataDraft(next);
+    if (!validation.ok) {
+      setStatus(validation.message, "error");
+      return;
+    }
+    writeForm(next);
+    setStatus("Imported metadata from JSON.", "success");
+  };
+
+  const save = async (): Promise<void> => {
+    let draft = readForm();
+    const importText = importEl.value.trim();
+    // If the form is empty but a JSON patch is present, apply it before saving.
+    if (isBookMetadataDraftEmpty(draft) && importText) {
+      const parsed = parseBookMetadataImport(importText);
+      if (!parsed.ok) {
+        setStatus(parsed.message, "error");
+        return;
+      }
+      draft = applyBookMetadataImport(draft, parsed.patch);
+      writeForm(draft);
+    }
+    if (isBookMetadataDraftEmpty(draft)) {
+      setStatus(
+        "Enter at least one metadata field, or paste JSON to import before saving.",
+        "error",
+      );
+      return;
+    }
+    const validation = validateBookMetadataDraft(draft);
+    if (!validation.ok) {
+      setStatus(validation.message, "error");
+      return;
+    }
+    try {
+      await invoke<BookMetadataPayload>("save_book_metadata", {
+        input: {
+          filePath,
+          sourceType: null,
+          title: draft.title,
+          authors: normalizeMetadataAuthorsText(draft.authorsText),
+          description: draft.description,
+          publisher: draft.publisher,
+          releaseDate: draft.releaseDate,
+          language: draft.language,
+          url: draft.url,
+          asin: draft.asin,
+          coverUrl: draft.coverUrl,
+        },
+      });
+      close();
+    } catch (error) {
+      setStatus(`Failed to save metadata: ${String(error)}`, "error");
+    }
+  };
+
+  const clearMetadata = async (): Promise<void> => {
+    const confirmed = await confirm("Clear the saved metadata for this book?", {
+      title: "Clear metadata",
+      kind: "warning",
+      okLabel: "Clear",
+      cancelLabel: "Cancel",
+    });
+    if (!confirmed) return;
+    try {
+      await invoke("delete_book_metadata", { filePath });
+      close();
+    } catch (error) {
+      setStatus(`Failed to clear metadata: ${String(error)}`, "error");
+    }
+  };
+
+  openEl.addEventListener("click", () => void open());
+  importApplyEl.addEventListener("click", () => applyJson());
+  saveEl.addEventListener("click", () => void save());
+  deleteEl.addEventListener("click", () => void clearMetadata());
+  cancelEl.addEventListener("click", close);
+  closeEl.addEventListener("click", close);
+  backdropEl.addEventListener("click", close);
+}
+
 // Wire the book editor modals reachable from the viewer overlay controls.
 function installBookEditors(filePath: string): void {
   const overlayControlsEl = document.querySelector<HTMLElement>("#viewer-overlay-controls");
@@ -897,6 +1149,7 @@ function installBookEditors(filePath: string): void {
     overlayControlsEl.hidden = false;
   }
   installTagEditor(filePath);
+  installMetadataEditor(filePath);
 }
 
 type SpreadIndexEntry = {

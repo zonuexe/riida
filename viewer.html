@@ -67,6 +67,174 @@
         <div id="epub-toc-panel" class="epub-toc-panel" hidden>
           <div id="epub-toc-list" class="epub-toc-list"></div>
         </div>
+        <div id="viewer-overlay-controls" class="viewer-overlay-controls" hidden>
+          <button
+            id="viewer-settings-toggle"
+            class="viewer-settings-toggle"
+            type="button"
+            aria-label="Open viewer settings"
+          >
+            <i class="fa-solid fa-bars" aria-hidden="true"></i>
+          </button>
+        </div>
+        <section id="viewer-settings-panel" class="viewer-settings-panel" hidden>
+          <div class="viewer-setting-tabs" role="tablist" aria-label="設定対象">
+            <button
+              id="viewer-settings-scope-global"
+              class="viewer-setting-tab"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              data-scope="global"
+            >
+              全体
+            </button>
+            <button
+              id="viewer-settings-scope-file"
+              class="viewer-setting-tab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              data-scope="file"
+            >
+              ファイル
+            </button>
+          </div>
+          <p id="viewer-settings-source-label" class="viewer-settings-source-label">PDF</p>
+          <div id="viewer-settings-reader-fields">
+            <label class="viewer-setting">
+              <span>ページ表示</span>
+              <select id="viewer-page-mode">
+                <option value="spread">2ページ</option>
+                <option value="single">単ページ</option>
+              </select>
+            </label>
+            <label class="viewer-setting">
+              <span>綴じ方向</span>
+              <select id="viewer-binding-direction">
+                <option value="auto">自動判定</option>
+                <option value="left">左綴じ</option>
+                <option value="right">右綴じ</option>
+              </select>
+            </label>
+            <label class="viewer-setting pdf-only">
+              <span>ズーム</span>
+              <select id="viewer-zoom-mode">
+                <option value="fit-width">幅に合わせる</option>
+                <option value="fit-height">高さに合わせる</option>
+                <option value="original">オリジナル</option>
+              </select>
+            </label>
+            <label class="viewer-setting epub-only">
+              <span>文字サイズ</span>
+              <div class="viewer-font-size-control">
+                <input
+                  type="range"
+                  id="viewer-epub-font-size"
+                  min="50"
+                  max="200"
+                  step="10"
+                  value="100"
+                />
+                <output id="viewer-epub-font-size-output" for="viewer-epub-font-size">100%</output>
+              </div>
+            </label>
+            <label class="viewer-setting">
+              <span>表示位置</span>
+              <select id="viewer-align-mode">
+                <option value="left">左寄せ</option>
+                <option value="center">中央</option>
+                <option value="right">右寄せ</option>
+              </select>
+            </label>
+            <label class="viewer-setting">
+              <span>スクロール</span>
+              <select id="viewer-scroll-mode">
+                <option value="continuous">連続スクロール</option>
+                <option value="paged">ページ単位</option>
+              </select>
+            </label>
+            <label class="viewer-setting">
+              <span>上下余白</span>
+              <select id="viewer-vertical-gap-mode">
+                <option value="wide">広い</option>
+                <option value="compact">狭い</option>
+                <option value="none">ゼロ</option>
+              </select>
+            </label>
+            <section class="viewer-setting viewer-setting-swatches">
+              <span>背景色</span>
+              <div
+                id="viewer-background-mode"
+                class="viewer-background-swatches"
+                role="radiogroup"
+                aria-label="Viewer background color"
+              >
+                <label class="viewer-background-option">
+                  <input
+                    type="radio"
+                    name="viewer-background-mode"
+                    value="default"
+                    aria-label="Default"
+                  />
+                  <span
+                    class="viewer-background-swatch"
+                    data-background-mode="default"
+                    aria-hidden="true"
+                  ></span>
+                </label>
+                <label class="viewer-background-option">
+                  <input
+                    type="radio"
+                    name="viewer-background-mode"
+                    value="snow-white"
+                    aria-label="Snow White"
+                  />
+                  <span
+                    class="viewer-background-swatch"
+                    data-background-mode="snow-white"
+                    aria-hidden="true"
+                  ></span>
+                </label>
+                <label class="viewer-background-option">
+                  <input
+                    type="radio"
+                    name="viewer-background-mode"
+                    value="night-city"
+                    aria-label="Night City"
+                  />
+                  <span
+                    class="viewer-background-swatch"
+                    data-background-mode="night-city"
+                    aria-hidden="true"
+                  ></span>
+                </label>
+                <label class="viewer-background-option">
+                  <input
+                    type="radio"
+                    name="viewer-background-mode"
+                    value="navy-blue"
+                    aria-label="Navy Blue"
+                  />
+                  <span
+                    class="viewer-background-swatch"
+                    data-background-mode="navy-blue"
+                    aria-hidden="true"
+                  ></span>
+                </label>
+              </div>
+              <label class="viewer-background-inherit">
+                <input id="viewer-background-inherit" type="checkbox" />
+                <span>アプリケーション設定を反映</span>
+              </label>
+            </section>
+            <div class="viewer-settings-divider" aria-hidden="true"></div>
+            <label class="viewer-setting viewer-checkbox">
+              <input id="viewer-cover-mode" type="checkbox" checked />
+              <span>1ページ目を表紙にする</span>
+            </label>
+          </div>
+        </section>
         <div id="viewer-window-status" class="viewer-window-status">
           <p id="viewer-window-target" class="viewer-window-target">
             <!-- main-viewer.ts fills this with the requested book path -->

@@ -41,6 +41,8 @@ import {
   DEFAULT_VIEWER_SETTINGS,
   type ViewerSettings,
   type ViewerSettingsPayload,
+  type ViewerSettingsScope,
+  type ViewerSourceType,
 } from "./viewer-settings-utils";
 
 type ViewerLaunchParams = {
@@ -82,6 +84,35 @@ function readLaunchParams(
     filePath: coerceLaunchString(params.get("file")),
     source: coerceLaunchString(params.get("source")),
   };
+}
+
+const VIEWER_LAUNCH_PARAMS_SESSION_KEY = "riida.viewer.launchParams";
+
+// A settings change reloads the window; the Rust-injected launch global is
+// normally re-applied on reload, but mirror the resolved params into
+// sessionStorage so the reloaded page can still find its book if it is not.
+function persistLaunchParams(params: ViewerLaunchParams): void {
+  try {
+    sessionStorage.setItem(VIEWER_LAUNCH_PARAMS_SESSION_KEY, JSON.stringify(params));
+  } catch {
+    // sessionStorage unavailable — reload falls back to the injected global.
+  }
+}
+
+function readPersistedLaunchParams(): ViewerLaunchParams | null {
+  try {
+    const raw = sessionStorage.getItem(VIEWER_LAUNCH_PARAMS_SESSION_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { filePath?: unknown; source?: unknown };
+      return {
+        filePath: coerceLaunchString(parsed.filePath),
+        source: coerceLaunchString(parsed.source),
+      };
+    }
+  } catch {
+    // sessionStorage unavailable or corrupt — caller falls back to defaults.
+  }
+  return null;
 }
 
 function setStatus(message: string | null): void {
@@ -465,6 +496,217 @@ function installEpubToc(book: import("epubjs").Book, rendition: import("epubjs")
     }
   };
   appendItems(navToc, 0);
+}
+
+const VIEWER_SETTINGS_PANEL_SESSION_KEY = "riida.viewer.settingsPanel";
+
+// The settings panel triggers a window reload to re-render from the new
+// preferences; its open state and scope are stashed here so it reappears
+// where the reader left it.
+function readSettingsPanelSession(): { open: boolean; scope: ViewerSettingsScope } {
+  try {
+    const raw = sessionStorage.getItem(VIEWER_SETTINGS_PANEL_SESSION_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { open?: unknown; scope?: unknown };
+      return {
+        open: parsed.open === true,
+        scope: parsed.scope === "file" ? "file" : "global",
+      };
+    }
+  } catch {
+    // sessionStorage unavailable or corrupt — fall through to defaults.
+  }
+  return { open: false, scope: "global" };
+}
+
+function writeSettingsPanelSession(state: { open: boolean; scope: ViewerSettingsScope }): void {
+  try {
+    sessionStorage.setItem(VIEWER_SETTINGS_PANEL_SESSION_KEY, JSON.stringify(state));
+  } catch {
+    // sessionStorage unavailable — the panel just will not survive a reload.
+  }
+}
+
+// Wire the viewer settings panel: the toggle button, the global/file scope
+// tabs, and every preference control. A changed control is persisted with the
+// same save_*_viewer_preferences commands the in-app viewer uses, then the
+// window reloads so boot re-renders from the new preferences. pageMode,
+// bindingDirection, treatFirstPageAsCover and scrollMode take visible effect;
+// the remaining preferences are persisted (and shared with the in-app viewer)
+// but not yet reflected by the viewer window's renderer.
+async function installViewerSettingsPanel(
+  filePath: string,
+  sourceType: ViewerSourceType,
+): Promise<void> {
+  const overlayControlsEl = document.querySelector<HTMLElement>("#viewer-overlay-controls");
+  const toggleEl = document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
+  const panelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
+  const scopeGlobalEl = document.querySelector<HTMLButtonElement>("#viewer-settings-scope-global");
+  const scopeFileEl = document.querySelector<HTMLButtonElement>("#viewer-settings-scope-file");
+  const sourceLabelEl = document.querySelector<HTMLElement>("#viewer-settings-source-label");
+  const pageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
+  const bindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
+  const zoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
+  const alignModeEl = document.querySelector<HTMLSelectElement>("#viewer-align-mode");
+  const verticalGapModeEl = document.querySelector<HTMLSelectElement>("#viewer-vertical-gap-mode");
+  const scrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
+  const coverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
+  const epubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
+  const epubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
+    "#viewer-epub-font-size-output",
+  );
+  const backgroundInheritEl = document.querySelector<HTMLInputElement>(
+    "#viewer-background-inherit",
+  );
+  const backgroundRadios = Array.from(
+    document.querySelectorAll<HTMLInputElement>('input[name="viewer-background-mode"]'),
+  );
+  if (
+    !overlayControlsEl ||
+    !toggleEl ||
+    !panelEl ||
+    !scopeGlobalEl ||
+    !scopeFileEl ||
+    !sourceLabelEl ||
+    !pageModeEl ||
+    !bindingEl ||
+    !zoomModeEl ||
+    !alignModeEl ||
+    !verticalGapModeEl ||
+    !scrollModeEl ||
+    !coverModeEl ||
+    !epubFontSizeEl ||
+    !epubFontSizeOutputEl ||
+    !backgroundInheritEl
+  ) {
+    return;
+  }
+
+  let payload: ViewerSettingsPayload;
+  try {
+    payload = await invoke<ViewerSettingsPayload>("load_viewer_preferences", {
+      filePath,
+      sourceType,
+    });
+  } catch (error) {
+    console.warn("[riida] viewer window: failed to load viewer preferences:", error);
+    return;
+  }
+
+  const session = readSettingsPanelSession();
+  let scope: ViewerSettingsScope = session.scope;
+  let isOpen = session.open;
+
+  // File scope with no saved override edits a copy of the effective settings,
+  // so the first change there creates the override.
+  const settingsForScope = (): ViewerSettings =>
+    scope === "file" ? (payload.file ?? payload.effective) : payload.global;
+
+  const populate = (): void => {
+    panelEl.dataset.scope = scope;
+    panelEl.dataset.sourceType = sourceType;
+    sourceLabelEl.textContent = sourceType === "epub" ? "EPUB" : "PDF";
+    scopeGlobalEl.classList.toggle("is-active", scope === "global");
+    scopeGlobalEl.setAttribute("aria-selected", String(scope === "global"));
+    scopeFileEl.classList.toggle("is-active", scope === "file");
+    scopeFileEl.setAttribute("aria-selected", String(scope === "file"));
+
+    const settings = settingsForScope();
+    pageModeEl.value = settings.pageMode;
+    bindingEl.value = settings.bindingDirection;
+    zoomModeEl.value = settings.zoomMode;
+    alignModeEl.value = settings.alignMode;
+    verticalGapModeEl.value = settings.verticalGapMode;
+    scrollModeEl.value = settings.scrollMode;
+    coverModeEl.checked = settings.treatFirstPageAsCover;
+    epubFontSizeEl.value = String(settings.epubFontSize);
+    epubFontSizeOutputEl.value = `${settings.epubFontSize}%`;
+
+    const inherits = settings.backgroundMode === "inherit-theme";
+    backgroundInheritEl.checked = inherits;
+    for (const radio of backgroundRadios) {
+      radio.checked = !inherits && radio.value === settings.backgroundMode;
+      radio.disabled = inherits;
+    }
+  };
+
+  const syncToggle = (): void => {
+    overlayControlsEl.hidden = false;
+    toggleEl.setAttribute("aria-expanded", String(isOpen));
+    panelEl.hidden = !isOpen;
+  };
+
+  const gather = (): ViewerSettings => {
+    const selectedBackground = backgroundRadios.find((radio) => radio.checked);
+    return {
+      pageMode: pageModeEl.value as ViewerSettings["pageMode"],
+      bindingDirection: bindingEl.value as ViewerSettings["bindingDirection"],
+      zoomMode: zoomModeEl.value as ViewerSettings["zoomMode"],
+      alignMode: alignModeEl.value as ViewerSettings["alignMode"],
+      verticalGapMode: verticalGapModeEl.value as ViewerSettings["verticalGapMode"],
+      treatFirstPageAsCover: coverModeEl.checked,
+      backgroundMode: backgroundInheritEl.checked
+        ? "inherit-theme"
+        : ((selectedBackground?.value as ViewerSettings["backgroundMode"]) ?? "inherit-theme"),
+      scrollMode: scrollModeEl.value as ViewerSettings["scrollMode"],
+      epubFontSize: Number.parseInt(epubFontSizeEl.value, 10) || 100,
+    };
+  };
+
+  const persistAndReload = async (): Promise<void> => {
+    const preferences = gather();
+    try {
+      if (scope === "file") {
+        await invoke("save_file_viewer_preferences", { filePath, sourceType, preferences });
+      } else {
+        await invoke("save_default_viewer_preferences", {
+          currentFilePath: filePath,
+          sourceType,
+          preferences,
+        });
+      }
+    } catch (error) {
+      console.error("[riida] viewer window: failed to save viewer preferences:", error);
+      return;
+    }
+    // boot re-reads the saved preferences and re-renders; keep the panel open.
+    writeSettingsPanelSession({ open: true, scope });
+    window.location.reload();
+  };
+
+  toggleEl.addEventListener("click", () => {
+    isOpen = !isOpen;
+    writeSettingsPanelSession({ open: isOpen, scope });
+    syncToggle();
+  });
+  scopeGlobalEl.addEventListener("click", () => {
+    scope = "global";
+    writeSettingsPanelSession({ open: isOpen, scope });
+    populate();
+  });
+  scopeFileEl.addEventListener("click", () => {
+    scope = "file";
+    writeSettingsPanelSession({ open: isOpen, scope });
+    populate();
+  });
+
+  for (const control of [
+    pageModeEl,
+    bindingEl,
+    zoomModeEl,
+    alignModeEl,
+    verticalGapModeEl,
+    scrollModeEl,
+    coverModeEl,
+    epubFontSizeEl,
+    backgroundInheritEl,
+    ...backgroundRadios,
+  ]) {
+    control.addEventListener("change", () => void persistAndReload());
+  }
+
+  populate();
+  syncToggle();
 }
 
 type SpreadIndexEntry = {
@@ -1300,10 +1542,12 @@ async function boot(): Promise<void> {
     applyAppTheme(cachedTheme);
   }
 
-  const { filePath, source } = readLaunchParams(
-    window.location.search,
-    window.__RIIDA_LAUNCH_PARAMS__,
-  );
+  const launch = readLaunchParams(window.location.search, window.__RIIDA_LAUNCH_PARAMS__);
+  // The settings panel reloads the window; fall back to the session-persisted
+  // params in case Tauri does not re-run its launch-param injection script.
+  const persisted = launch.filePath ? null : readPersistedLaunchParams();
+  const filePath = launch.filePath ?? persisted?.filePath ?? null;
+  const source = launch.source ?? persisted?.source ?? null;
 
   document.body.dataset.startup = "ready";
 
@@ -1311,6 +1555,7 @@ async function boot(): Promise<void> {
     setStatus("No file specified.");
     return;
   }
+  persistLaunchParams({ filePath, source });
 
   setStatus(`Loading ${source ? `${filePath} (source: ${source})` : filePath}...`);
 
@@ -1332,6 +1577,7 @@ async function boot(): Promise<void> {
       const { rendition, isRtl } = await renderEpubBook(filePath, epubViewerEl);
       setStatus(null);
       installEpubKeyboardNavigation(rendition, isRtl);
+      void installViewerSettingsPanel(filePath, "epub");
       activeBookFilePath = filePath;
       syncNoteUi();
     } catch (error) {
@@ -1351,6 +1597,7 @@ async function boot(): Promise<void> {
     const { spreadIndex, bindingDirection } = await renderPdfDocument(filePath, viewerEl, scrollEl);
     installReadingPositionPersistence(filePath, scrollEl, spreadIndex);
     installSpreadKeyboardNavigation(scrollEl, spreadIndex, bindingDirection);
+    void installViewerSettingsPanel(filePath, "pdf");
     activeBookFilePath = filePath;
     syncNoteUi();
   } catch (error) {

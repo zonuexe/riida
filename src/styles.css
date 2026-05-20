@@ -236,7 +236,9 @@ body[data-window-role="viewer"] .pdfjs-page canvas {
    chrome must be fixed to the viewport to stay put while reading. */
 body[data-window-role="viewer"] .viewer-navigation-overlay,
 body[data-window-role="viewer"] .epub-toc-toggle,
-body[data-window-role="viewer"] .epub-toc-panel {
+body[data-window-role="viewer"] .epub-toc-panel,
+body[data-window-role="viewer"] .viewer-overlay-controls,
+body[data-window-role="viewer"] .viewer-settings-panel {
   position: fixed;
 }
 

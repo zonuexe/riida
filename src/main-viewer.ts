@@ -573,6 +573,11 @@ async function installViewerSettingsPanel(
   const backgroundRadios = Array.from(
     document.querySelectorAll<HTMLInputElement>('input[name="viewer-background-mode"]'),
   );
+  // The tag/metadata buttons share the overlay with the settings toggle; they
+  // stay hidden until the menu is opened so they never cover the page.
+  const editorButtonEls = Array.from(
+    document.querySelectorAll<HTMLElement>("#viewer-tags-open, #viewer-metadata-open"),
+  );
   if (
     !overlayControlsEl ||
     !toggleEl ||
@@ -646,6 +651,9 @@ async function installViewerSettingsPanel(
     overlayControlsEl.hidden = false;
     toggleEl.setAttribute("aria-expanded", String(isOpen));
     panelEl.hidden = !isOpen;
+    for (const buttonEl of editorButtonEls) {
+      buttonEl.hidden = !isOpen;
+    }
   };
 
   const gather = (): ViewerSettings => {

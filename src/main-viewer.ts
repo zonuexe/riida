@@ -32,6 +32,7 @@ import {
   saveCachedReadingPosition,
   selectAnchorPageIndex,
 } from "./reading-position-utils";
+import { validateTagValue } from "./tag-utils";
 import {
   buildPageGroups,
   getVisualPageOrder,
@@ -707,6 +708,195 @@ async function installViewerSettingsPanel(
 
   populate();
   syncToggle();
+}
+
+type ViewerBookContext = {
+  filePath: string;
+  fileName: string;
+  sourceType: string;
+  tags: string[];
+};
+
+function basenameOf(filePath: string): string {
+  const parts = filePath.split(/[/\\]/);
+  return parts[parts.length - 1] || filePath;
+}
+
+let viewerBookContextPromise: Promise<ViewerBookContext> | null = null;
+
+// Look up the library entry for the open book — its tags, display name, and
+// source type — so the tag and metadata editors have the context the in-app
+// editors get from a BookSummary. Cached; the tag editor mutates the resolved
+// object's tags after a save so a reopen reflects the change. Falls back to
+// path-derived values when the book is not in the library snapshot.
+function loadViewerBookContext(filePath: string): Promise<ViewerBookContext> {
+  viewerBookContextPromise ??= (async () => {
+    const fallback: ViewerBookContext = {
+      filePath,
+      fileName: basenameOf(filePath),
+      sourceType: looksLikeEpubPath(filePath) ? "epub" : "pdf",
+      tags: [],
+    };
+    try {
+      const snapshot = await invoke<{ books?: Array<Record<string, unknown>> }>(
+        "load_library_snapshot",
+      );
+      const match = (snapshot.books ?? []).find((book) => book.filePath === filePath);
+      if (!match) return fallback;
+      return {
+        filePath,
+        fileName: typeof match.fileName === "string" ? match.fileName : fallback.fileName,
+        sourceType: typeof match.sourceType === "string" ? match.sourceType : fallback.sourceType,
+        tags: Array.isArray(match.tags)
+          ? match.tags.filter((tag): tag is string => typeof tag === "string")
+          : [],
+      };
+    } catch (error) {
+      console.warn("[riida] viewer window: failed to load library snapshot:", error);
+      return fallback;
+    }
+  })();
+  return viewerBookContextPromise;
+}
+
+// Wire the tag editor modal: open from the overlay button, add/remove tag
+// chips, and save with the save_book_tags command.
+function installTagEditor(filePath: string): void {
+  const openEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
+  const modalEl = document.querySelector<HTMLElement>("#tag-editor-modal");
+  const backdropEl = document.querySelector<HTMLElement>("#tag-editor-backdrop");
+  const bookEl = document.querySelector<HTMLElement>("#tag-editor-book");
+  const listEl = document.querySelector<HTMLElement>("#tag-editor-list");
+  const inputEl = document.querySelector<HTMLInputElement>("#tag-editor-input");
+  const addEl = document.querySelector<HTMLButtonElement>("#tag-editor-add");
+  const statusEl = document.querySelector<HTMLElement>("#tag-editor-status");
+  const cancelEl = document.querySelector<HTMLButtonElement>("#tag-editor-cancel");
+  const saveEl = document.querySelector<HTMLButtonElement>("#tag-editor-save");
+  const closeEl = document.querySelector<HTMLButtonElement>("#tag-editor-close");
+  if (
+    !openEl ||
+    !modalEl ||
+    !backdropEl ||
+    !listEl ||
+    !inputEl ||
+    !addEl ||
+    !statusEl ||
+    !cancelEl ||
+    !saveEl ||
+    !closeEl
+  ) {
+    return;
+  }
+
+  let tags: string[] = [];
+
+  const setStatus = (message: string, tone: "neutral" | "error" = "neutral"): void => {
+    statusEl.hidden = message.length === 0;
+    statusEl.textContent = message;
+    if (tone === "neutral") {
+      delete statusEl.dataset.tone;
+    } else {
+      statusEl.dataset.tone = tone;
+    }
+  };
+
+  const renderTags = (): void => {
+    listEl.innerHTML = "";
+    if (tags.length === 0) {
+      const emptyEl = document.createElement("p");
+      emptyEl.className = "empty-state-detail";
+      emptyEl.textContent = "No tags yet.";
+      listEl.appendChild(emptyEl);
+      return;
+    }
+    for (const tag of tags) {
+      const chipEl = document.createElement("span");
+      chipEl.className = "book-tag";
+      const labelEl = document.createElement("span");
+      labelEl.textContent = tag;
+      const removeEl = document.createElement("button");
+      removeEl.type = "button";
+      removeEl.className = "book-tag-remove";
+      removeEl.textContent = "×";
+      removeEl.setAttribute("aria-label", `Remove tag ${tag}`);
+      removeEl.addEventListener("click", () => {
+        tags = tags.filter((candidate) => candidate !== tag);
+        renderTags();
+      });
+      chipEl.append(labelEl, removeEl);
+      listEl.appendChild(chipEl);
+    }
+  };
+
+  const addTag = (): void => {
+    const result = validateTagValue(inputEl.value);
+    if (!result.ok) {
+      setStatus(result.message, "error");
+      return;
+    }
+    if (!tags.includes(result.value)) {
+      tags = [...tags, result.value];
+    }
+    inputEl.value = "";
+    setStatus("");
+    renderTags();
+  };
+
+  const close = (): void => {
+    modalEl.hidden = true;
+  };
+
+  const open = async (): Promise<void> => {
+    const book = await loadViewerBookContext(filePath);
+    tags = [...book.tags];
+    if (bookEl) {
+      bookEl.textContent = book.fileName;
+    }
+    inputEl.value = "";
+    setStatus("");
+    renderTags();
+    modalEl.hidden = false;
+    inputEl.focus();
+  };
+
+  const save = async (): Promise<void> => {
+    try {
+      const payload = await invoke<{ filePath: string; tags: string[] }>("save_book_tags", {
+        filePath,
+        tags,
+      });
+      // Keep the cached context fresh so a reopened editor shows saved tags.
+      const book = await loadViewerBookContext(filePath);
+      book.tags = [...payload.tags];
+      close();
+    } catch (error) {
+      setStatus(`Failed to save tags: ${String(error)}`, "error");
+    }
+  };
+
+  openEl.addEventListener("click", () => void open());
+  addEl.addEventListener("click", () => addTag());
+  inputEl.addEventListener("keydown", (event) => {
+    // Guard against IME composition: Enter while composing confirms the
+    // candidate, it must not add a tag (see AGENTS.md).
+    if (event.key === "Enter" && !event.isComposing && event.keyCode !== 229) {
+      event.preventDefault();
+      addTag();
+    }
+  });
+  cancelEl.addEventListener("click", close);
+  closeEl.addEventListener("click", close);
+  backdropEl.addEventListener("click", close);
+  saveEl.addEventListener("click", () => void save());
+}
+
+// Wire the book editor modals reachable from the viewer overlay controls.
+function installBookEditors(filePath: string): void {
+  const overlayControlsEl = document.querySelector<HTMLElement>("#viewer-overlay-controls");
+  if (overlayControlsEl) {
+    overlayControlsEl.hidden = false;
+  }
+  installTagEditor(filePath);
 }
 
 type SpreadIndexEntry = {
@@ -1578,6 +1768,7 @@ async function boot(): Promise<void> {
       setStatus(null);
       installEpubKeyboardNavigation(rendition, isRtl);
       void installViewerSettingsPanel(filePath, "epub");
+      installBookEditors(filePath);
       activeBookFilePath = filePath;
       syncNoteUi();
     } catch (error) {
@@ -1598,6 +1789,7 @@ async function boot(): Promise<void> {
     installReadingPositionPersistence(filePath, scrollEl, spreadIndex);
     installSpreadKeyboardNavigation(scrollEl, spreadIndex, bindingDirection);
     void installViewerSettingsPanel(filePath, "pdf");
+    installBookEditors(filePath);
     activeBookFilePath = filePath;
     syncNoteUi();
   } catch (error) {

@@ -68,6 +68,10 @@
           <div id="epub-toc-list" class="epub-toc-list"></div>
         </div>
         <div id="viewer-overlay-controls" class="viewer-overlay-controls" hidden>
+          <button id="viewer-tags-open" class="viewer-tags-button" type="button">
+            <i class="fa-solid fa-tags" aria-hidden="true"></i>
+            <span>Tags</span>
+          </button>
           <button
             id="viewer-settings-toggle"
             class="viewer-settings-toggle"
@@ -270,6 +274,56 @@
           <div class="note-resize-handle note-resize-handle-nw" data-resize="nw"></div>
         </aside>
       </section>
+      <div id="tag-editor-modal" class="app-settings-modal" hidden>
+        <div id="tag-editor-backdrop" class="app-settings-backdrop"></div>
+        <section
+          class="app-settings-dialog tag-editor-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tag-editor-title"
+        >
+          <div class="app-settings-header">
+            <div>
+              <p class="app-settings-kicker">Book tags</p>
+              <h2 id="tag-editor-title">Tags</h2>
+            </div>
+            <button
+              id="tag-editor-close"
+              class="app-settings-close"
+              type="button"
+              aria-label="Close tags"
+            >
+              ×
+            </button>
+          </div>
+          <div class="app-settings-body">
+            <p id="tag-editor-book" class="app-settings-path"></p>
+            <div id="tag-editor-list" class="tag-editor-list"></div>
+            <label class="app-settings-field">
+              <span>Add tag</span>
+              <div class="tag-editor-add-row">
+                <input id="tag-editor-input" type="text" maxlength="200" />
+                <button id="tag-editor-add" class="app-settings-secondary" type="button">
+                  Add
+                </button>
+              </div>
+              <small>
+                Tags can contain any non-empty text. Use <code>/</code> to create nested labels
+                such as <code>language/lean</code>.
+              </small>
+            </label>
+            <p id="tag-editor-status" class="app-settings-status" hidden></p>
+          </div>
+          <div class="app-settings-actions">
+            <button id="tag-editor-cancel" class="app-settings-secondary" type="button">
+              Cancel
+            </button>
+            <button id="tag-editor-save" class="app-settings-primary" type="button">
+              Save and close
+            </button>
+          </div>
+        </section>
+      </div>
     </main>
   </body>
 </html>

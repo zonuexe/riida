@@ -17,6 +17,7 @@ import {
   preserveNoteWindowBottomRightOffset,
 } from "./note-window-utils";
 import { detectPdfBindingDirection } from "./pdf-binding-detect";
+import { buildPdfRenderWindowPlan } from "./pdf-render-window-utils";
 import { loadPdfJsRuntime, TauriBinaryDataFactory } from "./pdf-runtime";
 import {
   clampReadingPositionOffsetRatio,
@@ -160,18 +161,55 @@ function findSpreadForPage(
   return fallback ?? spreadIndex[spreadIndex.length - 1] ?? null;
 }
 
-function restoreReadingPosition(
-  filePath: string,
+// WKWebView resets a freshly opened window's scroll container to the top
+// during its first layout passes (the same early-layout instability the EPUB
+// path works around with requestAnimationFrame). Setting scrollTop once is not
+// enough: the value takes, then a later layout pass clears it. So re-assert the
+// restored position every frame across a short settle window, recomputing the
+// offset each time in case the layout itself is still settling, and back off
+// as soon as the reader scrolls on their own.
+const SCROLL_RESTORE_SETTLE_MS = 2000;
+
+function restoreScrollAfterRender(
   scrollEl: HTMLElement,
-  spreadIndex: readonly SpreadIndexEntry[],
+  cached: ReturnType<typeof loadCachedReadingPosition>,
+  targetEntry: SpreadIndexEntry | null,
 ): void {
-  if (spreadIndex.length === 0) return;
-  const cached = loadCachedReadingPosition(filePath);
-  if (!cached) return;
-  const target = findSpreadForPage(spreadIndex, cached.pageNumber);
-  if (!target) return;
+  if (!cached || !targetEntry) return;
   const ratio = clampReadingPositionOffsetRatio(cached.pageOffsetRatio);
-  scrollEl.scrollTop = target.spreadEl.offsetTop + ratio * target.spreadEl.offsetHeight;
+
+  const applyScroll = (): void => {
+    scrollEl.scrollTop = targetEntry.spreadEl.offsetTop + ratio * targetEntry.spreadEl.offsetHeight;
+  };
+
+  let userTookOver = false;
+  const markUserTookOver = (): void => {
+    userTookOver = true;
+  };
+  // Genuine reader input only; a programmatic scrollTop assignment fires none
+  // of these, so the settle loop never mistakes its own correction for input.
+  const inputEvents: Array<keyof WindowEventMap> = ["wheel", "keydown", "pointerdown"];
+  for (const eventName of inputEvents) {
+    window.addEventListener(eventName, markUserTookOver, { passive: true });
+  }
+  const stopWatchingInput = (): void => {
+    for (const eventName of inputEvents) {
+      window.removeEventListener(eventName, markUserTookOver);
+    }
+  };
+
+  applyScroll();
+
+  const deadline = performance.now() + SCROLL_RESTORE_SETTLE_MS;
+  const tick = (): void => {
+    if (userTookOver || performance.now() >= deadline) {
+      stopWatchingInput();
+      return;
+    }
+    applyScroll();
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 
 function capturePositionFromScroll(
@@ -301,12 +339,17 @@ function installReadingPositionPersistence(
   });
 }
 
-// Minimal renderer: detect binding direction, build spread groups, and render
-// every page at a fixed high-resolution backing buffer. CSS in the viewer-
-// window scope handles the visible sizing via 100vh-based fit-height, so the
-// canvases stay sharp when the window is resized. Lazy paging, text layers,
-// search, and per-file viewer settings will follow.
-async function renderPdfAllPages(filePath: string, viewerEl: HTMLElement): Promise<RenderedPdf> {
+// Detect binding direction, build empty spread placeholders, then render page
+// canvases outward from the spread the reader left off at, so the requested
+// page paints before the rest of the document. Every spread has a fixed
+// 100vh-based height (see styles.css), so the scroll layout is final before
+// any canvas is painted and appending canvases later never shifts it. Lazy
+// paging, text layers, search, and per-file viewer settings will follow.
+async function renderPdfDocument(
+  filePath: string,
+  viewerEl: HTMLElement,
+  scrollEl: HTMLElement,
+): Promise<RenderedPdf> {
   const sourceUrl = convertFileSrc(filePath);
   const { getDocument } = await loadPdfJsRuntime();
 
@@ -337,7 +380,11 @@ async function renderPdfAllPages(filePath: string, viewerEl: HTMLElement): Promi
 
   const devicePixelRatio = window.devicePixelRatio || 1;
   const spreadIndex: SpreadIndexEntry[] = [];
+  const spreadVisualOrders: number[][] = [];
 
+  // Build empty spread placeholders up front. Each spread has a fixed height,
+  // so the full scroll layout — and the restored reading position — is correct
+  // before any page canvas exists.
   for (const group of pageGroups) {
     const visualOrder = getVisualPageOrder(group, layoutSettings);
     const spreadEl = document.createElement("div");
@@ -348,17 +395,60 @@ async function renderPdfAllPages(filePath: string, viewerEl: HTMLElement): Promi
       spreadEl.dataset.cover = "true";
     }
     viewerEl.appendChild(spreadEl);
-
-    for (const pageNumber of visualOrder) {
-      const page = await pdfDocument.getPage(pageNumber);
-      const pageEl = await renderPdfPageCanvas(page, pageNumber, devicePixelRatio);
-      spreadEl.appendChild(pageEl);
-    }
-
     // Record pages in document order so callers can match a saved page number
     // without caring about left/right binding.
     spreadIndex.push({ spreadEl, pageNumbers: [...group] });
+    spreadVisualOrders.push(visualOrder);
   }
+
+  // Resolve which spread the reader left off at so it can be rendered first.
+  const cached = loadCachedReadingPosition(filePath);
+  const targetEntry = cached ? findSpreadForPage(spreadIndex, cached.pageNumber) : null;
+  const targetGroupIndex = targetEntry ? Math.max(0, spreadIndex.indexOf(targetEntry)) : 0;
+
+  const renderSpread = async (groupIndex: number): Promise<void> => {
+    const entry = spreadIndex[groupIndex];
+    const visualOrder = spreadVisualOrders[groupIndex];
+    if (!entry || !visualOrder) return;
+    for (const pageNumber of visualOrder) {
+      const page = await pdfDocument.getPage(pageNumber);
+      const pageEl = await renderPdfPageCanvas(page, pageNumber, devicePixelRatio);
+      entry.spreadEl.appendChild(pageEl);
+    }
+  };
+
+  // buildPdfRenderWindowPlan with a radius spanning every spread yields a
+  // distance-ordered sweep: the target spread first, then alternating
+  // neighbours outward.
+  const { renderOrder } = buildPdfRenderWindowPlan(
+    spreadIndex.length,
+    targetGroupIndex,
+    spreadIndex.length,
+    spreadIndex.length,
+  );
+  const [firstGroup, ...remainingGroups] = renderOrder;
+
+  // Await only the target spread so the window becomes usable as soon as the
+  // requested page is on screen; paint the rest in the background.
+  if (firstGroup !== undefined) {
+    await renderSpread(firstGroup);
+  }
+
+  // The status overlay sits above the viewer in normal flow; hide it before
+  // measuring spread offsets so the restored scroll position is accurate.
+  setStatus(null);
+  restoreScrollAfterRender(scrollEl, cached, targetEntry);
+
+  void (async () => {
+    try {
+      for (const groupIndex of remainingGroups) {
+        await renderSpread(groupIndex);
+      }
+    } catch (error) {
+      console.warn("[riida] viewer window: background page rendering stopped:", error);
+    }
+  })();
+
   return { spreadIndex, bindingDirection: detectedBinding };
 }
 
@@ -865,9 +955,7 @@ async function boot(): Promise<void> {
   }
 
   try {
-    const { spreadIndex, bindingDirection } = await renderPdfAllPages(filePath, viewerEl);
-    setStatus(null);
-    restoreReadingPosition(filePath, scrollEl, spreadIndex);
+    const { spreadIndex, bindingDirection } = await renderPdfDocument(filePath, viewerEl, scrollEl);
     installReadingPositionPersistence(filePath, scrollEl, spreadIndex);
     installSpreadKeyboardNavigation(scrollEl, spreadIndex, bindingDirection);
     activeBookFilePath = filePath;

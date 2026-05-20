@@ -543,16 +543,20 @@ function writeSettingsPanelSession(state: { open: boolean; scope: ViewerSettings
   }
 }
 
+// Applies the preferences the viewer window can reflect without re-rendering
+// (background, scroll mode, EPUB font size). Provided by boot, which holds the
+// render context.
+type ApplyLiveViewerSettings = (preferences: ViewerSettings) => void;
+
 // Wire the viewer settings panel: the toggle button, the global/file scope
 // tabs, and every preference control. A changed control is persisted with the
-// same save_*_viewer_preferences commands the in-app viewer uses, then the
-// window reloads so boot re-renders from the new preferences. pageMode,
-// bindingDirection, treatFirstPageAsCover and scrollMode take visible effect;
-// the remaining preferences are persisted (and shared with the in-app viewer)
-// but not yet reflected by the viewer window's renderer.
+// same save_*_viewer_preferences commands the in-app viewer uses. Layout
+// preferences (page mode, binding direction, cover) reload the window so the
+// PDF is re-laid-out; every other change is applied in place via applyLive.
 async function installViewerSettingsPanel(
   filePath: string,
   sourceType: ViewerSourceType,
+  applyLive: ApplyLiveViewerSettings,
 ): Promise<void> {
   const overlayControlsEl = document.querySelector<HTMLElement>("#viewer-overlay-controls");
   const toggleEl = document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
@@ -613,6 +617,10 @@ async function installViewerSettingsPanel(
     console.warn("[riida] viewer window: failed to load viewer preferences:", error);
     return;
   }
+
+  // The layout the renderer is currently showing. A persisted change only
+  // forces a reload when it moves these fields away from this baseline.
+  const renderedEffective = payload.effective;
 
   const session = readSettingsPanelSession();
   let scope: ViewerSettingsScope = session.scope;
@@ -678,13 +686,22 @@ async function installViewerSettingsPanel(
     };
   };
 
-  const persistAndReload = async (): Promise<void> => {
+  // Persist the current control values. Layout preferences (page mode, binding
+  // direction, cover) need the PDF re-laid-out, so those reload the window;
+  // every other change — background, scroll mode, EPUB font size — is applied
+  // in place to avoid a reload flicker.
+  const persistChange = async (): Promise<void> => {
     const preferences = gather();
+    let updated: ViewerSettingsPayload;
     try {
       if (scope === "file") {
-        await invoke("save_file_viewer_preferences", { filePath, sourceType, preferences });
+        updated = await invoke<ViewerSettingsPayload>("save_file_viewer_preferences", {
+          filePath,
+          sourceType,
+          preferences,
+        });
       } else {
-        await invoke("save_default_viewer_preferences", {
+        updated = await invoke<ViewerSettingsPayload>("save_default_viewer_preferences", {
           currentFilePath: filePath,
           sourceType,
           preferences,
@@ -694,9 +711,21 @@ async function installViewerSettingsPanel(
       console.error("[riida] viewer window: failed to save viewer preferences:", error);
       return;
     }
-    // boot re-reads the saved preferences and re-renders; keep the panel open.
-    writeSettingsPanelSession({ open: true, scope });
-    window.location.reload();
+
+    const layoutChanged =
+      sourceType === "pdf" &&
+      (renderedEffective.pageMode !== updated.effective.pageMode ||
+        renderedEffective.bindingDirection !== updated.effective.bindingDirection ||
+        renderedEffective.treatFirstPageAsCover !== updated.effective.treatFirstPageAsCover);
+    if (layoutChanged) {
+      // boot re-reads the saved preferences and re-renders; keep the panel open.
+      writeSettingsPanelSession({ open: true, scope });
+      window.location.reload();
+      return;
+    }
+
+    payload = updated;
+    applyLive(updated.effective);
   };
 
   toggleEl.addEventListener("click", () => {
@@ -725,17 +754,17 @@ async function installViewerSettingsPanel(
     coverModeEl,
     epubFontSizeEl,
   ]) {
-    control.addEventListener("change", () => void persistAndReload());
+    control.addEventListener("change", () => void persistChange());
   }
 
   // Background picker: choosing a swatch is an explicit choice, so it clears
   // "inherit"; the inherit checkbox toggles between inherit and the
   // theme-matching colour. Both keep the controls consistent before gather()
-  // reads them, since each change persists and reloads.
+  // reads them.
   for (const radio of backgroundRadios) {
     radio.addEventListener("change", () => {
       backgroundInheritEl.checked = false;
-      void persistAndReload();
+      void persistChange();
     });
   }
   backgroundInheritEl.addEventListener("change", () => {
@@ -752,7 +781,7 @@ async function installViewerSettingsPanel(
         radio.checked = radio.value === explicit;
       }
     }
-    void persistAndReload();
+    void persistChange();
   });
 
   populate();
@@ -1601,6 +1630,7 @@ async function renderPdfDocument(
 type EpubRenderResult = {
   rendition: import("epubjs").Rendition;
   isRtl: boolean;
+  applyLive: ApplyLiveViewerSettings;
 };
 
 function looksLikeEpubPath(filePath: string): boolean {
@@ -1637,23 +1667,41 @@ async function renderEpubBook(filePath: string, viewerEl: HTMLElement): Promise<
     allowScriptedContent: true,
   });
 
-  // Apply the resolved viewer background: the container surfaces plus, via a
-  // content hook, every EPUB section as it renders.
-  const backgroundMode = (await loadEffectiveViewerSettings(filePath, "epub")).backgroundMode;
-  const palette = viewerColorPaletteForMode(backgroundMode, loadPersistedAppTheme());
+  // Apply the resolved viewer background to the container surfaces and, via a
+  // content hook, to every EPUB section as it renders. epubPalette is mutable
+  // so the settings panel can recolour the book in place without a reload.
+  const epubPreferences = await loadEffectiveViewerSettings(filePath, "epub");
   const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
-  if (backgroundMode === "inherit-theme") {
-    mainPaneEl?.style.removeProperty("background-color");
-    viewerEl.style.removeProperty("background-color");
-  } else {
-    if (mainPaneEl) {
-      mainPaneEl.style.backgroundColor = palette.background;
+  let epubPalette = viewerColorPaletteForMode(
+    epubPreferences.backgroundMode,
+    loadPersistedAppTheme(),
+  );
+  const applyEpubBackground = (backgroundMode: ViewerBackgroundMode): void => {
+    epubPalette = viewerColorPaletteForMode(backgroundMode, loadPersistedAppTheme());
+    if (backgroundMode === "inherit-theme") {
+      mainPaneEl?.style.removeProperty("background-color");
+      viewerEl.style.removeProperty("background-color");
+    } else {
+      if (mainPaneEl) {
+        mainPaneEl.style.backgroundColor = epubPalette.background;
+      }
+      viewerEl.style.backgroundColor = epubPalette.background;
     }
-    viewerEl.style.backgroundColor = palette.background;
-  }
+    const contentsList = rendition.getContents() as unknown as import("epubjs").Contents[];
+    for (const contents of contentsList) {
+      applyEpubColorsToDocument(contents.document, epubPalette);
+    }
+  };
   rendition.hooks.content.register((contents: import("epubjs").Contents) => {
-    applyEpubColorsToDocument(contents.document, palette);
+    applyEpubColorsToDocument(contents.document, epubPalette);
   });
+
+  const applyLive: ApplyLiveViewerSettings = (preferences) => {
+    applyEpubBackground(preferences.backgroundMode);
+    rendition.themes.fontSize(`${preferences.epubFontSize}%`);
+  };
+  // Initial apply: honour the saved background and font size on first render.
+  applyLive(epubPreferences);
 
   const cached = loadCachedReadingPosition(filePath);
   const restoreCfi = cached?.cfi ?? undefined;
@@ -1692,7 +1740,7 @@ async function renderEpubBook(filePath: string, viewerEl: HTMLElement): Promise<
 
   installEpubToc(book, rendition);
 
-  return { rendition, isRtl };
+  return { rendition, isRtl, applyLive };
 }
 
 function installEpubKeyboardNavigation(
@@ -2105,10 +2153,10 @@ async function boot(): Promise<void> {
       return;
     }
     try {
-      const { rendition, isRtl } = await renderEpubBook(filePath, epubViewerEl);
+      const { rendition, isRtl, applyLive } = await renderEpubBook(filePath, epubViewerEl);
       setStatus(null);
       installEpubKeyboardNavigation(rendition, isRtl);
-      void installViewerSettingsPanel(filePath, "epub");
+      void installViewerSettingsPanel(filePath, "epub", applyLive);
       installBookEditors(filePath);
       activeBookFilePath = filePath;
       syncNoteUi();
@@ -2129,7 +2177,11 @@ async function boot(): Promise<void> {
     const { spreadIndex, bindingDirection } = await renderPdfDocument(filePath, viewerEl, scrollEl);
     installReadingPositionPersistence(filePath, scrollEl, spreadIndex);
     installSpreadKeyboardNavigation(scrollEl, spreadIndex, bindingDirection);
-    void installViewerSettingsPanel(filePath, "pdf");
+    const applyLivePdfSettings: ApplyLiveViewerSettings = (preferences) => {
+      applyPdfViewerBackground(preferences.backgroundMode);
+      scrollEl.dataset.scrollMode = preferences.scrollMode;
+    };
+    void installViewerSettingsPanel(filePath, "pdf", applyLivePdfSettings);
     installBookEditors(filePath);
     activeBookFilePath = filePath;
     syncNoteUi();

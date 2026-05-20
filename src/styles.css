@@ -42,6 +42,9 @@
   --accent: rgb(var(--accent-rgb));
   --accent-soft: rgb(var(--accent-soft-rgb));
   --shadow: rgb(var(--shadow-rgb) / 0.12);
+  /* Soft drop shadow around a rendered PDF page. Shared by the in-app viewer
+     and the standalone viewer window so both render identical page depth. */
+  --pdf-page-shadow: 0 12px 28px rgb(var(--shadow-rgb) / 0.14);
 }
 
 :root[data-theme="snow-white"] {
@@ -177,7 +180,9 @@ body[data-window-role="viewer"] .pdfjs-spread {
   max-width: 100%;
   height: calc(100vh - 56px);
   margin: 0;
-  gap: 6px;
+  /* Keep the two pages of a spread flush at the spine, matching the in-app
+     viewer's .pdfjs-spread (gap: 0). */
+  gap: 0;
   /* Reset shell grid rules so the flex layout above wins. */
   grid-template-columns: none;
   grid-template-rows: none;
@@ -209,6 +214,8 @@ body[data-window-role="viewer"] .pdfjs-page canvas {
   width: auto;
   height: auto;
   object-fit: contain;
+  /* Same page depth as the in-app viewer's .pdfjs-viewer .page. */
+  box-shadow: var(--pdf-page-shadow);
 }
 
 /* Paged scroll mode: the scroll container snaps each spread to the top of the
@@ -1957,7 +1964,7 @@ h1 {
 .pdfjs-viewer .page {
   --user-unit: 1;
   --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
-  box-shadow: 0 12px 28px rgb(var(--shadow-rgb) / 0.14);
+  box-shadow: var(--pdf-page-shadow);
   position: relative;
   background: white;
   overflow: visible;

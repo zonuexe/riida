@@ -51,6 +51,7 @@ import {
 } from "./viewer-layout-utils";
 import {
   DEFAULT_VIEWER_SETTINGS,
+  preferredExplicitViewerBackgroundMode,
   viewerColorPaletteForMode,
   type ViewerBackgroundMode,
   type ViewerColorPalette,
@@ -645,8 +646,9 @@ async function installViewerSettingsPanel(
     const inherits = settings.backgroundMode === "inherit-theme";
     backgroundInheritEl.checked = inherits;
     for (const radio of backgroundRadios) {
+      // Radios stay enabled even while "inherit" is on, so a swatch click can
+      // switch away from inherit in one action.
       radio.checked = !inherits && radio.value === settings.backgroundMode;
-      radio.disabled = inherits;
     }
   };
 
@@ -722,11 +724,36 @@ async function installViewerSettingsPanel(
     scrollModeEl,
     coverModeEl,
     epubFontSizeEl,
-    backgroundInheritEl,
-    ...backgroundRadios,
   ]) {
     control.addEventListener("change", () => void persistAndReload());
   }
+
+  // Background picker: choosing a swatch is an explicit choice, so it clears
+  // "inherit"; the inherit checkbox toggles between inherit and the
+  // theme-matching colour. Both keep the controls consistent before gather()
+  // reads them, since each change persists and reloads.
+  for (const radio of backgroundRadios) {
+    radio.addEventListener("change", () => {
+      backgroundInheritEl.checked = false;
+      void persistAndReload();
+    });
+  }
+  backgroundInheritEl.addEventListener("change", () => {
+    if (backgroundInheritEl.checked) {
+      for (const radio of backgroundRadios) {
+        radio.checked = false;
+      }
+    } else {
+      const explicit = preferredExplicitViewerBackgroundMode(
+        "inherit-theme",
+        loadPersistedAppTheme(),
+      );
+      for (const radio of backgroundRadios) {
+        radio.checked = radio.value === explicit;
+      }
+    }
+    void persistAndReload();
+  });
 
   populate();
   syncToggle();

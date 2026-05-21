@@ -2,7 +2,7 @@
 
 This file was generated from the currently installed Rust dependencies used by riida.
 
-- Rust dependencies: 446
+- Rust dependencies: 447
 
 _Regenerate with `npm run generate:third-party-licenses` inside the Nix development shell._
 
@@ -1760,7 +1760,7 @@ DEALINGS IN THE SOFTWARE.
 
 _See the [full text of the Apache License 2.0](#apache-20)._
 
-### cipher 0.5.1
+### cipher 0.5.2
 
 - License: MIT OR Apache-2.0
 - Authors: RustCrypto Developers
@@ -2556,7 +2556,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### crypto-common 0.2.1
+### crypto-common 0.2.2
 
 - License: MIT OR Apache-2.0
 - Authors: RustCrypto Developers
@@ -8246,7 +8246,7 @@ SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### libbz2-rs-sys 0.2.4
+### libbz2-rs-sys 0.2.5
 
 - License: bzip2-1.0.6
 - Source: https://github.com/trifectatechfoundation/libbzip2-rs
@@ -8610,7 +8610,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### lzma-rust2 0.16.2
+### lzma-rust2 0.16.3
 
 - License: Apache-2.0
 - Source: https://github.com/hasenbanck/lzma-rust2/
@@ -8881,7 +8881,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### muda 0.19.1
+### muda 0.19.2
 
 - License: Apache-2.0 OR MIT
 - Source: https://github.com/tauri-apps/muda
@@ -9068,7 +9068,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### num-conv 0.2.1
+### num-conv 0.2.2
 
 - License: MIT OR Apache-2.0
 - Authors: Jacob Pratt <jacob@jhpratt.dev>
@@ -12605,6 +12605,49 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
+### sha2 0.11.0
+
+- License: MIT OR Apache-2.0
+- Authors: RustCrypto Developers
+- Source: https://github.com/RustCrypto/hashes
+
+#### LICENSE-APACHE
+
+_See the [full text of the Apache License 2.0](#apache-20)._
+
+#### LICENSE-MIT
+
+```text
+Copyright (c) 2016-2026 The RustCrypto Project Developers
+Copyright (c) 2016 Artyom Pavlov
+Copyright (c) 2009-2013 Mozilla Foundation
+Copyright (c) 2006-2009 Graydon Hoare
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
 ### shlex 1.3.0
 
 - License: MIT OR Apache-2.0
@@ -13320,7 +13363,7 @@ Creator: Person: Daniel Thompson-Yvetot
 
 _See the [full text of the Apache License 2.0](#apache-20)._
 
-### tauri 2.11.1
+### tauri 2.11.2
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13356,7 +13399,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tauri-build 2.6.1
+### tauri-build 2.6.2
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13392,7 +13435,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tauri-codegen 2.6.1
+### tauri-codegen 2.6.2
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13428,7 +13471,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tauri-macros 2.6.1
+### tauri-macros 2.6.2
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13464,7 +13507,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tauri-plugin 2.6.1
+### tauri-plugin 2.6.2
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13655,7 +13698,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/tauri.git
 Creator: Person: Daniel Thompson-Yvetot
 ```
 
-### tauri-runtime 2.11.1
+### tauri-runtime 2.11.2
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13691,7 +13734,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tauri-runtime-wry 2.11.1
+### tauri-runtime-wry 2.11.2
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -13727,7 +13770,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tauri-utils 2.9.1
+### tauri-utils 2.9.2
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -16640,7 +16683,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### winnow 1.0.2
+### winnow 1.0.3
 
 - License: MIT
 - Source: https://github.com/winnow-rs/winnow

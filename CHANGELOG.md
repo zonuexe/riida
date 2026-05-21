@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-05-21
+
+### Added
+
+- The standalone viewer window now carries the same reading chrome as the in-app reader. It gains back/forward history, a page-number jump field, a table-of-contents panel (built from the PDF outline or the EPUB navigation document), the viewer settings panel with global and per-file scopes, and tag and metadata editing. Clicking an in-document PDF link — a table-of-contents entry or cross-reference — jumps to its destination and records the jump in the back/forward history. The Tags and Metadata buttons stay hidden until the settings menu is opened so they never cover the page while reading.
+
+### Changed
+
+- Opening a book in the viewer window is noticeably quicker to become usable: the page you left off at is rendered first, instead of rendering sequentially from page 1. The viewer window also inherits the viewer preferences saved for the book and matches the in-app viewer's spread style — the two pages of a spread sit flush and carry the same soft page shadow.
+- Background color, scroll mode, and EPUB font size changed from the viewer window's settings panel now apply in place; only layout changes (page mode, binding direction, cover handling) reload the window.
+
+### Fixed
+
+- The viewer window no longer snaps back to the top of the document shortly after opening to a saved reading position.
+- The viewer background color picker now works: choosing a swatch applies the color to the reading surface, and the frosted overlay chrome (table-of-contents button, settings panel) refreshes instead of keeping the previous color.
+
 ## [0.6.0] - 2026-05-16
 
 ### Added
@@ -384,7 +400,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/zonuexe/riida/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/zonuexe/riida/compare/v0.5.5...v0.6.0
 [0.5.5]: https://github.com/zonuexe/riida/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/zonuexe/riida/compare/v0.5.3...v0.5.4

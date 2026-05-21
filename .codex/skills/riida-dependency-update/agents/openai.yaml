@@ -1,0 +1,4 @@
+interface:
+  display_name: "riida Dependency Update"
+  short_description: "Update npm and Cargo dependencies, keeping notices and checks consistent."
+  default_prompt: "Update riida's npm and Cargo dependencies, regenerate bundled license notices, run release verification, and commit the npm and Rust updates as separate commits."

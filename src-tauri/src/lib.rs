@@ -44,6 +44,7 @@ const NIGHT_CITY_VIEWER_BACKGROUND_MODE: &str = "night-city";
 const NAVY_BLUE_VIEWER_BACKGROUND_MODE: &str = "navy-blue";
 
 static APP_PATHS: OnceLock<AppPaths> = OnceLock::new();
+static DATABASE: OnceLock<Mutex<Connection>> = OnceLock::new();
 
 fn should_allow_internal_navigation(url: &Url) -> bool {
     match url.scheme() {
@@ -661,7 +662,7 @@ fn load_config() -> Result<AppConfig, String> {
 /// SQLite DB and rewrite the file with the current version stamped, so
 /// subsequent launches skip the work.
 fn migrate_legacy_config_if_needed(config_path: &Path) -> Result<(), String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     migrate_legacy_config_with_connection(config_path, &connection)
 }
 
@@ -806,6 +807,21 @@ fn open_database() -> Result<Connection, String> {
 
     let connection = Connection::open(database_file).map_err(|error| error.to_string())?;
 
+    // WAL keeps readers from blocking the writer and is safe for the
+    // out-of-process MCP writer that shares this database. `synchronous =
+    // NORMAL` is the recommended companion for WAL and avoids an fsync on
+    // every commit. `busy_timeout` lets a concurrent writer (e.g. the MCP
+    // server) finish instead of failing immediately with SQLITE_BUSY.
+    connection
+        .execute_batch(
+            "
+            PRAGMA journal_mode = WAL;
+            PRAGMA synchronous = NORMAL;
+            PRAGMA busy_timeout = 5000;
+            ",
+        )
+        .map_err(|error| error.to_string())?;
+
     connection
         .execute_batch(
             "
@@ -931,6 +947,29 @@ fn open_database() -> Result<Connection, String> {
     migrate_paths_to_nfc(&connection).map_err(|error| error.to_string())?;
 
     Ok(connection)
+}
+
+/// Open the shared database connection once and store it in the process-wide
+/// `DATABASE` cell. Schema creation, column back-fills, and the NFC path
+/// migration all run here exactly once at startup instead of on every command.
+fn initialize_database() -> Result<(), String> {
+    if DATABASE.get().is_some() {
+        return Ok(());
+    }
+    let connection = open_database()?;
+    let _ = DATABASE.set(Mutex::new(connection));
+    Ok(())
+}
+
+/// Lock the shared database connection. Callers hold the guard only for the
+/// duration of their own statements; expensive non-database work (such as the
+/// filesystem walk during a rescan) must happen before acquiring this lock.
+fn lock_database() -> Result<std::sync::MutexGuard<'static, Connection>, String> {
+    DATABASE
+        .get()
+        .ok_or_else(|| "database is not initialized".to_string())?
+        .lock()
+        .map_err(|error| error.to_string())
 }
 
 /// One-time migration: convert any NFD file_path values to NFC across all tables.
@@ -1571,15 +1610,24 @@ fn load_viewer_preferences_payload(
     })
 }
 
-fn scan_and_index(
-    connection: &mut Connection,
+/// A book discovered on disk, ready to be upserted into the index.
+struct IndexableBook {
+    file_path: String,
+    file_name: String,
+    file_size: u64,
+    modified_at: u64,
+    source_type: &'static str,
+}
+
+/// Walk the configured library roots and collect every indexable book.
+///
+/// This performs the filesystem traversal and `stat` calls but touches no
+/// database state, so it can run without holding the shared connection lock.
+fn collect_indexable_books(
     config: &AppConfig,
     excluded_patterns: &CompiledExcludePatterns,
-) -> Result<(), String> {
-    let scan_token = current_scan_token()?;
-    let transaction = connection
-        .transaction()
-        .map_err(|error| error.to_string())?;
+) -> Result<Vec<IndexableBook>, String> {
+    let mut books = Vec::new();
 
     for root in &config.library_roots {
         for entry in WalkDir::new(root)
@@ -1608,25 +1656,55 @@ fn scan_and_index(
                 .unwrap_or("unknown")
                 .nfc()
                 .collect();
-            let modified_at = modified_unix_seconds(&metadata);
-            let source_type = book_source_type(path).unwrap_or("pdf");
 
-            transaction
-                .execute(
-                    "
-                    INSERT INTO books (file_path, file_name, file_size, modified_at, indexed_at, source_type)
-                    VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-                    ON CONFLICT(file_path) DO UPDATE SET
-                      file_name = excluded.file_name,
-                      file_size = excluded.file_size,
-                      modified_at = excluded.modified_at,
-                      indexed_at = excluded.indexed_at,
-                      source_type = excluded.source_type
-                    ",
-                    params![file_path, file_name, file_size, modified_at, scan_token, source_type],
-                )
-                .map_err(|error| error.to_string())?;
+            books.push(IndexableBook {
+                file_path,
+                file_name,
+                file_size,
+                modified_at: modified_unix_seconds(&metadata),
+                source_type: book_source_type(path).unwrap_or("pdf"),
+            });
         }
+    }
+
+    Ok(books)
+}
+
+/// Upsert the discovered books inside a single transaction and prune any rows
+/// not seen during this scan. Only the database work happens here, so the
+/// caller can keep the connection lock held for the shortest possible time.
+fn index_books(
+    connection: &mut Connection,
+    books: &[IndexableBook],
+    scan_token: u64,
+) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| error.to_string())?;
+
+    for book in books {
+        transaction
+            .execute(
+                "
+                INSERT INTO books (file_path, file_name, file_size, modified_at, indexed_at, source_type)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                ON CONFLICT(file_path) DO UPDATE SET
+                  file_name = excluded.file_name,
+                  file_size = excluded.file_size,
+                  modified_at = excluded.modified_at,
+                  indexed_at = excluded.indexed_at,
+                  source_type = excluded.source_type
+                ",
+                params![
+                    book.file_path,
+                    book.file_name,
+                    book.file_size,
+                    book.modified_at,
+                    scan_token,
+                    book.source_type
+                ],
+            )
+            .map_err(|error| error.to_string())?;
     }
 
     transaction
@@ -1639,6 +1717,21 @@ fn scan_and_index(
     transaction.commit().map_err(|error| error.to_string())?;
 
     Ok(())
+}
+
+/// Convenience wrapper combining the walk and the upsert. Production code
+/// calls `collect_indexable_books` + `index_books` separately so the
+/// filesystem walk runs without holding the connection lock; this single-call
+/// form is retained for tests that operate on an isolated in-memory database.
+#[cfg(test)]
+fn scan_and_index(
+    connection: &mut Connection,
+    config: &AppConfig,
+    excluded_patterns: &CompiledExcludePatterns,
+) -> Result<(), String> {
+    let books = collect_indexable_books(config, excluded_patterns)?;
+    let scan_token = current_scan_token()?;
+    index_books(connection, &books, scan_token)
 }
 
 fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibrarySnapshot, String> {
@@ -1942,9 +2035,14 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
 }
 
 fn refresh_library_snapshot(config: &AppConfig) -> Result<LibrarySnapshot, String> {
-    let mut connection = open_database()?;
     let excluded_patterns = compile_exclude_patterns(config)?;
-    scan_and_index(&mut connection, config, &excluded_patterns)?;
+    // Walk the filesystem before touching the shared connection so a large
+    // rescan does not block concurrent database commands while it runs.
+    let books = collect_indexable_books(config, &excluded_patterns)?;
+    let scan_token = current_scan_token()?;
+
+    let mut connection = lock_database()?;
+    index_books(&mut connection, &books, scan_token)?;
     load_snapshot(&connection, config)
 }
 
@@ -2430,16 +2528,26 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
 }
 
 #[tauri::command]
-fn library_snapshot(config_state: State<'_, ConfigState>) -> Result<LibrarySnapshot, String> {
+async fn library_snapshot(config_state: State<'_, ConfigState>) -> Result<LibrarySnapshot, String> {
     let config = lock_config(&config_state)?.clone();
-    refresh_library_snapshot(&config)
+    // The rescan walks the whole library and writes to SQLite; run it on the
+    // blocking pool so the UI thread stays responsive.
+    tauri::async_runtime::spawn_blocking(move || refresh_library_snapshot(&config))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn load_library_snapshot(config_state: State<'_, ConfigState>) -> Result<LibrarySnapshot, String> {
+async fn load_library_snapshot(
+    config_state: State<'_, ConfigState>,
+) -> Result<LibrarySnapshot, String> {
     let config = lock_config(&config_state)?.clone();
-    let connection = open_database()?;
-    load_snapshot(&connection, &config)
+    tauri::async_runtime::spawn_blocking(move || {
+        let connection = lock_database()?;
+        load_snapshot(&connection, &config)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -2518,7 +2626,7 @@ fn save_app_config(
 
 #[tauri::command]
 fn load_note(file_path: String) -> Result<NoteDocument, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     let mut statement = connection
         .prepare(
             "
@@ -2555,7 +2663,7 @@ fn load_note(file_path: String) -> Result<NoteDocument, String> {
 
 #[tauri::command]
 fn save_note(file_path: String, content: String) -> Result<NoteDocument, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     let updated_at = std::time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| error.to_string())?
@@ -2585,7 +2693,7 @@ fn save_note(file_path: String, content: String) -> Result<NoteDocument, String>
 
 #[tauri::command]
 fn save_book_tags(file_path: String, tags: Vec<String>) -> Result<BookTagsPayload, String> {
-    let mut connection = open_database()?;
+    let mut connection = lock_database()?;
     let normalized = normalize_book_tags(tags);
     let transaction = connection
         .transaction()
@@ -2792,13 +2900,13 @@ fn open_viewer_window(
 
 #[tauri::command]
 fn rename_tag_globally(old_tag: String, new_tag: String) -> Result<u64, String> {
-    let mut connection = open_database()?;
+    let mut connection = lock_database()?;
     rename_book_tag(&mut connection, &old_tag, &new_tag)
 }
 
 #[tauri::command]
 fn delete_tag_globally(tag: String) -> Result<u64, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     delete_book_tag(&connection, &tag)
 }
 
@@ -2816,7 +2924,7 @@ fn extract_epub_metadata(file_path: String) -> Result<EpubMetadataPayload, Strin
 
 #[tauri::command]
 fn load_book_metadata(file_path: String) -> Result<BookMetadataPayload, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     let (table_name, file_path_filter) =
         if file_path.starts_with("kindle:") || file_path.starts_with("custom:") {
             ("external_books", "")
@@ -2882,7 +2990,7 @@ fn load_book_metadata(file_path: String) -> Result<BookMetadataPayload, String> 
 
 #[tauri::command]
 fn save_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPayload, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     let input_source_type = input.source_type.clone();
     let mut payload = normalize_book_metadata(input)?;
     let updated_at = std::time::SystemTime::now()
@@ -2996,7 +3104,7 @@ fn save_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPayload, S
 
 #[tauri::command]
 fn delete_book_metadata(file_path: String) -> Result<(), String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
 
     if file_path.starts_with("kindle:") || file_path.starts_with("custom:") {
         connection
@@ -3047,7 +3155,7 @@ fn save_custom_source(
     name: String,
     icon: String,
 ) -> Result<CustomSource, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     let source_id = id.unwrap_or_else(uuid_v4);
     let created_at = std::time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -3074,7 +3182,7 @@ fn save_custom_source(
 
 #[tauri::command]
 fn delete_custom_source(id: String) -> Result<(), String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     // Collect file_paths of books in this source before deleting
     let mut stmt = connection
         .prepare("SELECT file_path FROM external_books WHERE source_type = ?1")
@@ -3118,7 +3226,7 @@ fn delete_custom_source(id: String) -> Result<(), String> {
 
 #[tauri::command]
 fn list_shelves() -> Result<Vec<Shelf>, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     let mut stmt = connection
         .prepare(
             "
@@ -3159,7 +3267,7 @@ fn save_shelf(draft: ShelfDraft) -> Result<Shelf, String> {
         .duration_since(UNIX_EPOCH)
         .map_err(|error| error.to_string())?
         .as_secs();
-    let connection = open_database()?;
+    let connection = lock_database()?;
 
     if let Some(id) = draft.id {
         connection
@@ -3229,7 +3337,7 @@ fn save_shelf(draft: ShelfDraft) -> Result<Shelf, String> {
 
 #[tauri::command]
 fn delete_shelf(id: String) -> Result<(), String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     connection
         .execute("DELETE FROM shelves WHERE id = ?1", params![&id])
         .map_err(|error| error.to_string())?;
@@ -3238,7 +3346,7 @@ fn delete_shelf(id: String) -> Result<(), String> {
 
 #[tauri::command]
 fn reorder_shelves(ids: Vec<String>) -> Result<(), String> {
-    let mut connection = open_database()?;
+    let mut connection = lock_database()?;
     let tx = connection
         .transaction()
         .map_err(|error| error.to_string())?;
@@ -3255,7 +3363,7 @@ fn reorder_shelves(ids: Vec<String>) -> Result<(), String> {
 
 #[tauri::command]
 fn load_reading_position(file_path: String) -> Result<Option<ReadingPosition>, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     let mut statement = connection
         .prepare(
             "
@@ -3293,7 +3401,7 @@ fn save_reading_position(
     page_number: u32,
     page_offset_ratio: f64,
 ) -> Result<ReadingPosition, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     let updated_at = std::time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| error.to_string())?
@@ -3325,7 +3433,7 @@ fn save_reading_position(
 
 #[tauri::command]
 fn save_epub_position(file_path: String, cfi: String) -> Result<(), String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     let updated_at = std::time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| error.to_string())?
@@ -3356,7 +3464,7 @@ fn load_viewer_preferences(
     file_path: String,
     source_type: String,
 ) -> Result<ViewerPreferencesPayload, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     load_viewer_preferences_payload(&connection, Some(&file_path), &source_type)
 }
 
@@ -3366,7 +3474,7 @@ fn save_default_viewer_preferences(
     source_type: String,
     preferences: ViewerPreferences,
 ) -> Result<ViewerPreferencesPayload, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     let normalized_source_type = normalize_viewer_source_type(&source_type);
     let global_scope_key = viewer_global_scope_key(&normalized_source_type);
     save_viewer_preferences_record(
@@ -3389,7 +3497,7 @@ fn save_file_viewer_preferences(
     source_type: String,
     preferences: ViewerPreferences,
 ) -> Result<ViewerPreferencesPayload, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     let normalized_source_type = normalize_viewer_source_type(&source_type);
     let global_scope_key = viewer_global_scope_key(&normalized_source_type);
     let global = load_saved_viewer_preferences(&connection, &global_scope_key)?
@@ -3413,7 +3521,7 @@ fn clear_file_viewer_preferences(
     file_path: String,
     source_type: String,
 ) -> Result<ViewerPreferencesPayload, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     let normalized_source_type = normalize_viewer_source_type(&source_type);
     let file_scope_key = viewer_file_scope_key(&file_path, &normalized_source_type);
     connection
@@ -3459,13 +3567,13 @@ fn upsert_pdf_password(
 
 #[tauri::command]
 fn get_pdf_password(file_path: String) -> Result<Option<String>, String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     query_pdf_password(&connection, &file_path)
 }
 
 #[tauri::command]
 fn save_pdf_password(file_path: String, password: String) -> Result<(), String> {
-    let connection = open_database()?;
+    let connection = lock_database()?;
     upsert_pdf_password(&connection, &file_path, &password)
 }
 
@@ -3476,6 +3584,7 @@ pub fn run() {
             let paths = resolve_app_paths()?;
             let _ = APP_PATHS.set(paths.clone());
             prepare_storage(&paths)?;
+            initialize_database()?;
             migrate_legacy_config_if_needed(&paths.config_file)?;
             let config = load_config()?;
             start_library_watcher(app.handle().clone(), config.clone())?;

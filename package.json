@@ -21,6 +21,8 @@
     "rust:lint": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
     "rust:audit": "cargo audit --file src-tauri/Cargo.lock",
     "rust:machete": "cargo machete src-tauri",
+    "cov:rust": "cargo llvm-cov --manifest-path src-tauri/Cargo.toml nextest",
+    "cov:rust:html": "cargo llvm-cov --manifest-path src-tauri/Cargo.toml --html nextest",
     "lint": "oxlint --vitest-plugin --deny-warnings src vite.config.ts",
     "lint:fix": "oxlint --vitest-plugin --fix src vite.config.ts",
     "fmt": "oxfmt --write src index.html vite.config.ts",

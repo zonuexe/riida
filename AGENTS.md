@@ -496,6 +496,25 @@ Good candidates for future `proptest` coverage:
 - reading-position normalization
 - watcher rescan decisions
 
+Rust coverage is measured with [`cargo-llvm-cov`](https://github.com/taiki-e/cargo-llvm-cov),
+the parallel to the frontend's `test:coverage`:
+
+```bash
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run cov:rust
+nix --extra-experimental-features 'nix-command flakes' develop --command npm run cov:rust:html
+```
+
+`cov:rust` runs the `nextest` suite under instrumentation and prints a
+per-file summary; `cov:rust:html` also writes a browsable report under
+`src-tauri/target/llvm-cov/html` (gitignored with the rest of `target/`).
+It is reporting-only — there is no coverage threshold gate and it is not
+part of `check:rust`, so it does not block CI.
+
+`cargo-llvm-cov` needs `llvm-cov`/`llvm-profdata` matching rustc's LLVM
+version. The dev shell wires `LLVM_COV` / `LLVM_PROFDATA` to the matching
+`llvmPackages_21.llvm` in [flake.nix](flake.nix); bump those alongside any
+rustc upgrade that changes the major LLVM version.
+
 Mutation testing is not part of normal CI yet, but `cargo-mutants` is the preferred tool for periodic local audits.
 
 Suggested local workflow:

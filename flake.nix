@@ -28,6 +28,7 @@
           packages = with pkgs; [
             cargo
             cargo-audit
+            cargo-llvm-cov
             cargo-machete
             cargo-nextest
             clippy
@@ -48,6 +49,13 @@
           env = {
             RUST_BACKTRACE = "1";
             CARGO_TERM_COLOR = "always";
+            # cargo-llvm-cov needs llvm-cov/llvm-profdata matching rustc's LLVM
+            # version (this toolchain reports LLVM 21.1.8). The rustc wrapper
+            # does not ship the llvm-tools-preview component, so point the tools
+            # at the matching LLVM build explicitly. Bump this alongside any
+            # rustc upgrade that changes the major LLVM version.
+            LLVM_COV = "${pkgs.llvmPackages_21.llvm}/bin/llvm-cov";
+            LLVM_PROFDATA = "${pkgs.llvmPackages_21.llvm}/bin/llvm-profdata";
           };
 
           shellHook = ''

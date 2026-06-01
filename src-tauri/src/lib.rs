@@ -995,8 +995,7 @@ fn migrate_paths_to_nfc(connection: &Connection) -> Result<(), rusqlite::Error> 
             let mut stmt = connection.prepare(&format!("SELECT file_path FROM {table}"))?;
             let all_paths: Vec<String> = stmt
                 .query_map([], |row| row.get(0))?
-                .filter_map(|r| r.ok())
-                .collect();
+                .collect::<Result<Vec<_>, _>>()?;
             all_paths
                 .into_iter()
                 .filter(|p| {
@@ -1030,7 +1029,7 @@ fn migrate_paths_to_nfc(connection: &Connection) -> Result<(), rusqlite::Error> 
                             "SELECT scope_key FROM viewer_preferences WHERE file_path = ?1",
                         )?;
                         let rows = stmt.query_map(params![&nfd], |row| row.get(0))?;
-                        rows.filter_map(|r| r.ok()).collect()
+                        rows.collect::<Result<Vec<_>, _>>()?
                     };
                     for scope_key in scope_keys {
                         let next_scope_key = scope_key.replacen(&nfd, &nfc, 1);
@@ -1054,8 +1053,7 @@ fn migrate_paths_to_nfc(connection: &Connection) -> Result<(), rusqlite::Error> 
         let mut stmt = connection.prepare("SELECT file_path, tag FROM book_tags")?;
         let all_tags: Vec<(String, String)> = stmt
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-            .filter_map(|r| r.ok())
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
         all_tags
             .into_iter()
             .filter(|(p, _)| {
@@ -1951,8 +1949,8 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
             })
         })
         .map_err(|error| error.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
 
     for row in external_rows {
         let (
@@ -3190,8 +3188,8 @@ fn delete_custom_source(id: String) -> Result<(), String> {
     let file_paths: Vec<String> = stmt
         .query_map(params![&id], |row| row.get(0))
         .map_err(|error| error.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
     for fp in &file_paths {
         connection
             .execute("DELETE FROM book_tags WHERE file_path = ?1", params![fp])
@@ -3249,7 +3247,9 @@ fn list_shelves() -> Result<Vec<Shelf>, String> {
             })
         })
         .map_err(|error| error.to_string())?;
-    let shelves = rows.filter_map(|row| row.ok()).collect::<Vec<_>>();
+    let shelves = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
     Ok(shelves)
 }
 

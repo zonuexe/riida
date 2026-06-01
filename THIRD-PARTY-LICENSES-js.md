@@ -2917,7 +2917,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @napi-rs/canvas 0.1.100
+### @napi-rs/canvas 1.0.0
 
 - License: MIT
 - Source: git+https://github.com/Brooooooklyn/canvas.git
@@ -12203,7 +12203,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### pdfjs-dist 5.7.284
+### pdfjs-dist 6.0.227
 
 - License: Apache-2.0
 - Source: git+https://github.com/mozilla/pdf.js.git

@@ -14751,7 +14751,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### temporal-polyfill-lite 0.3.6
+### temporal-polyfill-lite 0.4.0
 
 - License: MIT
 - Authors: fabon <syobon.hinata.public@gmail.com> (https://www.fabon.info/)

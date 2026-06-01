@@ -63,7 +63,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### aes 0.9.0
+### aes 0.9.1
 
 - License: MIT OR Apache-2.0
 - Authors: RustCrypto Developers
@@ -735,7 +735,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### autocfg 1.5.0
+### autocfg 1.5.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Josh Stone <cuviper@gmail.com>
@@ -1133,11 +1133,28 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### brotli 8.0.2
+### brotli 8.0.3
 
 - License: BSD-3-Clause AND MIT
 - Authors: Daniel Reiter Horn <danielrh@dropbox.com>, The Brotli Authors
 - Source: https://github.com/dropbox/rust-brotli
+
+#### LICENSE.BSD-3-Clause
+
+```text
+Copyright (c) 2016 Dropbox, Inc.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
 
 #### LICENSE.MIT
 
@@ -1163,7 +1180,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### brotli-decompressor 5.0.0
+### brotli-decompressor 5.0.1
 
 - License: BSD-3-Clause/MIT
 - Authors: Daniel Reiter Horn <danielrh@dropbox.com>, The Brotli Authors
@@ -1269,7 +1286,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### bumpalo 3.20.2
+### bumpalo 3.20.3
 
 - License: MIT OR Apache-2.0
 - Authors: Nick Fitzgerald <fitzgen@gmail.com>
@@ -1599,7 +1616,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### cc 1.2.62
+### cc 1.2.63
 
 - License: MIT OR Apache-2.0
 - Authors: Alex Crichton <alex@alexcrichton.com>
@@ -1800,7 +1817,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### cmov 0.5.3
+### cmov 0.5.4
 
 - License: Apache-2.0 OR MIT
 - Authors: RustCrypto Developers
@@ -3898,7 +3915,7 @@ SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### displaydoc 0.2.5
+### displaydoc 0.2.6
 
 - License: MIT OR Apache-2.0
 - Authors: Jane Lusby <jlusby@yaah.dev>
@@ -7001,7 +7018,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### http 1.4.0
+### http 1.4.1
 
 - License: MIT OR Apache-2.0
 - Authors: Alex Crichton <alex@alexcrichton.com>, Carl Lerche <me@carllerche.com>, Sean McArthur <sean@seanmonstar.com>
@@ -7804,11 +7821,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### inotify 0.11.1
+### inotify 0.11.2
 
 - License: ISC
-- Authors: Hanno Braun <mail@hannobraun.de>, Félix Saparelli <me@passcod.name>, Cristian Kubis <cristian.kubis@tsunix.de>, Frank Denis <github@pureftpd.org>
-- Source: https://github.com/hannobraun/inotify
+- Source: https://github.com/hannobraun/inotify-rs
 
 #### LICENSE
 
@@ -8570,7 +8586,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### log 0.4.29
+### log 0.4.30
 
 - License: MIT OR Apache-2.0
 - Authors: The Rust Project Developers
@@ -8610,7 +8626,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### lzma-rust2 0.16.3
+### lzma-rust2 0.16.4
 
 - License: Apache-2.0
 - Source: https://github.com/hasenbanck/lzma-rust2/
@@ -8659,7 +8675,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### memchr 2.8.0
+### memchr 2.8.1
 
 - License: Unlicense OR MIT
 - Authors: Andrew Gallant <jamslam@gmail.com>, bluss
@@ -8851,7 +8867,7 @@ Permission is granted to anyone to use this software for any purpose, including 
 3. This notice may not be removed or altered from any source distribution.
 ```
 
-### mio 1.2.0
+### mio 1.2.1
 
 - License: MIT
 - Authors: Carl Lerche <me@carllerche.com>, Thomas de Zeeuw <thomasdezeeuw@gmail.com>, Tokio Contributors <team@tokio.rs>
@@ -12150,7 +12166,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### serde_json 1.0.149
+### serde_json 1.0.150
 
 - License: MIT OR Apache-2.0
 - Authors: Erick Tryzelaar <erick.tryzelaar@gmail.com>, David Tolnay <dtolnay@gmail.com>
@@ -12648,7 +12664,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### shlex 1.3.0
+### shlex 2.0.1
 
 - License: MIT OR Apache-2.0
 - Authors: comex <comexk@gmail.com>, Fenhl <fenhl@fenhl.net>, Adrian Taylor <adetaylor@chromium.org>, Alex Touchet <alextouchet@outlook.com>, Daniel Parks <dp+git@oxidized.org>, Garrett Berg <googberg@gmail.com>
@@ -12864,7 +12880,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### socket2 0.6.3
+### socket2 0.6.4
 
 - License: MIT OR Apache-2.0
 - Authors: Alex Crichton <alex@alexcrichton.com>, Thomas de Zeeuw <thomasdezeeuw@gmail.com>
@@ -13320,7 +13336,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### tao 0.35.2
+### tao 0.35.3
 
 - License: Apache-2.0
 - Authors: Tauri Programme within The Commons Conservancy, The winit contributors
@@ -14638,7 +14654,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### toml_edit 0.25.11+spec-1.1.0
+### toml_edit 0.25.12+spec-1.1.0
 
 - License: MIT OR Apache-2.0
 - Source: https://github.com/toml-rs/toml
@@ -14980,10 +14996,9 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### typenum 1.20.0
+### typenum 1.20.1
 
 - License: MIT OR Apache-2.0
-- Authors: Paho Lurie-Gregg <paho@paholg.com>, Andre Bogus <bogusandre@gmail.com>
 - Source: https://github.com/paholg/typenum
 
 #### LICENSE
@@ -15219,7 +15234,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### unicode-segmentation 1.13.2
+### unicode-segmentation 1.13.3
 
 - License: MIT OR Apache-2.0
 - Authors: kwantam <kwantam@gmail.com>, Manish Goregaokar <manishsmail@gmail.com>
@@ -15409,7 +15424,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### uuid 1.23.1
+### uuid 1.23.2
 
 - License: Apache-2.0 OR MIT
 - Authors: Ashley Mannix<ashleymannix@live.com.au>, Dylan DPC<dylan.dpc@gmail.com>, Hunar Roop Kahlon<hunar.roop@gmail.com>
@@ -17041,7 +17056,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### zbus 5.15.0
+### zbus 5.16.0
 
 - License: MIT
 - Authors: Zeeshan Ali Khan <zeeshanak@gnome.org>
@@ -17077,7 +17092,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### zbus_macros 5.15.0
+### zbus_macros 5.16.0
 
 - License: MIT
 - Authors: Marc-André Lureau <marcandre.lureau@redhat.com>, Zeeshan Ali Khan <zeeshanak@gnome.org>
@@ -17149,7 +17164,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### zerocopy 0.8.48
+### zerocopy 0.8.50
 
 - License: BSD-2-Clause OR Apache-2.0 OR MIT
 - Authors: Joshua Liebow-Feeser <joshlf@google.com>, Jack Wrenn <jswrenn@amazon.com>
@@ -17757,7 +17772,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### zvariant 5.11.0
+### zvariant 5.12.0
 
 - License: MIT
 - Authors: Zeeshan Ali Khan <zeeshanak@gnome.org>
@@ -17793,7 +17808,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### zvariant_derive 5.11.0
+### zvariant_derive 5.12.0
 
 - License: MIT
 - Authors: Zeeshan Ali Khan <zeeshanak@gnome.org>
@@ -17829,7 +17844,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### zvariant_utils 3.3.1
+### zvariant_utils 3.4.0
 
 - License: MIT
 - Authors: Zeeshan Ali Khan <zeeshanak@gnome.org>, turbocooler <turbocooler@cocaine.ninja>

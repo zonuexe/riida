@@ -36,3 +36,11 @@ zip = "8.5.1"
 
 [dev-dependencies]
 proptest = "1"
+
+[profile.release]
+# Optimize the shipped desktop binary for size and speed. LTO with a single
+# codegen unit lets the optimizer work across crate boundaries, and stripping
+# symbols trims the bundle. These only affect `tauri build`, not dev or test.
+lto = true
+codegen-units = 1
+strip = true

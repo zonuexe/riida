@@ -298,6 +298,56 @@ function formatLicenseBodyAppendix(appendixEntries) {
   return lines;
 }
 
+// Compute the set of package ids reachable from the workspace members through
+// normal/build dependency edges, excluding dev-only edges. Dev-dependencies
+// (e.g. proptest) and crates reachable only through them are compiled for
+// `cargo test` but never shipped in the release binary, so they do not belong
+// in the bundled notices — the analogue of `license-checker --production` on
+// the npm side. Returns null if the metadata lacks resolve info, in which case
+// the caller falls back to including every package.
+function computeProductionPackageIds(metadata) {
+  const resolve = metadata.resolve;
+  if (!resolve || !Array.isArray(resolve.nodes)) {
+    return null;
+  }
+
+  const nodeById = new Map(resolve.nodes.map((node) => [node.id, node]));
+  const roots =
+    Array.isArray(metadata.workspace_members) && metadata.workspace_members.length > 0
+      ? metadata.workspace_members
+      : resolve.root
+        ? [resolve.root]
+        : [];
+
+  const included = new Set();
+  const stack = [...roots];
+  while (stack.length > 0) {
+    const id = stack.pop();
+    if (included.has(id)) {
+      continue;
+    }
+    included.add(id);
+
+    const node = nodeById.get(id);
+    if (!node || !Array.isArray(node.deps)) {
+      continue;
+    }
+
+    for (const dep of node.deps) {
+      const kinds = Array.isArray(dep.dep_kinds) ? dep.dep_kinds : [];
+      // Keep normal (kind === null) and build edges; drop dev-only edges. An
+      // empty dep_kinds (older cargo) is treated as a normal dependency.
+      const isProduction =
+        kinds.length === 0 || kinds.some((entry) => entry.kind === null || entry.kind === "build");
+      if (isProduction && !included.has(dep.pkg)) {
+        stack.push(dep.pkg);
+      }
+    }
+  }
+
+  return included;
+}
+
 function collectRustPackages() {
   const packages = new Map();
 
@@ -319,8 +369,15 @@ function collectRustPackages() {
       metadata = cargoMetadata(target, { offline: false });
     }
 
+    const productionIds = computeProductionPackageIds(metadata);
+
     for (const pkg of metadata.packages.filter((candidate) => candidate.source)) {
       if (packages.has(pkg.id)) {
+        continue;
+      }
+
+      // Skip dev-only crates (not part of the shipped binary).
+      if (productionIds && !productionIds.has(pkg.id)) {
         continue;
       }
 
@@ -409,7 +466,7 @@ const jsAppendixEntries = new Map();
 const rustOutput = [
   "# Third-Party Licenses (Rust)",
   "",
-  "This file was generated from the currently installed Rust dependencies used by riida.",
+  "This file was generated from the production Rust dependencies used by riida. Dev-only crates are excluded.",
   "",
   `- Rust dependencies: ${rustPackages.length}`,
   "",

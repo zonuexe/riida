@@ -3741,6 +3741,243 @@ mod tests {
         assert_eq!(stored, nfc, "non-NULL NFD path should be normalized to NFC");
     }
 
+    #[test]
+    fn apply_pre_version_migrations_flips_only_global_left_binding() {
+        let connection = test_connection();
+        // Global pdf prefs carrying the legacy default "left" binding.
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key("pdf"),
+            None,
+            "pdf",
+            viewer_preferences(
+                "dual",
+                "left",
+                "fit-width",
+                "left",
+                "wide",
+                false,
+                "inherit-theme",
+            ),
+        )
+        .expect("global prefs should save");
+        // Global epub prefs with an explicit "right" binding (not the legacy default).
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key("epub"),
+            None,
+            "epub",
+            viewer_preferences(
+                "dual",
+                "right",
+                "fit-width",
+                "left",
+                "wide",
+                false,
+                "inherit-theme",
+            ),
+        )
+        .expect("global epub prefs should save");
+        // File-scoped prefs with a "left" binding — a deliberate per-file choice.
+        let file_scope = viewer_file_scope_key("/book.pdf", "pdf");
+        save_viewer_preferences_record(
+            &connection,
+            &file_scope,
+            Some("/book.pdf"),
+            "pdf",
+            viewer_preferences(
+                "dual",
+                "left",
+                "fit-width",
+                "left",
+                "wide",
+                false,
+                "inherit-theme",
+            ),
+        )
+        .expect("file prefs should save");
+
+        apply_pre_version_migrations(&connection).expect("migration should apply");
+
+        let global_pdf =
+            load_saved_viewer_preferences(&connection, &viewer_global_scope_key("pdf"))
+                .expect("global pdf load")
+                .expect("global pdf row exists");
+        assert_eq!(
+            global_pdf.binding_direction, "auto",
+            "global legacy-left binding should flip to auto"
+        );
+
+        let global_epub =
+            load_saved_viewer_preferences(&connection, &viewer_global_scope_key("epub"))
+                .expect("global epub load")
+                .expect("global epub row exists");
+        assert_eq!(
+            global_epub.binding_direction, "right",
+            "non-left global binding should be untouched"
+        );
+
+        let file = load_saved_viewer_preferences(&connection, &file_scope)
+            .expect("file load")
+            .expect("file row exists");
+        assert_eq!(
+            file.binding_direction, "left",
+            "explicit per-file binding should be untouched"
+        );
+    }
+
+    #[test]
+    fn migrate_legacy_config_stamps_version_and_runs_migration() {
+        let connection = test_connection();
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key("pdf"),
+            None,
+            "pdf",
+            viewer_preferences(
+                "dual",
+                "left",
+                "fit-width",
+                "left",
+                "wide",
+                false,
+                "inherit-theme",
+            ),
+        )
+        .expect("global prefs should save");
+
+        let dir = unique_temp_dir("legacy-config");
+        let config_path = dir.join("riida.toml");
+        // A versionless config predates the version-stamped migration scheme.
+        fs::write(&config_path, "library_roots = []\n").expect("config should write");
+
+        migrate_legacy_config_with_connection(&config_path, &connection)
+            .expect("legacy migration should run");
+
+        // The pre-version migration flipped the legacy global binding...
+        let global = load_saved_viewer_preferences(&connection, &viewer_global_scope_key("pdf"))
+            .expect("global load")
+            .expect("global row exists");
+        assert_eq!(global.binding_direction, "auto");
+        // ...and the file was stamped with the current version so later launches skip it.
+        let rewritten = fs::read_to_string(&config_path).expect("config should read");
+        assert!(
+            rewritten.contains(&format!("version = \"{}\"", env!("CARGO_PKG_VERSION"))),
+            "config should be stamped with the current version, got: {rewritten}"
+        );
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn migrate_legacy_config_is_noop_when_version_present() {
+        let connection = test_connection();
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key("pdf"),
+            None,
+            "pdf",
+            viewer_preferences(
+                "dual",
+                "left",
+                "fit-width",
+                "left",
+                "wide",
+                false,
+                "inherit-theme",
+            ),
+        )
+        .expect("global prefs should save");
+
+        let dir = unique_temp_dir("versioned-config");
+        let config_path = dir.join("riida.toml");
+        let original = "version = \"0.0.1\"\nlibrary_roots = []\n";
+        fs::write(&config_path, original).expect("config should write");
+
+        migrate_legacy_config_with_connection(&config_path, &connection)
+            .expect("versioned config should be a no-op");
+
+        // The migration never ran, so the legacy "left" binding is preserved.
+        let global = load_saved_viewer_preferences(&connection, &viewer_global_scope_key("pdf"))
+            .expect("global load")
+            .expect("global row exists");
+        assert_eq!(global.binding_direction, "left");
+        // The already-versioned file is left byte-for-byte unchanged.
+        let after = fs::read_to_string(&config_path).expect("config should read");
+        assert_eq!(after, original, "versioned config must not be rewritten");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn migrate_legacy_config_is_noop_when_file_missing() {
+        let connection = test_connection();
+        let dir = unique_temp_dir("missing-config");
+        let config_path = dir.join("riida.toml"); // intentionally never created
+        migrate_legacy_config_with_connection(&config_path, &connection)
+            .expect("a missing config file should be a no-op");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn load_viewer_preferences_payload_applies_file_override() {
+        let connection = test_connection();
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key("pdf"),
+            None,
+            "pdf",
+            viewer_preferences(
+                "dual",
+                "auto",
+                "fit-width",
+                "left",
+                "wide",
+                false,
+                "inherit-theme",
+            ),
+        )
+        .expect("global prefs should save");
+
+        // With no file-scoped row, the effective settings fall back to global.
+        let payload = load_viewer_preferences_payload(&connection, Some("/book.pdf"), "pdf")
+            .expect("payload should load");
+        assert!(!payload.uses_file_override);
+        assert!(payload.file.is_none());
+        assert_eq!(payload.effective.binding_direction, "auto");
+
+        // A file-scoped override with an explicit "right" binding.
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_file_scope_key("/book.pdf", "pdf"),
+            Some("/book.pdf"),
+            "pdf",
+            viewer_preferences(
+                "dual",
+                "right",
+                "fit-width",
+                "left",
+                "wide",
+                false,
+                "inherit-theme",
+            ),
+        )
+        .expect("file prefs should save");
+
+        let payload = load_viewer_preferences_payload(&connection, Some("/book.pdf"), "pdf")
+            .expect("payload should load");
+        assert!(payload.uses_file_override);
+        assert_eq!(payload.effective.binding_direction, "right");
+        // The reported global is still the untouched global row.
+        assert_eq!(payload.global.binding_direction, "auto");
+
+        // Loading without a file path ignores the per-file override entirely.
+        let global_payload =
+            load_viewer_preferences_payload(&connection, None, "pdf").expect("payload should load");
+        assert!(!global_payload.uses_file_override);
+        assert_eq!(global_payload.effective.binding_direction, "auto");
+    }
+
     fn viewer_preferences(
         page_mode: &str,
         binding_direction: &str,

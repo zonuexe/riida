@@ -679,6 +679,37 @@ regression below the thresholds breaks the verification pipeline.
 DOM-driven entry points or large data files that the helper-module
 test strategy does not target.
 
+## End-to-End Smoke Test
+
+A WebdriverIO + `tauri-driver` smoke test lives in [e2e/](e2e/):
+[e2e/wdio.conf.js](e2e/wdio.conf.js) and the specs under `e2e/specs/`.
+It launches the built app and asserts the library shell mounts (the
+sidebar brand renders, the window title is `riida`).
+
+```bash
+# Linux only; needs the app built and tauri-driver + WebKitWebDriver present.
+npm run tauri build -- --no-bundle
+xvfb-run -a npm run e2e
+```
+
+Hard platform constraint: **`tauri-driver` supports only Linux
+(WebKitWebDriver / webkit2gtk) and Windows (Edge WebDriver). macOS
+WKWebView has no WebDriver, so this cannot run on macOS at all.** On
+Linux it drives WebKitGTK — a *different* engine than the WKWebView
+riida ships on macOS — so it catches gross regressions (app fails to
+launch, webview never mounts, shell does not render) but cannot
+reproduce macOS/WKWebView-specific bugs (e.g. the EPUB link-handling
+issue above). It is therefore Linux-CI-only and not part of any local
+or per-push check.
+
+It runs in the nightly workflow's `e2e` job
+([.github/workflows/nightly.yml](.github/workflows/nightly.yml)), which
+installs `webkit2gtk-driver` + `xvfb`, `cargo install tauri-driver`,
+builds the app with `--no-bundle`, and runs the suite under `xvfb-run`.
+The `@wdio/*` packages are listed in `knip.json` `ignoreDependencies`
+because the WebdriverIO config references the framework/reporter/runner
+by name rather than importing them.
+
 ## Dead-Code Detection
 
 `knip` checks for unused files, exports, and dependencies in the frontend.

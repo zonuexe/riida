@@ -3,6 +3,7 @@
   "entry": ["src/main-viewer.ts", "src/note-editor.ts", "scripts/*.mjs"],
   "project": ["src/**/*.ts"],
   "ignore": ["mcp-server/**", ".claude/worktrees/**"],
+  "ignoreDependencies": ["@wdio/local-runner", "@wdio/mocha-framework", "@wdio/spec-reporter"],
   "rules": {
     "types": "off"
   }

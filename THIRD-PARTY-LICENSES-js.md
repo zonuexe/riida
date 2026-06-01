@@ -11480,7 +11480,7 @@ SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### oxfmt 0.43.0
+### oxfmt 0.53.0
 
 - License: MIT
 - Authors: Boshen and oxc contributors

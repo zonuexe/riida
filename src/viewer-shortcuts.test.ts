@@ -18,6 +18,8 @@ import {
   nextEpubFontSizeUp,
   nextViewerZoomIn,
   nextViewerZoomOut,
+  resolveViewerKeyboardNav,
+  type ViewerKeyboardNavInput,
 } from "./viewer-shortcuts";
 
 const baseInput = {
@@ -210,5 +212,75 @@ describe("EPUB font size arithmetic", () => {
     let down = EPUB_FONT_SIZE_MIN;
     down = nextEpubFontSizeDown(down);
     expect(down).toBe(EPUB_FONT_SIZE_MIN);
+  });
+});
+
+describe("resolveViewerKeyboardNav", () => {
+  const navInput = (overrides: Partial<ViewerKeyboardNavInput> = {}): ViewerKeyboardNavInput => ({
+    key: "",
+    shiftKey: false,
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    defaultPrevented: false,
+    isTextEntryTarget: false,
+    ...overrides,
+  });
+
+  it("maps the forward keys to next for left-bound books", () => {
+    for (const key of ["PageDown", "ArrowDown", "ArrowRight", " "]) {
+      expect(resolveViewerKeyboardNav(navInput({ key }), "left")).toBe("next");
+    }
+  });
+
+  it("maps the backward keys to prev for left-bound books", () => {
+    expect(resolveViewerKeyboardNav(navInput({ key: "PageUp" }), "left")).toBe("prev");
+    expect(resolveViewerKeyboardNav(navInput({ key: "ArrowUp" }), "left")).toBe("prev");
+    expect(resolveViewerKeyboardNav(navInput({ key: "ArrowLeft" }), "left")).toBe("prev");
+    expect(resolveViewerKeyboardNav(navInput({ key: " ", shiftKey: true }), "left")).toBe("prev");
+  });
+
+  it("flips horizontal arrows for right-bound books", () => {
+    expect(resolveViewerKeyboardNav(navInput({ key: "ArrowLeft" }), "right")).toBe("next");
+    expect(resolveViewerKeyboardNav(navInput({ key: "ArrowRight" }), "right")).toBe("prev");
+    // Vertical and paging keys are unaffected by binding direction.
+    expect(resolveViewerKeyboardNav(navInput({ key: "ArrowDown" }), "right")).toBe("next");
+    expect(resolveViewerKeyboardNav(navInput({ key: "PageUp" }), "right")).toBe("prev");
+  });
+
+  it("resolves Home and End regardless of binding direction", () => {
+    expect(resolveViewerKeyboardNav(navInput({ key: "Home" }), "left")).toBe("home");
+    expect(resolveViewerKeyboardNav(navInput({ key: "End" }), "right")).toBe("end");
+  });
+
+  it("ignores system modifier combinations", () => {
+    expect(
+      resolveViewerKeyboardNav(navInput({ key: "ArrowDown", metaKey: true }), "left"),
+    ).toBeNull();
+    expect(
+      resolveViewerKeyboardNav(navInput({ key: "ArrowDown", ctrlKey: true }), "left"),
+    ).toBeNull();
+    expect(
+      resolveViewerKeyboardNav(navInput({ key: "ArrowDown", altKey: true }), "left"),
+    ).toBeNull();
+  });
+
+  it("ignores events from text-entry targets and already-handled events", () => {
+    expect(
+      resolveViewerKeyboardNav(navInput({ key: "ArrowDown", isTextEntryTarget: true }), "left"),
+    ).toBeNull();
+    expect(
+      resolveViewerKeyboardNav(navInput({ key: "ArrowDown", defaultPrevented: true }), "left"),
+    ).toBeNull();
+  });
+
+  it("returns null for unrelated keys", () => {
+    expect(resolveViewerKeyboardNav(navInput({ key: "a" }), "left")).toBeNull();
+    expect(resolveViewerKeyboardNav(navInput({ key: "Enter" }), "left")).toBeNull();
+  });
+
+  it("treats Shift+Space as prev but plain Space as next", () => {
+    expect(resolveViewerKeyboardNav(navInput({ key: " " }), "left")).toBe("next");
+    expect(resolveViewerKeyboardNav(navInput({ key: " ", shiftKey: true }), "left")).toBe("prev");
   });
 });

@@ -44,6 +44,7 @@ import {
   selectAnchorPageIndex,
 } from "./reading-position-utils";
 import { validateTagValue } from "./tag-utils";
+import { resolveViewerKeyboardNav } from "./viewer-shortcuts";
 import {
   buildPageGroups,
   getVisualPageOrder,
@@ -1357,47 +1358,38 @@ function scrollToSpread(
   scrollEl.scrollTo({ top: target.spreadEl.offsetTop, behavior: "smooth" });
 }
 
+function isTextEntryEventTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  return !!el && (el.isContentEditable || /^(input|textarea|select)$/i.test(el.tagName));
+}
+
 function installSpreadKeyboardNavigation(
   scrollEl: HTMLElement,
   spreadIndex: readonly SpreadIndexEntry[],
   bindingDirection: "left" | "right",
 ): void {
   if (spreadIndex.length === 0) return;
-  // For right-bound (typically Japanese tategaki) books, the reader advances
-  // toward the left of the spread, so horizontal arrow semantics flip.
-  const horizontalNext = bindingDirection === "right" ? "ArrowLeft" : "ArrowRight";
-  const horizontalPrev = bindingDirection === "right" ? "ArrowRight" : "ArrowLeft";
   window.addEventListener("keydown", (event) => {
-    if (event.defaultPrevented) return;
-    // Let the OS / browser handle Cmd-, Ctrl-, and Alt-combinations
-    // (Spotlight on Cmd+Space, window cycling on Cmd+`, etc.) so we never
-    // accidentally swallow a system shortcut. Shift is allowed because
-    // Shift+Space is our own "previous spread" binding.
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
-    const target = event.target as HTMLElement | null;
-    if (target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName))) {
-      return;
-    }
-    const isNext =
-      event.key === "PageDown" ||
-      (event.key === " " && !event.shiftKey) ||
-      event.key === "ArrowDown" ||
-      event.key === horizontalNext;
-    const isPrev =
-      event.key === "PageUp" ||
-      (event.key === " " && event.shiftKey) ||
-      event.key === "ArrowUp" ||
-      event.key === horizontalPrev;
-    const isHome = event.key === "Home";
-    const isEnd = event.key === "End";
-    if (!isNext && !isPrev && !isHome && !isEnd) return;
+    const action = resolveViewerKeyboardNav(
+      {
+        key: event.key,
+        shiftKey: event.shiftKey,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey,
+        defaultPrevented: event.defaultPrevented,
+        isTextEntryTarget: isTextEntryEventTarget(event.target),
+      },
+      bindingDirection,
+    );
+    if (!action) return;
     event.preventDefault();
     const current = findCurrentSpreadIndex(scrollEl, spreadIndex);
-    if (isHome) {
+    if (action === "home") {
       scrollToSpread(scrollEl, spreadIndex, 0);
-    } else if (isEnd) {
+    } else if (action === "end") {
       scrollToSpread(scrollEl, spreadIndex, spreadIndex.length - 1);
-    } else if (isNext) {
+    } else if (action === "next") {
       scrollToSpread(scrollEl, spreadIndex, current + 1);
     } else {
       scrollToSpread(scrollEl, spreadIndex, current - 1);
@@ -1771,28 +1763,24 @@ function installEpubKeyboardNavigation(
   rendition: import("epubjs").Rendition,
   isRtl: boolean,
 ): void {
-  const horizontalNext = isRtl ? "ArrowLeft" : "ArrowRight";
-  const horizontalPrev = isRtl ? "ArrowRight" : "ArrowLeft";
   window.addEventListener("keydown", (event) => {
-    if (event.defaultPrevented) return;
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
-    const target = event.target as HTMLElement | null;
-    if (target && (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName))) {
-      return;
-    }
-    const isNext =
-      event.key === "PageDown" ||
-      (event.key === " " && !event.shiftKey) ||
-      event.key === "ArrowDown" ||
-      event.key === horizontalNext;
-    const isPrev =
-      event.key === "PageUp" ||
-      (event.key === " " && event.shiftKey) ||
-      event.key === "ArrowUp" ||
-      event.key === horizontalPrev;
-    if (!isNext && !isPrev) return;
+    const action = resolveViewerKeyboardNav(
+      {
+        key: event.key,
+        shiftKey: event.shiftKey,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey,
+        defaultPrevented: event.defaultPrevented,
+        isTextEntryTarget: isTextEntryEventTarget(event.target),
+      },
+      isRtl ? "right" : "left",
+    );
+    // EPUB paged flow only advances/retreats; Home/End fall through to the
+    // browser as before.
+    if (action !== "next" && action !== "prev") return;
     event.preventDefault();
-    if (isNext) {
+    if (action === "next") {
       void rendition.next();
     } else {
       void rendition.prev();

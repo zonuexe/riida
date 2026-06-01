@@ -116,3 +116,62 @@ export function nextEpubFontSizeUp(value: number): number {
 export function nextEpubFontSizeDown(value: number): number {
   return clampEpubFontSize(value - EPUB_FONT_SIZE_STEP);
 }
+
+export type ViewerKeyboardNavInput = {
+  key: string;
+  shiftKey: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  defaultPrevented: boolean;
+  /**
+   * Whether the event originated from an editable surface (contentEditable,
+   * <input>, <textarea>, <select>). The caller resolves this from the DOM
+   * target so this helper stays pure and testable.
+   */
+  isTextEntryTarget: boolean;
+};
+
+export type ViewerKeyboardNavAction = "next" | "prev" | "home" | "end";
+
+/**
+ * Classify a keydown into a paged-viewer navigation intent, shared by the PDF
+ * spread navigation and the EPUB rendition navigation.
+ *
+ * Returns `null` when the event should be left alone: already handled, a system
+ * modifier combo (Cmd/Ctrl/Alt), typing into a form field, or an unrelated key.
+ * Shift is allowed because Shift+Space is the "previous page" binding.
+ *
+ * For right-bound books (typically Japanese tategaki) the reader advances toward
+ * the left of the spread, so the horizontal arrow semantics flip.
+ */
+export function resolveViewerKeyboardNav(
+  input: ViewerKeyboardNavInput,
+  bindingDirection: "left" | "right",
+): ViewerKeyboardNavAction | null {
+  if (input.defaultPrevented) return null;
+  if (input.metaKey || input.ctrlKey || input.altKey) return null;
+  if (input.isTextEntryTarget) return null;
+
+  if (input.key === "Home") return "home";
+  if (input.key === "End") return "end";
+
+  const horizontalNext = bindingDirection === "right" ? "ArrowLeft" : "ArrowRight";
+  const horizontalPrev = bindingDirection === "right" ? "ArrowRight" : "ArrowLeft";
+
+  const isNext =
+    input.key === "PageDown" ||
+    (input.key === " " && !input.shiftKey) ||
+    input.key === "ArrowDown" ||
+    input.key === horizontalNext;
+  if (isNext) return "next";
+
+  const isPrev =
+    input.key === "PageUp" ||
+    (input.key === " " && input.shiftKey) ||
+    input.key === "ArrowUp" ||
+    input.key === horizontalPrev;
+  if (isPrev) return "prev";
+
+  return null;
+}

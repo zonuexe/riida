@@ -508,14 +508,17 @@ nix --extra-experimental-features 'nix-command flakes' develop --command npm run
 per-file summary; `cov:rust:html` also writes a browsable report under
 `src-tauri/target/llvm-cov/html` (gitignored with the rest of `target/`).
 It is reporting-only — there is no coverage threshold gate and it is not
-part of `check:rust`, so it does not block CI.
+part of `check:rust`, so it does not block the per-push CI gate. It runs
+in the nightly workflow (see below) and uploads an HTML artifact.
 
 `cargo-llvm-cov` needs `llvm-cov`/`llvm-profdata` matching rustc's LLVM
 version. The dev shell wires `LLVM_COV` / `LLVM_PROFDATA` to the matching
 `llvmPackages_21.llvm` in [flake.nix](flake.nix); bump those alongside any
 rustc upgrade that changes the major LLVM version.
 
-Mutation testing is not part of normal CI yet, but `cargo-mutants` is the preferred tool for periodic local audits.
+Mutation testing does not run on the per-push CI gate (too slow), but
+`cargo-mutants` is both the preferred tool for periodic local audits and
+part of the nightly workflow (see below).
 
 Suggested local workflow:
 
@@ -543,6 +546,27 @@ Stryker runs incrementally (`incremental: true`) so subsequent runs
 only re-test mutated regions. The HTML report is written to
 `reports/mutation/mutation.html`. Both `reports/` and `.stryker-tmp/`
 are gitignored.
+
+### Nightly workflow
+
+The per-push CI gate stays fast (`test.yml`, `test-rust.yml`,
+`license-check.yml`). The slow checks run on a schedule instead, in
+[.github/workflows/nightly.yml](.github/workflows/nightly.yml), which
+fires nightly (`cron`) and on demand (`workflow_dispatch`):
+
+- `rust-mutation` — `npm run mutants:rust` (`cargo-mutants`, scoped to
+  `lib.rs`); uploads `src-tauri/mutants.out/`.
+- `frontend-mutation` — `npm run mutants:frontend` (Stryker, incremental);
+  uploads `reports/mutation/`.
+- `rust-coverage` — `npm run cov:rust:html` (`cargo-llvm-cov`); uploads
+  the HTML report.
+
+The mutation jobs exit non-zero when the mutation score regresses, so a
+red nightly is an actionable signal rather than a merge blocker; the
+coverage job is reporting-only. Reports always upload (`if: always()`).
+CI installs the tools via `taiki-e/install-action` and, for coverage,
+the `llvm-tools-preview` rustup component (the Nix dev shell uses the
+`LLVM_COV`/`LLVM_PROFDATA` env wiring instead).
 
 Standard Rust static checks:
 

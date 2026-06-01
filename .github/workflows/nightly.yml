@@ -1,0 +1,137 @@
+name: Nightly
+
+# Heavy, slow quality checks kept off the per-push gate. They run on a nightly
+# schedule and on demand, and publish their reports as workflow artifacts. The
+# mutation jobs exit non-zero when the mutation score regresses, so a red
+# nightly is an actionable signal rather than a merge blocker.
+on:
+  schedule:
+    - cron: "0 18 * * *" # 18:00 UTC (03:00 JST)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust-mutation:
+    name: Rust mutation testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTFLAGS: "-C debuginfo=0"
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Linux system dependencies
+        uses: ./.github/actions/install-linux-deps
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install cargo tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants,cargo-nextest
+
+      - name: Run Rust mutation testing
+        run: npm run mutants:rust
+
+      - name: Upload mutants report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-mutants
+          path: src-tauri/mutants.out/
+          if-no-files-found: ignore
+
+  frontend-mutation:
+    name: Frontend mutation testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend mutation testing
+        run: npm run mutants:frontend
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stryker-report
+          path: reports/mutation/
+          if-no-files-found: ignore
+
+  rust-coverage:
+    name: Rust coverage report
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Linux system dependencies
+        uses: ./.github/actions/install-linux-deps
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # cargo-llvm-cov uses these tools directly; on the rustup-style CI
+          # toolchain they ship with the component (the Nix dev shell wires
+          # LLVM_COV/LLVM_PROFDATA instead).
+          components: llvm-tools-preview
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install cargo tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,cargo-nextest
+
+      - name: Generate Rust coverage report
+        run: npm run cov:rust:html
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-coverage-html
+          path: src-tauri/target/llvm-cov/html/
+          if-no-files-found: ignore

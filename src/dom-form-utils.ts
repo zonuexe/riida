@@ -13,3 +13,14 @@ export function shouldSyncControlValue(params: {
 }): boolean {
   return !params.isFocused && params.currentValue !== params.nextValue;
 }
+
+export type StatusTone = "neutral" | "success" | "error";
+
+/**
+ * Map a status tone to the `data-tone` attribute value, or `null` when the
+ * attribute should be removed. "neutral" carries no styling, so it is dropped
+ * rather than written, keeping the default (untoned) appearance.
+ */
+export function statusToneAttribute(tone: StatusTone): string | null {
+  return tone === "neutral" ? null : tone;
+}

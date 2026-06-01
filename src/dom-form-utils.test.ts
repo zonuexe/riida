@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shouldSyncControlValue } from "./dom-form-utils";
+import { shouldSyncControlValue, statusToneAttribute } from "./dom-form-utils";
 
 describe("shouldSyncControlValue", () => {
   it("writes when the control is unfocused and the value differs", () => {
@@ -24,5 +24,16 @@ describe("shouldSyncControlValue", () => {
     expect(shouldSyncControlValue({ isFocused: false, currentValue: "x", nextValue: "" })).toBe(
       true,
     );
+  });
+});
+
+describe("statusToneAttribute", () => {
+  it("drops the neutral tone so the default appearance is used", () => {
+    expect(statusToneAttribute("neutral")).toBeNull();
+  });
+
+  it("passes through success and error tones verbatim", () => {
+    expect(statusToneAttribute("success")).toBe("success");
+    expect(statusToneAttribute("error")).toBe("error");
   });
 });

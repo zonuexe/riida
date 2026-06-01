@@ -30,7 +30,7 @@ import {
   parseBookMetadataImport,
   validateBookMetadataDraft,
 } from "./book-metadata-utils";
-import { shouldSyncControlValue } from "./dom-form-utils";
+import { shouldSyncControlValue, type StatusTone, statusToneAttribute } from "./dom-form-utils";
 import {
   clampEpubPageNumber,
   epubLocationIndexFromPageNumber,
@@ -1746,19 +1746,13 @@ function renderLibraryRootsList() {
   });
 }
 
-function setAppSettingsStatus(message: string, tone: "neutral" | "success" | "error" = "neutral") {
+function setAppSettingsStatus(message: string, tone: StatusTone = "neutral") {
   const statusEl = document.querySelector<HTMLElement>("#app-settings-status");
   if (!statusEl) {
     return;
   }
 
-  statusEl.hidden = message.length === 0;
-  statusEl.textContent = message;
-  if (tone === "neutral") {
-    delete statusEl.dataset.tone;
-  } else {
-    statusEl.dataset.tone = tone;
-  }
+  applyStatusMessage(statusEl, message, tone);
 }
 
 function syncAppSettingsUi() {
@@ -1862,6 +1856,23 @@ function syncControlValue(
     })
   ) {
     element.value = value;
+  }
+}
+
+// Render a status line: hide it when empty, and reflect the tone through the
+// `data-tone` attribute (removed for the neutral default).
+function applyStatusMessage(
+  statusEl: HTMLElement,
+  message: string,
+  tone: StatusTone = "neutral",
+): void {
+  statusEl.hidden = message.length === 0;
+  statusEl.textContent = message;
+  const toneAttr = statusToneAttribute(tone);
+  if (toneAttr === null) {
+    delete statusEl.dataset.tone;
+  } else {
+    statusEl.dataset.tone = toneAttr;
   }
 }
 
@@ -2337,36 +2348,24 @@ async function deleteShelfFromEditor() {
   }
 }
 
-function setTagEditorStatus(message: string, tone: "neutral" | "success" | "error" = "neutral") {
+function setTagEditorStatus(message: string, tone: StatusTone = "neutral") {
   const statusEl = document.querySelector<HTMLElement>("#tag-editor-status");
   if (!statusEl) {
     return;
   }
 
   tagEditorState.statusMessage = message;
-  statusEl.hidden = message.length === 0;
-  statusEl.textContent = message;
-  if (tone === "neutral") {
-    delete statusEl.dataset.tone;
-  } else {
-    statusEl.dataset.tone = tone;
-  }
+  applyStatusMessage(statusEl, message, tone);
 }
 
-function setBookMetadataStatus(message: string, tone: "neutral" | "success" | "error" = "neutral") {
+function setBookMetadataStatus(message: string, tone: StatusTone = "neutral") {
   const statusEl = document.querySelector<HTMLElement>("#book-metadata-status");
   if (!statusEl) {
     return;
   }
 
   bookMetadataEditorState.statusMessage = message;
-  statusEl.hidden = message.length === 0;
-  statusEl.textContent = message;
-  if (tone === "neutral") {
-    delete statusEl.dataset.tone;
-  } else {
-    statusEl.dataset.tone = tone;
-  }
+  applyStatusMessage(statusEl, message, tone);
 }
 
 function syncTagEditorUi() {

@@ -30,6 +30,7 @@ import {
   parseBookMetadataImport,
   validateBookMetadataDraft,
 } from "./book-metadata-utils";
+import { shouldSyncControlValue } from "./dom-form-utils";
 import {
   clampEpubPageNumber,
   epubLocationIndexFromPageNumber,
@@ -1844,6 +1845,26 @@ function renderCustomSourcesList() {
   }
 }
 
+// Write a state value into a form control without disrupting the user: skip
+// while the control is focused, and skip when the value already matches.
+function syncControlValue(
+  element: HTMLInputElement | HTMLTextAreaElement | null,
+  value: string,
+): void {
+  if (!element) {
+    return;
+  }
+  if (
+    shouldSyncControlValue({
+      isFocused: document.activeElement === element,
+      currentValue: element.value,
+      nextValue: value,
+    })
+  ) {
+    element.value = value;
+  }
+}
+
 function syncCustomSourceEditorUi() {
   const modalEl = document.querySelector<HTMLElement>("#custom-source-editor-modal");
   const titleEl = document.querySelector<HTMLElement>("#custom-source-editor-heading");
@@ -1859,9 +1880,7 @@ function syncCustomSourceEditorUi() {
   if (deleteEl) {
     deleteEl.hidden = !customSourceEditorState.id;
   }
-  if (nameEl && document.activeElement !== nameEl) {
-    nameEl.value = customSourceEditorState.name;
-  }
+  syncControlValue(nameEl, customSourceEditorState.name);
   // Update icon picker selection
   const pickerEl = document.querySelector<HTMLElement>("#custom-source-icon-picker");
   if (pickerEl) {
@@ -2149,7 +2168,7 @@ function syncShelfEditorUi() {
   const modeEl = document.querySelector<HTMLElement>("#shelf-editor-mode");
   if (modalEl) modalEl.hidden = !shelfEditorState.isOpen;
   if (titleEl) titleEl.textContent = shelfEditorState.id ? "Edit shelf" : "New shelf";
-  if (nameEl && document.activeElement !== nameEl) nameEl.value = shelfEditorState.name;
+  syncControlValue(nameEl, shelfEditorState.name);
   if (deleteEl) deleteEl.hidden = !shelfEditorState.id;
   if (modeEl) {
     for (const btn of modeEl.querySelectorAll<HTMLButtonElement>(".shelf-editor-mode-btn")) {
@@ -2167,7 +2186,7 @@ function syncShelfEditorUi() {
   const isCustom = shelfEditorState.mode === "custom";
   if (queryFieldEl) queryFieldEl.hidden = !isCustom;
   if (conditionsFieldEl) conditionsFieldEl.hidden = isCustom;
-  if (queryEl && document.activeElement !== queryEl) queryEl.value = shelfEditorState.query;
+  syncControlValue(queryEl, shelfEditorState.query);
   if (!isCustom) renderShelfConditionRows();
   if (statusEl) {
     statusEl.hidden = shelfEditorState.statusMessage.length === 0;
@@ -2501,9 +2520,7 @@ function syncTagManagerUi() {
       }
     }
   }
-  if (inputEl && document.activeElement !== inputEl) {
-    inputEl.value = tagManagerState.renameInput;
-  }
+  syncControlValue(inputEl, tagManagerState.renameInput);
   if (statusEl) {
     const hasStatus = tagManagerState.statusMessage.length > 0;
     statusEl.hidden = !hasStatus;
@@ -2628,23 +2645,6 @@ function syncBookMetadataEditorUi() {
   if (bookEl) {
     bookEl.textContent = bookMetadataEditorState.bookTitle;
   }
-
-  const syncControlValue = (
-    element: HTMLInputElement | HTMLTextAreaElement | null,
-    value: string,
-  ) => {
-    if (!element) {
-      return;
-    }
-
-    if (document.activeElement === element) {
-      return;
-    }
-
-    if (element.value !== value) {
-      element.value = value;
-    }
-  };
 
   syncControlValue(titleEl, bookMetadataEditorState.title);
   syncControlValue(authorsEl, bookMetadataEditorState.authorsText);

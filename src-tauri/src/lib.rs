@@ -993,9 +993,17 @@ fn migrate_paths_to_nfc(connection: &Connection) -> Result<(), rusqlite::Error> 
     for table in &simple_tables {
         let nfd_paths: Vec<String> = {
             let mut stmt = connection.prepare(&format!("SELECT file_path FROM {table}"))?;
+            // `file_path` is nullable in some of these tables (e.g. the global
+            // `viewer_preferences` row keys off `scope_key` and stores a NULL
+            // path). A NULL path has nothing to NFC-normalize, so read it as
+            // `Option<String>` and skip the NULLs — while still propagating a
+            // genuine row-decode error rather than silently dropping the row.
             let all_paths: Vec<String> = stmt
-                .query_map([], |row| row.get(0))?
-                .collect::<Result<Vec<_>, _>>()?;
+                .query_map([], |row| row.get::<_, Option<String>>(0))?
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .flatten()
+                .collect();
             all_paths
                 .into_iter()
                 .filter(|p| {
@@ -3685,6 +3693,52 @@ mod tests {
             )
             .expect("viewer_preferences table should be created");
         connection
+    }
+
+    #[test]
+    fn migrate_paths_to_nfc_tolerates_null_file_path() {
+        let connection = Connection::open_in_memory().expect("in-memory db should open");
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE books (file_path TEXT);
+                CREATE TABLE notes (file_path TEXT);
+                CREATE TABLE viewer_preferences (scope_key TEXT, file_path TEXT);
+                CREATE TABLE reading_positions (file_path TEXT);
+                CREATE TABLE external_books (file_path TEXT);
+                CREATE TABLE book_tags (file_path TEXT, tag TEXT);
+                ",
+            )
+            .expect("migration tables should be created");
+
+        // Global viewer preferences are keyed only by `scope_key` and store a
+        // NULL `file_path`. Reading that column as a non-optional `String`
+        // previously aborted the startup setup hook (panic on `Invalid column
+        // type Null`). The migration must skip NULL paths.
+        connection
+            .execute(
+                "INSERT INTO viewer_preferences (scope_key, file_path) VALUES ('global::pdf', NULL)",
+                [],
+            )
+            .expect("global pref row should insert");
+
+        // A real NFD path alongside the NULL row, to confirm normalization of
+        // non-NULL paths is unaffected.
+        let nfd = "cafe\u{0301}.pdf";
+        let nfc: String = nfd.nfc().collect();
+        connection
+            .execute(
+                "INSERT INTO books (file_path) VALUES (?1)",
+                rusqlite::params![nfd],
+            )
+            .expect("nfd book row should insert");
+
+        migrate_paths_to_nfc(&connection).expect("migration should tolerate NULL file_path");
+
+        let stored: String = connection
+            .query_row("SELECT file_path FROM books", [], |row| row.get(0))
+            .expect("book row should still exist");
+        assert_eq!(stored, nfc, "non-NULL NFD path should be normalized to NFC");
     }
 
     fn viewer_preferences(

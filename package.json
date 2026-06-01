@@ -60,7 +60,7 @@
     "oxfmt": "^0.53.0",
     "oxlint": "^1.58.0",
     "typescript": "~6.0.0",
-    "vite": "^6.0.3",
+    "vite": "^8.0.0",
     "vite-plugin-static-copy": "^4.0.0",
     "vitest": "^4.1.2"
   }

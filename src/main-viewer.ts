@@ -20,6 +20,7 @@ import {
   validateBookMetadataDraft,
   type BookMetadataDraft,
 } from "./book-metadata-utils";
+import { createDebouncedSaver } from "./debounce-utils";
 import { loadEpubJs } from "./epub-runtime";
 import type { NoteEditorHandle } from "./note-editor";
 import {
@@ -1402,21 +1403,15 @@ function installReadingPositionPersistence(
   scrollEl: HTMLElement,
   spreadIndex: readonly SpreadIndexEntry[],
 ): void {
-  let saveTimer: ReturnType<typeof setTimeout> | null = null;
   const SAVE_DEBOUNCE_MS = 600;
+  const saver = createDebouncedSaver(
+    () => capturePositionFromScroll(filePath, scrollEl, spreadIndex),
+    SAVE_DEBOUNCE_MS,
+  );
 
-  const scheduleSave = () => {
-    if (saveTimer !== null) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      saveTimer = null;
-      capturePositionFromScroll(filePath, scrollEl, spreadIndex);
-    }, SAVE_DEBOUNCE_MS);
-  };
-
-  scrollEl.addEventListener("scroll", scheduleSave, { passive: true });
+  scrollEl.addEventListener("scroll", () => saver.schedule(), { passive: true });
   window.addEventListener("beforeunload", () => {
-    if (saveTimer !== null) clearTimeout(saveTimer);
-    capturePositionFromScroll(filePath, scrollEl, spreadIndex);
+    void saver.flush();
   });
 }
 
@@ -1845,7 +1840,7 @@ const noteInteractionState: NoteInteractionState = {
 
 let noteEditor: NoteEditorHandle | null = null;
 let noteEditorModulePromise: Promise<typeof import("./note-editor")> | null = null;
-let noteSaveTimer: ReturnType<typeof setTimeout> | null = null;
+const noteSaver = createDebouncedSaver(() => saveNoteNow(), NOTE_SAVE_DEBOUNCE_MS);
 let pendingNoteSave: { filePath: string; content: string } | null = null;
 let activeBookFilePath: string | null = null;
 let lastNoteViewport: { width: number; height: number } | null = null;
@@ -1916,21 +1911,11 @@ function scheduleNoteSave(markdown: string): void {
   if (!noteState.activeFilePath) return;
   noteState.currentContent = markdown;
   pendingNoteSave = { filePath: noteState.activeFilePath, content: markdown };
-  if (noteSaveTimer !== null) {
-    clearTimeout(noteSaveTimer);
-  }
-  noteSaveTimer = setTimeout(() => {
-    noteSaveTimer = null;
-    void saveNoteNow();
-  }, NOTE_SAVE_DEBOUNCE_MS);
+  noteSaver.schedule();
 }
 
 async function flushPendingNoteSave(): Promise<void> {
-  if (noteSaveTimer !== null) {
-    clearTimeout(noteSaveTimer);
-    noteSaveTimer = null;
-  }
-  await saveNoteNow();
+  await noteSaver.flush();
 }
 
 async function destroyNoteEditor(): Promise<void> {

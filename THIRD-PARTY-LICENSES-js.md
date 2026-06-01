@@ -2,13 +2,13 @@
 
 This file was generated from the currently installed JavaScript dependencies used by riida.
 
-- npm dependencies: 492
+- npm dependencies: 491
 
 _Regenerate with `npm run generate:third-party-licenses` inside the Nix development shell._
 
 ## npm Dependencies
 
-### @babel/code-frame 7.29.0
+### @babel/code-frame 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -41,7 +41,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/compat-data 7.29.3
+### @babel/compat-data 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -74,7 +74,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/core 7.29.0
+### @babel/core 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -107,7 +107,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/generator 7.29.1
+### @babel/generator 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -140,7 +140,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-annotate-as-pure 7.27.3
+### @babel/helper-annotate-as-pure 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -173,7 +173,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-compilation-targets 7.28.6
+### @babel/helper-compilation-targets 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -206,7 +206,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-create-class-features-plugin 7.29.3
+### @babel/helper-create-class-features-plugin 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -239,7 +239,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-globals 7.28.0
+### @babel/helper-globals 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -272,7 +272,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-member-expression-to-functions 7.28.5
+### @babel/helper-member-expression-to-functions 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -305,7 +305,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-module-imports 7.28.6
+### @babel/helper-module-imports 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -338,7 +338,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-module-transforms 7.28.6
+### @babel/helper-module-transforms 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -371,7 +371,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-optimise-call-expression 7.27.1
+### @babel/helper-optimise-call-expression 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -404,7 +404,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-plugin-utils 7.28.6
+### @babel/helper-plugin-utils 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -437,7 +437,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-replace-supers 7.28.6
+### @babel/helper-replace-supers 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -470,7 +470,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-skip-transparent-expression-wrappers 7.27.1
+### @babel/helper-skip-transparent-expression-wrappers 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -503,7 +503,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-string-parser 7.27.1
+### @babel/helper-string-parser 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -536,7 +536,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-validator-identifier 7.28.5
+### @babel/helper-validator-identifier 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -569,7 +569,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-validator-option 7.27.1
+### @babel/helper-validator-option 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -602,7 +602,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helpers 7.29.2
+### @babel/helpers 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -636,7 +636,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/parser 7.29.3
+### @babel/parser 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -666,7 +666,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @babel/plugin-proposal-decorators 7.29.0
+### @babel/plugin-proposal-decorators 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -699,7 +699,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/plugin-syntax-decorators 7.28.6
+### @babel/plugin-syntax-decorators 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -732,7 +732,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/plugin-syntax-jsx 7.28.6
+### @babel/plugin-syntax-jsx 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -765,7 +765,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/plugin-syntax-typescript 7.28.6
+### @babel/plugin-syntax-typescript 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -798,7 +798,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/plugin-transform-destructuring 7.28.5
+### @babel/plugin-transform-destructuring 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -831,7 +831,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/plugin-transform-explicit-resource-management 7.28.6
+### @babel/plugin-transform-explicit-resource-management 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -864,7 +864,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/plugin-transform-modules-commonjs 7.28.6
+### @babel/plugin-transform-modules-commonjs 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -897,7 +897,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/plugin-transform-typescript 7.28.6
+### @babel/plugin-transform-typescript 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -963,7 +963,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/template 7.28.6
+### @babel/template 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -996,7 +996,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/traverse 7.29.0
+### @babel/traverse 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -1029,7 +1029,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/types 7.29.0
+### @babel/types 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -1398,7 +1398,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/ansi 2.0.5
+### @inquirer/ansi 2.0.7
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1431,7 +1431,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/checkbox 5.1.5
+### @inquirer/checkbox 5.2.1
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1464,7 +1464,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/confirm 6.0.13
+### @inquirer/confirm 6.1.1
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1497,7 +1497,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/core 11.1.10
+### @inquirer/core 11.2.1
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1530,7 +1530,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/editor 5.1.2
+### @inquirer/editor 5.2.2
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1563,7 +1563,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/expand 5.0.14
+### @inquirer/expand 5.1.1
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1596,7 +1596,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/external-editor 3.0.0
+### @inquirer/external-editor 3.0.3
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1629,7 +1629,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/figures 2.0.5
+### @inquirer/figures 2.0.7
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1662,7 +1662,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/input 5.0.13
+### @inquirer/input 5.1.2
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1695,7 +1695,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/number 4.0.13
+### @inquirer/number 4.1.1
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1728,7 +1728,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/password 5.0.13
+### @inquirer/password 5.1.1
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1761,7 +1761,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/prompts 8.4.3
+### @inquirer/prompts 8.5.2
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1794,7 +1794,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/rawlist 5.2.9
+### @inquirer/rawlist 5.3.1
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1827,7 +1827,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/search 4.1.9
+### @inquirer/search 4.2.1
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1860,7 +1860,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/select 5.1.5
+### @inquirer/select 5.2.1
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -1893,7 +1893,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @inquirer/type 4.0.5
+### @inquirer/type 4.0.7
 
 - License: MIT
 - Authors: Simon Boudrias <admin@simonboudrias.com>
@@ -2988,7 +2988,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @oxc-project/types 0.130.0
+### @oxc-project/types 0.133.0
 
 - License: MIT
 - Authors: Boshen and oxc contributors
@@ -3393,38 +3393,6 @@ _No local license or notice file was found in the installed package._
     SOFTWARE
 ```
 
-### @types/estree 1.0.8
-
-- License: MIT
-- Authors: RReverser (https://github.com/RReverser)
-- Source: https://github.com/DefinitelyTyped/DefinitelyTyped.git
-
-#### LICENSE
-
-```text
-    MIT License
-
-    Copyright (c) Microsoft Corporation.
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-
-    The above copyright notice and this permission notice shall be included in all
-    copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-    SOFTWARE
-```
-
 ### @types/estree 1.0.9
 
 - License: MIT
@@ -3656,7 +3624,7 @@ _No local license or notice file was found in the installed package._
     SOFTWARE
 ```
 
-### @vitest/coverage-v8 4.1.7
+### @vitest/coverage-v8 4.1.8
 
 - License: MIT
 - Authors: Anthony Fu <anthonyfu117@hotmail.com>
@@ -3688,7 +3656,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @vitest/expect 4.1.7
+### @vitest/expect 4.1.8
 
 - License: MIT
 - Source: git+https://github.com/vitest-dev/vitest.git
@@ -3719,7 +3687,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @vitest/mocker 4.1.7
+### @vitest/mocker 4.1.8
 
 - License: MIT
 - Source: git+https://github.com/vitest-dev/vitest.git
@@ -3750,7 +3718,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @vitest/pretty-format 4.1.7
+### @vitest/pretty-format 4.1.8
 
 - License: MIT
 - Source: git+https://github.com/vitest-dev/vitest.git
@@ -3781,7 +3749,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @vitest/runner 4.1.7
+### @vitest/runner 4.1.8
 
 - License: MIT
 - Source: git+https://github.com/vitest-dev/vitest.git
@@ -3812,7 +3780,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @vitest/snapshot 4.1.7
+### @vitest/snapshot 4.1.8
 
 - License: MIT
 - Source: git+https://github.com/vitest-dev/vitest.git
@@ -3843,7 +3811,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @vitest/spy 4.1.7
+### @vitest/spy 4.1.8
 
 - License: MIT
 - Source: git+https://github.com/vitest-dev/vitest.git
@@ -3874,7 +3842,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @vitest/utils 4.1.7
+### @vitest/utils 4.1.8
 
 - License: MIT
 - Source: git+https://github.com/vitest-dev/vitest.git
@@ -3905,7 +3873,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @vue/compiler-core 3.5.34
+### @vue/compiler-core 3.5.35
 
 - License: MIT
 - Authors: Evan You
@@ -3937,7 +3905,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/compiler-dom 3.5.34
+### @vue/compiler-dom 3.5.35
 
 - License: MIT
 - Authors: Evan You
@@ -3969,7 +3937,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/compiler-sfc 3.5.34
+### @vue/compiler-sfc 3.5.35
 
 - License: MIT
 - Authors: Evan You
@@ -4001,7 +3969,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/compiler-ssr 3.5.34
+### @vue/compiler-ssr 3.5.35
 
 - License: MIT
 - Authors: Evan You
@@ -4033,7 +4001,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/reactivity 3.5.34
+### @vue/reactivity 3.5.35
 
 - License: MIT
 - Authors: Evan You
@@ -4065,7 +4033,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/runtime-core 3.5.34
+### @vue/runtime-core 3.5.35
 
 - License: MIT
 - Authors: Evan You
@@ -4097,7 +4065,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/runtime-dom 3.5.34
+### @vue/runtime-dom 3.5.35
 
 - License: MIT
 - Authors: Evan You
@@ -4129,7 +4097,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/server-renderer 3.5.34
+### @vue/server-renderer 3.5.35
 
 - License: MIT
 - Authors: Evan You
@@ -4161,7 +4129,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/shared 3.5.34
+### @vue/shared 3.5.35
 
 - License: MIT
 - Authors: Evan You
@@ -4472,7 +4440,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### ast-v8-to-istanbul 1.0.0
+### ast-v8-to-istanbul 1.0.3
 
 - License: MIT
 - Authors: Ari Perkkiö <ari.perkkio@gmail.com>
@@ -4602,7 +4570,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### baseline-browser-mapping 2.10.31
+### baseline-browser-mapping 2.10.33
 
 - License: Apache-2.0
 - Source: git+https://github.com/web-platform-dx/baseline-browser-mapping.git
@@ -4632,7 +4600,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### brace-expansion 1.1.14
+### brace-expansion 1.1.15
 
 - License: MIT
 - Authors: Julian Gruber <mail@juliangruber.com> (http://juliangruber.com)
@@ -6027,7 +5995,7 @@ IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 _See the [full text of the Apache License 2.0](#apache-20)._
 
-### dompurify 3.4.5
+### dompurify 3.4.7
 
 - License: (MPL-2.0 OR Apache-2.0)
 - Authors: Dr.-Ing. Mario Heiderich, Cure53 <mario@cure53.de> (https://cure53.de/)
@@ -6069,7 +6037,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### electron-to-chromium 1.5.360
+### electron-to-chromium 1.5.364
 
 - License: ISC
 - Authors: Kilian Valkhof
@@ -6261,7 +6229,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### es-object-atoms 1.1.1
+### es-object-atoms 1.1.2
 
 - License: MIT
 - Authors: Jordan Harband <ljharb@gmail.com>
@@ -7417,7 +7385,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### hasown 2.0.3
+### hasown 2.0.4
 
 - License: MIT
 - Authors: Jordan Harband <ljharb@gmail.com>
@@ -8925,7 +8893,7 @@ copy of the Program in return for a fee.
                      END OF TERMS AND CONDITIONS
 ```
 
-### knip 6.14.1
+### knip 6.15.0
 
 - License: ISC
 - Authors: Lars Kappert <lars@webpro.nl>
@@ -11083,7 +11051,7 @@ OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 ```
 
-### node-releases 2.0.45
+### node-releases 2.0.46
 
 - License: MIT
 - Authors: Sergey Rubanov <chi187@gmail.com>
@@ -11472,7 +11440,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
 IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
-### oxc-parser 0.130.0
+### oxc-parser 0.133.0
 
 - License: MIT
 - Authors: Boshen and oxc contributors
@@ -11505,7 +11473,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### oxc-resolver 11.19.1
+### oxc-resolver 11.20.0
 
 - License: MIT
 - Source: git+https://github.com/oxc-project/oxc-resolver.git
@@ -11545,7 +11513,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### oxlint 1.66.0
+### oxlint 1.68.0
 
 - License: MIT
 - Authors: Boshen and oxc contributors
@@ -13024,7 +12992,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### rollup 4.60.4
+### rollup 4.61.0
 
 - License: MIT
 - Authors: Rich Harris
@@ -14000,7 +13968,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
 IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
-### semver 7.8.0
+### semver 7.8.1
 
 - License: ISC
 - Authors: GitHub Inc.
@@ -14846,7 +14814,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tinyexec 1.1.2
+### tinyexec 1.2.4
 
 - License: MIT
 - Authors: James Garbutt (https://github.com/43081j)
@@ -14878,7 +14846,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### tinyglobby 0.2.16
+### tinyglobby 0.2.17
 
 - License: MIT
 - Authors: Superchupu
@@ -15591,7 +15559,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 ```
 
-### valibot 1.4.0
+### valibot 1.4.1
 
 - License: MIT
 - Authors: Fabian Hiller
@@ -15686,7 +15654,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### vite 6.4.2
+### vite 6.4.3
 
 - License: MIT
 - Authors: Evan You
@@ -17042,7 +17010,7 @@ Repository: lydell/js-tokens
 ## launch-editor, launch-editor-middleware
 License: MIT
 By: Evan You
-Repositories: git+https://github.com/yyx990803/launch-editor.git, git+https://github.com/yyx990803/launch-editor.git
+Repositories: git+https://github.com/vitejs/launch-editor.git, git+https://github.com/vitejs/launch-editor.git
 
 > The MIT License (MIT)
 > 
@@ -18135,7 +18103,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### vitest 4.1.7
+### vitest 4.1.8
 
 - License: MIT
 - Authors: Anthony Fu <anthonyfu117@hotmail.com>
@@ -18957,7 +18925,7 @@ Repository: git+https://github.com/websockets/ws.git
 > CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### vue 3.5.34
+### vue 3.5.35
 
 - License: MIT
 - Authors: Evan You

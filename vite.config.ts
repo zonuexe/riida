@@ -62,7 +62,6 @@ export default defineConfig(async () => ({
         "src/main-viewer.ts",
         "src/note-editor.ts",
         "src/cjk-radical-map.ts",
-        "src/search-suggestions.ts",
         "src/vendor/**",
         "src/**/*.test.ts",
         "src/vite-env.d.ts",

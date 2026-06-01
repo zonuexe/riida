@@ -360,6 +360,14 @@ function collectNodePackages() {
         return false;
       }
 
+      // Skip dev-only dependencies. These bundled notices cover code shipped in
+      // the production build, mirroring `license-checker --production`; test and
+      // build tooling (vitest, oxlint, jsdom, WebdriverIO, …) is not shipped.
+      // npm's lockfile (v3) marks dev-only packages with `dev: true`.
+      if (pkg?.dev === true) {
+        return false;
+      }
+
       return true;
     })
     .map(([packagePath]) => {
@@ -416,7 +424,7 @@ const rustOutput = [
 const jsOutput = [
   "# Third-Party Licenses (JavaScript)",
   "",
-  "This file was generated from the currently installed JavaScript dependencies used by riida.",
+  "This file was generated from the production (bundled) JavaScript dependencies used by riida. Dev-only tooling is excluded.",
   "",
   `- npm dependencies: ${nodePackages.length}`,
   "",

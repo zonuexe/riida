@@ -88,7 +88,7 @@ import {
   reorderSidebarSection,
   saveSidebarSectionOrder,
 } from "./sidebar-section-order.ts";
-import { validateTagValue } from "./tag-utils";
+import { countBooksWithTagOrDescendants, validateTagValue } from "./tag-utils";
 import {
   clampReadingPositionOffsetRatio,
   computePageOffsetRatio,
@@ -2437,30 +2437,9 @@ function syncTagEditorUi() {
   }
 }
 
-function countBooksWithTagOrDescendants(tagId: string): {
-  bookCount: number;
-  affectedTags: string[];
-} {
-  const books = lastSnapshot?.books ?? viewerState.books;
-  const prefix = `${tagId}/`;
-  const affectedTagSet = new Set<string>();
-  const affectedBookSet = new Set<string>();
-  for (const book of books) {
-    for (const tag of book.tags ?? []) {
-      if (tag === tagId || tag.startsWith(prefix)) {
-        affectedTagSet.add(tag);
-        affectedBookSet.add(book.filePath);
-      }
-    }
-  }
-  return {
-    bookCount: affectedBookSet.size,
-    affectedTags: [...affectedTagSet].sort((a, b) => a.localeCompare(b, "ja")),
-  };
-}
-
 function openTagManager(tagId: string) {
-  const stats = countBooksWithTagOrDescendants(tagId);
+  const books = lastSnapshot?.books ?? viewerState.books;
+  const stats = countBooksWithTagOrDescendants(books, tagId);
   tagManagerState.isOpen = true;
   tagManagerState.tagId = tagId;
   tagManagerState.affectedBooks = stats.bookCount;
@@ -7198,19 +7177,23 @@ window.addEventListener("DOMContentLoaded", async () => {
     );
   }
 
-  viewerStageEl?.addEventListener("scroll", () => {
-    if (lastSnapshot?.pdfRenderer !== "pdfjs" || !viewerState.currentBook) {
-      return;
-    }
-    if (pdfRenderInProgress) {
-      return;
-    }
+  viewerStageEl?.addEventListener(
+    "scroll",
+    () => {
+      if (lastSnapshot?.pdfRenderer !== "pdfjs" || !viewerState.currentBook) {
+        return;
+      }
+      if (pdfRenderInProgress) {
+        return;
+      }
 
-    scheduleReadingPositionSave();
-    if (activePdfRenderSession) {
-      schedulePdfRenderWindowUpdate(activePdfRenderSession);
-    }
-  });
+      scheduleReadingPositionSave();
+      if (activePdfRenderSession) {
+        schedulePdfRenderWindowUpdate(activePdfRenderSession);
+      }
+    },
+    { passive: true },
+  );
 
   sidebarToggleEl?.addEventListener("click", () => {
     viewerState.sidebarCollapsed = !viewerState.sidebarCollapsed;

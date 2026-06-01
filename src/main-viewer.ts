@@ -62,11 +62,12 @@ import {
   type ViewerSettingsScope,
   type ViewerSourceType,
 } from "./viewer-settings-utils";
-
-type ViewerLaunchParams = {
-  filePath: string | null;
-  source: string | null;
-};
+import {
+  coerceLaunchString,
+  parsePersistedLaunchParams,
+  parseSettingsPanelSession,
+  type ViewerLaunchParams,
+} from "./viewer-session-utils";
 
 // The Rust open_viewer_window command injects an initialization script that
 // sets this global on the new window before any other script runs. It is the
@@ -81,10 +82,6 @@ declare global {
   interface Window {
     __RIIDA_LAUNCH_PARAMS__?: InjectedLaunchParams;
   }
-}
-
-function coerceLaunchString(value: unknown): string | null {
-  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function readLaunchParams(
@@ -119,18 +116,11 @@ function persistLaunchParams(params: ViewerLaunchParams): void {
 
 function readPersistedLaunchParams(): ViewerLaunchParams | null {
   try {
-    const raw = sessionStorage.getItem(VIEWER_LAUNCH_PARAMS_SESSION_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { filePath?: unknown; source?: unknown };
-      return {
-        filePath: coerceLaunchString(parsed.filePath),
-        source: coerceLaunchString(parsed.source),
-      };
-    }
+    return parsePersistedLaunchParams(sessionStorage.getItem(VIEWER_LAUNCH_PARAMS_SESSION_KEY));
   } catch {
-    // sessionStorage unavailable or corrupt — caller falls back to defaults.
+    // sessionStorage unavailable — caller falls back to defaults.
+    return null;
   }
-  return null;
 }
 
 function setStatus(message: string | null): void {
@@ -523,18 +513,11 @@ const VIEWER_SETTINGS_PANEL_SESSION_KEY = "riida.viewer.settingsPanel";
 // where the reader left it.
 function readSettingsPanelSession(): { open: boolean; scope: ViewerSettingsScope } {
   try {
-    const raw = sessionStorage.getItem(VIEWER_SETTINGS_PANEL_SESSION_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { open?: unknown; scope?: unknown };
-      return {
-        open: parsed.open === true,
-        scope: parsed.scope === "file" ? "file" : "global",
-      };
-    }
+    return parseSettingsPanelSession(sessionStorage.getItem(VIEWER_SETTINGS_PANEL_SESSION_KEY));
   } catch {
-    // sessionStorage unavailable or corrupt — fall through to defaults.
+    // sessionStorage unavailable — fall through to defaults.
+    return { open: false, scope: "global" };
   }
-  return { open: false, scope: "global" };
 }
 
 function writeSettingsPanelSession(state: { open: boolean; scope: ViewerSettingsScope }): void {

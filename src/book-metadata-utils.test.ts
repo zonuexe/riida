@@ -1,15 +1,30 @@
 import { describe, expect, test } from "vitest";
 import {
   applyBookMetadataImport,
+  BOOK_METADATA_DRAFT_KEYS,
   BOOK_METADATA_IMPORT_EXAMPLE,
+  type BookMetadataDraft,
   isBookMetadataDraftEmpty,
   isValidMetadataReleaseDate,
   joinMetadataAuthors,
+  mergeBookMetadataFormValues,
   normalizeMetadataAuthorsText,
   normalizeReleaseDateInput,
   parseBookMetadataImport,
   validateBookMetadataDraft,
 } from "./book-metadata-utils";
+
+const sampleDraft: BookMetadataDraft = {
+  title: "Title",
+  authorsText: "Alice\nBob",
+  description: "Desc",
+  publisher: "Pub",
+  releaseDate: "2026-01-01",
+  language: "ja",
+  url: "https://example.com",
+  asin: "B000000000",
+  coverUrl: "https://example.com/cover.jpg",
+};
 
 describe("normalizeMetadataAuthorsText", () => {
   test("splits lines, trims values, and drops duplicates", () => {
@@ -207,5 +222,40 @@ describe("applyBookMetadataImport", () => {
         },
       ).authorsText,
     ).toBe("Alice\nBob");
+  });
+});
+
+describe("BOOK_METADATA_DRAFT_KEYS", () => {
+  test("lists every editable draft field exactly once", () => {
+    expect([...BOOK_METADATA_DRAFT_KEYS].sort()).toEqual(
+      (Object.keys(sampleDraft) as Array<keyof BookMetadataDraft>).sort(),
+    );
+    expect(new Set(BOOK_METADATA_DRAFT_KEYS).size).toBe(BOOK_METADATA_DRAFT_KEYS.length);
+  });
+});
+
+describe("mergeBookMetadataFormValues", () => {
+  test("prefers form values over the fallback draft", () => {
+    const merged = mergeBookMetadataFormValues(
+      { title: "Edited", asin: "B999999999" },
+      sampleDraft,
+    );
+    expect(merged.title).toBe("Edited");
+    expect(merged.asin).toBe("B999999999");
+    // Untouched fields fall back to the current draft.
+    expect(merged.authorsText).toBe(sampleDraft.authorsText);
+    expect(merged.coverUrl).toBe(sampleDraft.coverUrl);
+  });
+
+  test("treats undefined as 'keep fallback' but an empty string as a real edit", () => {
+    const merged = mergeBookMetadataFormValues({ title: "", publisher: undefined }, sampleDraft);
+    // Empty string is a user clearing the field, so it must win over the fallback.
+    expect(merged.title).toBe("");
+    // undefined (e.g. missing input element) keeps the existing value.
+    expect(merged.publisher).toBe(sampleDraft.publisher);
+  });
+
+  test("returns a full draft even when no form values are supplied", () => {
+    expect(mergeBookMetadataFormValues({}, sampleDraft)).toEqual(sampleDraft);
   });
 });

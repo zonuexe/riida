@@ -13,6 +13,39 @@ export type BookMetadataDraft = {
   coverUrl: string;
 };
 
+/**
+ * Single source of truth for the editable metadata fields. Iterating this keeps
+ * the form-read, state-apply, and merge logic in lockstep so a new field can be
+ * added in one place instead of three.
+ */
+export const BOOK_METADATA_DRAFT_KEYS = [
+  "title",
+  "authorsText",
+  "description",
+  "publisher",
+  "releaseDate",
+  "language",
+  "url",
+  "asin",
+  "coverUrl",
+] as const satisfies ReadonlyArray<keyof BookMetadataDraft>;
+
+/**
+ * Build a complete draft from (possibly missing) form values, falling back to
+ * the current draft per field. A field value of `undefined` — e.g. when its
+ * input element is absent — keeps the fallback; an empty string is a real edit.
+ */
+export function mergeBookMetadataFormValues(
+  formValues: Partial<Record<keyof BookMetadataDraft, string | undefined>>,
+  fallback: BookMetadataDraft,
+): BookMetadataDraft {
+  const result = {} as BookMetadataDraft;
+  for (const key of BOOK_METADATA_DRAFT_KEYS) {
+    result[key] = formValues[key] ?? fallback[key];
+  }
+  return result;
+}
+
 export type BookMetadataImportPatch = {
   title?: string | null;
   authors?: string[] | null;

@@ -19,9 +19,12 @@ import { applyAppTheme, persistAppTheme } from "./app-theme";
 import { loadPdfJsRuntime, TauriBinaryDataFactory } from "./pdf-runtime";
 import {
   applyBookMetadataImport,
+  BOOK_METADATA_DRAFT_KEYS,
   BOOK_METADATA_IMPORT_EXAMPLE,
+  type BookMetadataDraft,
   isBookMetadataDraftEmpty,
   joinMetadataAuthors,
+  mergeBookMetadataFormValues,
   normalizeMetadataAuthorsText,
   normalizeReleaseDateInput,
   parseBookMetadataImport,
@@ -3076,50 +3079,30 @@ function addTagFromEditorInput() {
   syncTagEditorUi();
 }
 
-function buildBookMetadataDraftFromForm() {
-  const titleEl = document.querySelector<HTMLInputElement>("#book-metadata-title");
-  const authorsEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-authors");
-  const descriptionEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-description");
-  const publisherEl = document.querySelector<HTMLInputElement>("#book-metadata-publisher");
-  const releaseDateEl = document.querySelector<HTMLInputElement>("#book-metadata-release-date");
-  const languageEl = document.querySelector<HTMLInputElement>("#book-metadata-language");
-  const urlEl = document.querySelector<HTMLInputElement>("#book-metadata-url");
-  const asinEl = document.querySelector<HTMLInputElement>("#book-metadata-asin");
-  const coverUrlEl = document.querySelector<HTMLInputElement>("#book-metadata-cover-url");
+function buildBookMetadataDraftFromForm(): BookMetadataDraft {
+  const readField = (id: string) =>
+    document.querySelector<HTMLInputElement | HTMLTextAreaElement>(id)?.value;
 
-  return {
-    title: titleEl?.value ?? bookMetadataEditorState.title,
-    authorsText: authorsEl?.value ?? bookMetadataEditorState.authorsText,
-    description: descriptionEl?.value ?? bookMetadataEditorState.description,
-    publisher: publisherEl?.value ?? bookMetadataEditorState.publisher,
-    releaseDate: releaseDateEl?.value ?? bookMetadataEditorState.releaseDate,
-    language: languageEl?.value ?? bookMetadataEditorState.language,
-    url: urlEl?.value ?? bookMetadataEditorState.url,
-    asin: asinEl?.value ?? bookMetadataEditorState.asin,
-    coverUrl: coverUrlEl?.value ?? bookMetadataEditorState.coverUrl,
-  };
+  return mergeBookMetadataFormValues(
+    {
+      title: readField("#book-metadata-title"),
+      authorsText: readField("#book-metadata-authors"),
+      description: readField("#book-metadata-description"),
+      publisher: readField("#book-metadata-publisher"),
+      releaseDate: readField("#book-metadata-release-date"),
+      language: readField("#book-metadata-language"),
+      url: readField("#book-metadata-url"),
+      asin: readField("#book-metadata-asin"),
+      coverUrl: readField("#book-metadata-cover-url"),
+    },
+    bookMetadataEditorState,
+  );
 }
 
-function applyBookMetadataDraftToState(draft: {
-  title: string;
-  authorsText: string;
-  description: string;
-  publisher: string;
-  releaseDate: string;
-  language: string;
-  url: string;
-  asin: string;
-  coverUrl: string;
-}) {
-  bookMetadataEditorState.title = draft.title;
-  bookMetadataEditorState.authorsText = draft.authorsText;
-  bookMetadataEditorState.description = draft.description;
-  bookMetadataEditorState.publisher = draft.publisher;
-  bookMetadataEditorState.releaseDate = draft.releaseDate;
-  bookMetadataEditorState.language = draft.language;
-  bookMetadataEditorState.url = draft.url;
-  bookMetadataEditorState.asin = draft.asin;
-  bookMetadataEditorState.coverUrl = draft.coverUrl;
+function applyBookMetadataDraftToState(draft: BookMetadataDraft) {
+  for (const key of BOOK_METADATA_DRAFT_KEYS) {
+    bookMetadataEditorState[key] = draft[key];
+  }
 }
 
 function importBookMetadataFromJson() {

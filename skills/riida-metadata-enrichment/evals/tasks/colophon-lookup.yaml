@@ -1,0 +1,17 @@
+id: colophon-lookup
+name: Colophon and ISBN lookup
+description: |
+  Use the colophon ISBN to enrich a riida book's release date and description, only
+  when the ISBN/title match is confident.
+tags:
+  - happy-path
+  - colophon
+inputs:
+  prompt: |
+    This book in riida has an ISBN in its colophon but no release date or description.
+    Please enrich those fields.
+expected:
+  output_contains:
+    - "release"
+  outcomes:
+    - type: task_completed

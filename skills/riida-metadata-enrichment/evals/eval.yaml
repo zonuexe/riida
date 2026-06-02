@@ -1,0 +1,47 @@
+name: riida-metadata-enrichment-eval
+description: Evaluation suite for riida-metadata-enrichment skill
+skill: riida-metadata-enrichment
+version: "1.0"
+config:
+  trials_per_task: 1
+  timeout_seconds: 300
+  parallel: false
+  executor: copilot-sdk
+  model: auto
+graders:
+  - type: skill_invocation
+    name: enrichment_sequence
+    config:
+      required_skills:
+        - riida-metadata-enrichment
+      mode: exact_match
+      allow_extra: false
+  - type: trigger
+    name: positive_trigger
+    config:
+      skill_path: skills/riida-metadata-enrichment/SKILL.md
+      mode: positive
+      threshold: 0.6
+  - type: trigger
+    name: negative_trigger
+    config:
+      skill_path: skills/riida-metadata-enrichment/SKILL.md
+      mode: negative
+      threshold: 0.6
+  - type: prompt
+    name: enrichment_quality
+    config:
+      model: auto
+      prompt: |
+        Evaluate whether the agent correctly enriched or completed the book metadata in riida by resolving against techbook-mcp, and only wrote back confident results. Pass if:
+        - The agent filled missing or thin fields (title, authors, publisher, release date, or description) for books indexed by riida.
+        - The agent used techbook-mcp for resolution, and only wrote back when confidence was high and ISBN/title agreed.
+        - The agent did NOT attempt to enrich files not indexed by riida, read book content, or perform web lookups.
+        - The agent skipped or asked for confirmation on ambiguous/low-confidence matches.
+        If all criteria are met, call set_waza_grade_pass. Otherwise, call set_waza_grade_fail and explain.
+metrics:
+  - name: task_completion
+    weight: 1.0
+    threshold: 0.8
+tasks:
+  - "tasks/*.yaml"

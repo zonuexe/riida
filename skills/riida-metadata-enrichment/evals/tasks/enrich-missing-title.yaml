@@ -1,0 +1,17 @@
+id: enrich-missing-title
+name: Enrich missing title
+description: |
+  Fill in a missing book title in the riida library using techbook-mcp, only when a
+  confident match is found.
+tags:
+  - happy-path
+  - resolve
+inputs:
+  prompt: |
+    One of my books in riida is missing its title. Please fill it in using the best
+    available metadata source.
+expected:
+  output_contains:
+    - "title"
+  outcomes:
+    - type: task_completed

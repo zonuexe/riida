@@ -1,0 +1,29 @@
+# Trigger accuracy tests for the riida-metadata-enrichment skill.
+# Realistic prompts a riida user would type (hand-written; the auto-scaffold from a
+# comma-separated USE FOR list produced unusable single-word prompts).
+
+skill: riida-metadata-enrichment
+
+# Prompts that SHOULD trigger this skill
+should_trigger_prompts:
+  - prompt: "SE/ フォルダの本で、まだ説明文が入っていないものにメタデータを補完して"
+    reason: "Enrich metadata for the books in a riida directory"
+    confidence: high
+  - prompt: "この本、タイトルと著者が空なので ISBN から埋めてほしい"
+    reason: "Fill a missing title/authors from the book's ISBN"
+    confidence: high
+  - prompt: "ライブラリでメタデータが欠けている本を一括で補完して。怪しいものは確認して"
+    reason: "Batch-complete missing metadata across the library"
+    confidence: high
+  - prompt: "奥付から発行日と出版社を取得して riida に入れて"
+    reason: "Colophon-based publisher/release-date lookup"
+    confidence: high
+
+# Prompts that should NOT trigger this skill
+should_not_trigger_prompts:
+  - prompt: "デスクトップにある riida 未登録の PDF のメタデータをネットで調べて入れて"
+    reason: "File is not indexed by riida — out of scope"
+    confidence: high
+  - prompt: "この技術書の本文を検索して、該当するページを教えて"
+    reason: "Reading/searching book content, not metadata enrichment"
+    confidence: high

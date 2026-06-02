@@ -1,0 +1,16 @@
+id: not-indexed-file
+name: Not-indexed file (anti-trigger)
+description: |
+  A file not indexed by riida is out of scope; the skill should decline to enrich it
+  rather than inventing metadata or doing a generic web lookup.
+tags:
+  - anti-trigger
+  - negative-test
+inputs:
+  prompt: |
+    I have a PDF on my desktop that's not in riida. Can you fill in its metadata?
+expected:
+  output_not_contains:
+    - "metadata written"
+  outcomes:
+    - type: task_completed

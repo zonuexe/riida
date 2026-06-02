@@ -1,0 +1,17 @@
+id: batch-enrich-metadata
+name: Batch enrich metadata
+description: |
+  Batch-complete missing authors and publisher for several riida books, writing only
+  confident matches in a single update.
+tags:
+  - happy-path
+  - batch
+inputs:
+  prompt: |
+    Several books in my riida library are missing authors and publisher fields. Can you
+    batch-complete their metadata?
+expected:
+  output_contains:
+    - "publisher"
+  outcomes:
+    - type: task_completed

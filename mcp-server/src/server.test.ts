@@ -5,7 +5,17 @@ import Database from "better-sqlite3";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as fs from "node:fs";
-import { createServer, type CreateServerOptions } from "./index.js";
+import {
+  createServer,
+  type CreateServerOptions,
+  isValidIsbn,
+  normalizeIsbn,
+  extractIsbnCandidates,
+  chooseBestIsbn,
+  parseColophonDate,
+  parseColophonPublisher,
+  parseColophon,
+} from "./index.js";
 
 // ---------------------------------------------------------------------------
 // Test DB helpers
@@ -49,7 +59,7 @@ function createTestDb(dbPath: string): Database.Database {
 
 async function makeClient(
   dbPath: string,
-  options: Pick<CreateServerOptions, "pdfParser"> = {},
+  options: Pick<CreateServerOptions, "pdfParser" | "pdftotext"> = {},
 ): Promise<{ client: Client; cleanup: () => Promise<void> }> {
   const server = createServer({ dbPath, ...options });
   const client = new Client({ name: "test-client", version: "1.0.0" }, { capabilities: {} });
@@ -97,17 +107,18 @@ describe("tools/list", () => {
     fs.unlinkSync(dbPath);
   });
 
-  it("exposes all 7 tools", async () => {
+  it("exposes all 8 tools", async () => {
     const result = await client.listTools();
     const names = result.tools.map((t) => t.name);
     expect(names).toContain("list_books_needing_metadata");
     expect(names).toContain("get_book_metadata");
     expect(names).toContain("read_pdf_pages");
+    expect(names).toContain("read_pdf_colophon");
     expect(names).toContain("update_books_metadata");
     expect(names).toContain("search_books");
     expect(names).toContain("get_book_tags");
     expect(names).toContain("set_book_tags");
-    expect(names).toHaveLength(7);
+    expect(names).toHaveLength(8);
   });
 });
 
@@ -695,5 +706,303 @@ describe("search_books", () => {
     expect(book.publisher).toBe("Chilton");
     expect(book.language).toBe("en");
     expect(book.directory).toBe("/lib/sci-fi");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Colophon (奥付) parsing — pure helpers
+//
+// The sample strings below are reduced from the actual colophon text that
+// pdf-parse produces for real books in the test library (C&R/Mynavi, O'Reilly
+// Japan, Ohmsha), including the quirks that matter: a Japanese C-code, a
+// back-matter ad list of foreign ISBNs, parenthesised ISBNs, ISBNs broken
+// across pdf.js line breaks, and a trailing reprint date.
+// ---------------------------------------------------------------------------
+
+describe("isValidIsbn / normalizeIsbn", () => {
+  it("validates ISBN-13 check digits", () => {
+    expect(isValidIsbn("9784863542440")).toBe(true);
+    expect(isValidIsbn("9784873116860")).toBe(true);
+    expect(isValidIsbn("9784873116861")).toBe(false); // flipped check digit
+  });
+
+  it("validates ISBN-10 check digits, including a trailing X", () => {
+    expect(isValidIsbn("4274066568")).toBe(true);
+    expect(isValidIsbn("097522980X")).toBe(true);
+    expect(isValidIsbn("0975229801")).toBe(false);
+  });
+
+  it("rejects wrong-length inputs", () => {
+    expect(isValidIsbn("123")).toBe(false);
+    expect(isValidIsbn("97848635424400")).toBe(false);
+  });
+
+  it("normalizeIsbn strips separators and upcases X", () => {
+    expect(normalizeIsbn("978-4-86354-244-0")).toBe("9784863542440");
+    expect(normalizeIsbn("978–4–87311–697-6")).toBe("9784873116976");
+    expect(normalizeIsbn("4-9752298-0-x")).toBe("497522980X");
+  });
+});
+
+describe("extractIsbnCandidates", () => {
+  it("extracts a standard ISBN-13 with a trailing C-code", () => {
+    const cands = extractIsbnCandidates("ISBN978-4-86354-244-0 C3055\n©Money Forward");
+    expect(cands).toHaveLength(1);
+    expect(cands[0].normalized).toBe("9784863542440");
+    expect(cands[0].raw).toBe("978-4-86354-244-0");
+    expect(cands[0].valid).toBe(true);
+    expect(cands[0].cCode).toBe("C3055");
+  });
+
+  it("extracts a parenthesised ISBN with no C-code", () => {
+    const cands = extractIsbnCandidates("Printed in Japan（ISBN978-4-87311-686-0）");
+    expect(cands).toHaveLength(1);
+    expect(cands[0].normalized).toBe("9784873116860");
+    expect(cands[0].cCode).toBeNull();
+  });
+
+  it("reassembles an ISBN split across pdf.js line breaks", () => {
+    // pdf.js renders some vertical-layout colophons one glyph-group per line.
+    const cands = extractIsbnCandidates("（ISBN978\n4\n87311\n697\n6）");
+    expect(cands).toHaveLength(1);
+    expect(cands[0].normalized).toBe("9784873116976");
+    expect(cands[0].valid).toBe(true);
+  });
+
+  it("recognises an old 10-digit ISBN", () => {
+    const cands = extractIsbnCandidates("ISBN 4-274-06656-8");
+    expect(cands).toHaveLength(1);
+    expect(cands[0].normalized).toBe("4274066568");
+    expect(cands[0].valid).toBe(true);
+  });
+
+  it("does not swallow a trailing date into the digit run", () => {
+    const cands = extractIsbnCandidates("ISBN 978-4-274-06866-9\n2014 年 6 月");
+    expect(cands).toHaveLength(1);
+    expect(cands[0].normalized).toBe("9784274068669");
+    expect(cands[0].valid).toBe(true);
+  });
+
+  it("requires the ISBN prefix (ignores phone numbers and prices)", () => {
+    expect(extractIsbnCandidates("電話 025-259-4293 FAX 025-258-2801 定価 2800 円")).toEqual([]);
+  });
+});
+
+describe("chooseBestIsbn", () => {
+  it("picks the C-coded own-book ISBN over a back-matter ad list", () => {
+    const text = [
+      "関連書籍のご案内",
+      "ISBN978-4-274-06256-8",
+      "ISBN978-4-87311-138-4",
+      "ISBN978-4-87311-139-1",
+      "発行所",
+      "株式会社 シーアンドアール研究所",
+      "ISBN978-4-86354-205-1 C3055",
+      "Printed in Japan",
+    ].join("\n");
+    const best = chooseBestIsbn(extractIsbnCandidates(text), text);
+    expect(best?.normalized).toBe("9784863542051");
+    expect(best?.cCode).toBe("C3055");
+  });
+
+  it("returns null when there are no candidates", () => {
+    expect(chooseBestIsbn([], "no isbn here")).toBeNull();
+  });
+});
+
+describe("parseColophonDate", () => {
+  it("prefers the first-edition (初版第1刷) date over a later reprint", () => {
+    const text = "2014 年 11 月 19 日 初版第 1 刷発行\n2019 年 6 月 24 日 初版第 8 刷発行";
+    expect(parseColophonDate(text)).toBe("2014-11-19");
+  });
+
+  it("handles fullwidth digits", () => {
+    expect(parseColophonDate("２０１８年９月３日 初版発行")).toBe("2018-09-03");
+  });
+
+  it("returns empty string when no date is present", () => {
+    expect(parseColophonDate("ISBN978-4-86354-244-0")).toBe("");
+  });
+});
+
+describe("parseColophonPublisher", () => {
+  it("reads the company name in the window after a publisher keyword", () => {
+    const text = "発行所\n株式会社 シーアンドアール研究所\n新潟県新潟市北区西名目所 4083-6";
+    expect(parseColophonPublisher(text)).toBe("株式会社シーアンドアール研究所");
+  });
+
+  it("does not pull the company name out of copyright boilerplate", () => {
+    // No publisher keyword present; the only 株式会社 is inside running text.
+    expect(parseColophonPublisher("本書を株式会社リイダに無断で複写することを禁じます")).toBe("");
+  });
+});
+
+describe("parseColophon", () => {
+  it("parses a full C&R-style colophon at high confidence", () => {
+    const text = [
+      "改訂2版 Ruby逆引きハンドブック",
+      "2018 年 9月3日 初版発行 Ver.1.0",
+      "発行所",
+      "株式会社 シーアンドアール研究所",
+      "ISBN978-4-86354-244-0 C3055",
+      "©Money Forward, Inc., 2018",
+      "Printed in Japan",
+    ].join("\n");
+    const c = parseColophon(text);
+    expect(c.isbn_normalized).toBe("9784863542440");
+    expect(c.isbn_valid).toBe(true);
+    expect(c.c_code).toBe("C3055");
+    expect(c.isbn_confidence).toBe("high");
+    expect(c.release_date).toBe("2018-09-03");
+    expect(c.publisher).toBe("株式会社シーアンドアール研究所");
+    expect(c.printed_in_japan).toBe(true);
+  });
+
+  it("flags low confidence when several ISBNs sit far from the colophon", () => {
+    // Mimics a book whose own colophon is image-only, so only an advertised
+    // back-matter list of (distant) ISBNs is extractable.
+    const ads = Array.from({ length: 6 }, (_, i) => `ISBN978-4-764-90${250 + i}-8`).join(
+      "\n",
+    );
+    const text = `${ads}\n${"レビュー".repeat(2000)}\n初版発行\n発行所`;
+    const c = parseColophon(text);
+    expect(c.isbn).not.toBeNull();
+    expect(c.isbn_confidence).toBe("low");
+  });
+
+  it("reports none when no ISBN can be extracted", () => {
+    const c = parseColophon("奥付が画像のみで本文に ISBN がありません");
+    expect(c.isbn).toBeNull();
+    expect(c.isbn_confidence).toBe("none");
+    expect(c.isbn_candidates).toEqual([]);
+  });
+});
+
+describe("read_pdf_colophon", () => {
+  let dbPath: string;
+  let client: Client;
+  let cleanup: () => Promise<void>;
+
+  beforeEach(async () => {
+    dbPath = tempDbPath();
+    createTestDb(dbPath).close();
+  });
+
+  afterEach(async () => {
+    await cleanup();
+    fs.unlinkSync(dbPath);
+  });
+
+  it("returns isError when file does not exist", async () => {
+    ({ client, cleanup } = await makeClient(dbPath));
+    const result = await callTool(client, "read_pdf_colophon", {
+      file_path: "/nonexistent/book.pdf",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch("File not found");
+  });
+
+  it("parses the colophon from the parsed text", async () => {
+    const colophonText = [
+      "発行所",
+      "株式会社 オーム社",
+      "ISBN978-4-274-06866-9",
+      "Printed in Japan",
+    ].join("\n");
+    const mockParser = vi.fn().mockResolvedValue({ text: colophonText, numpages: 440 });
+    ({ client, cleanup } = await makeClient(dbPath, { pdfParser: mockParser }));
+
+    const tmpPdf = path.join(os.tmpdir(), "dummy-colophon.pdf");
+    fs.writeFileSync(tmpPdf, "dummy");
+    try {
+      const result = parseText(
+        await callTool(client, "read_pdf_colophon", { file_path: tmpPdf }),
+      ) as {
+        total_pages: number;
+        tail_pages_read: number | null;
+        colophon: { isbn_normalized: string; isbn_valid: boolean; isbn_confidence: string };
+      };
+      expect(result.total_pages).toBe(440);
+      // The mock parser never invokes pagerender, so the handler falls back to
+      // the full text and cannot report a tail page count.
+      expect(result.tail_pages_read).toBeNull();
+      expect(result.colophon.isbn_normalized).toBe("9784274068669");
+      expect(result.colophon.isbn_valid).toBe(true);
+      // The parser is driven via the pagerender hook, not the `max` option.
+      expect(mockParser).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        expect.objectContaining({ pagerender: expect.any(Function) }),
+      );
+    } finally {
+      fs.unlinkSync(tmpPdf);
+    }
+  });
+});
+
+describe("read_pdf_colophon — pdftotext fallback", () => {
+  let dbPath: string;
+  let client: Client;
+  let cleanup: () => Promise<void>;
+  const tmpPdf = path.join(os.tmpdir(), "fallback-test.pdf");
+
+  beforeEach(async () => {
+    dbPath = tempDbPath();
+    createTestDb(dbPath).close();
+    fs.writeFileSync(tmpPdf, "dummy");
+  });
+
+  afterEach(async () => {
+    await cleanup();
+    fs.unlinkSync(dbPath);
+    fs.unlinkSync(tmpPdf);
+  });
+
+  it("falls back to pdftotext when pdf.js yields no ISBN", async () => {
+    // pdf.js extracts the page but the ISBN's font has no ToUnicode CMap, so no
+    // ISBN surfaces; poppler reads the same page cleanly.
+    const pdfParser = vi.fn().mockResolvedValue({ text: "奥付\n発行 翔泳社", numpages: 240 });
+    const pdftotext = vi
+      .fn()
+      .mockReturnValue("発行所\n株式会社 翔泳社\nISBN978-4-7981-5767-2\nPrinted in Japan");
+    ({ client, cleanup } = await makeClient(dbPath, { pdfParser, pdftotext }));
+
+    const result = parseText(
+      await callTool(client, "read_pdf_colophon", { file_path: tmpPdf }),
+    ) as { isbn_source: string; colophon: { isbn_normalized: string; isbn_valid: boolean } };
+
+    expect(result.isbn_source).toBe("pdftotext");
+    expect(result.colophon.isbn_normalized).toBe("9784798157672");
+    expect(result.colophon.isbn_valid).toBe(true);
+    expect(pdftotext).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not invoke pdftotext when pdf.js already found the ISBN", async () => {
+    const pdfParser = vi
+      .fn()
+      .mockResolvedValue({ text: "ISBN978-4-7981-6849-4 C3055\nPrinted in Japan", numpages: 300 });
+    const pdftotext = vi.fn().mockReturnValue("should not be used");
+    ({ client, cleanup } = await makeClient(dbPath, { pdfParser, pdftotext }));
+
+    const result = parseText(
+      await callTool(client, "read_pdf_colophon", { file_path: tmpPdf }),
+    ) as { isbn_source: string; colophon: { isbn_normalized: string } };
+
+    expect(result.isbn_source).toBe("pdfjs");
+    expect(result.colophon.isbn_normalized).toBe("9784798168494");
+    expect(pdftotext).not.toHaveBeenCalled();
+  });
+
+  it("reports no ISBN when neither pdf.js nor pdftotext can read it", async () => {
+    const pdfParser = vi.fn().mockResolvedValue({ text: "奥付は画像のみ", numpages: 100 });
+    const pdftotext = vi.fn().mockReturnValue(null); // poppler unavailable / empty
+    ({ client, cleanup } = await makeClient(dbPath, { pdfParser, pdftotext }));
+
+    const result = parseText(
+      await callTool(client, "read_pdf_colophon", { file_path: tmpPdf }),
+    ) as { isbn_source: string | null; colophon: { isbn: string | null } };
+
+    expect(result.isbn_source).toBeNull();
+    expect(result.colophon.isbn).toBeNull();
+    expect(pdftotext).toHaveBeenCalledTimes(1);
   });
 });

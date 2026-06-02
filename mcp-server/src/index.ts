@@ -9,6 +9,7 @@ import Database from "better-sqlite3";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -21,10 +22,36 @@ const defaultPdfParse = require("pdf-parse/lib/pdf-parse.js") as PdfParser;
 // Types
 // ---------------------------------------------------------------------------
 
+/** Minimal shape of the pdf.js page object pdf-parse hands to `pagerender`. */
+interface PdfPageData {
+  pageNumber: number;
+  getTextContent: (
+    options?: unknown,
+  ) => Promise<{ items: Array<{ str: string; transform: number[] }> }>;
+}
+
+interface PdfParseOptions {
+  /** Stop after this many leading pages. `pdf-parse` default (0) reads all. */
+  max?: number;
+  /** Per-page render hook; lets us capture text page-by-page (for the tail). */
+  pagerender?: (pageData: PdfPageData) => string | Promise<string>;
+}
+
 type PdfParser = (
   data: Buffer,
-  options?: { max?: number },
+  options?: PdfParseOptions,
 ) => Promise<{ text: string; numpages: number }>;
+
+/**
+ * Extracts text from a page range of a PDF using an external engine, or returns
+ * null when no such engine is available. Used as a fallback for colophons that
+ * pdf.js cannot read (fonts without a ToUnicode CMap), which poppler can.
+ */
+type PdftotextExtractor = (
+  filePath: string,
+  fromPage: number,
+  toPage: number,
+) => string | null;
 
 interface BookRow {
   file_path: string;
@@ -60,6 +87,44 @@ export interface CreateServerOptions {
   dbPath?: string;
   /** Override the PDF parser (useful for testing). */
   pdfParser?: PdfParser;
+  /** Override the pdftotext fallback (useful for testing). */
+  pdftotext?: PdftotextExtractor;
+}
+
+/** Candidate `pdftotext` locations, tried in order (PATH first, then Homebrew). */
+const PDFTOTEXT_BINARIES = [
+  "pdftotext",
+  "/opt/homebrew/bin/pdftotext",
+  "/usr/local/bin/pdftotext",
+  "/usr/bin/pdftotext",
+];
+
+/**
+ * Default pdftotext fallback: shell out to poppler's `pdftotext` for a page
+ * range. Returns null when poppler is not installed (so the tool degrades to
+ * pdf.js-only) or extraction fails.
+ */
+function defaultPdftotext(
+  filePath: string,
+  fromPage: number,
+  toPage: number,
+): string | null {
+  for (const bin of PDFTOTEXT_BINARIES) {
+    const result = spawnSync(
+      bin,
+      ["-q", "-f", String(fromPage), "-l", String(toPage), filePath, "-"],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    );
+    if (result.error) {
+      // Not found at this location — try the next candidate.
+      if ((result.error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      return null;
+    }
+    return result.status === 0 && typeof result.stdout === "string"
+      ? result.stdout
+      : null;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,12 +150,345 @@ export function getDbPath(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Colophon (奥付) parsing — pure helpers, unit-tested independently
+// ---------------------------------------------------------------------------
+//
+// Japanese books carry their bibliographic data on a colophon page (奥付) at
+// the very end of the volume. It reliably contains the ISBN, the first-edition
+// publication date, and the publisher. We read the last few pages and parse it.
+//
+// The hard case is books whose back matter advertises *other* titles: those ad
+// pages list many foreign ISBNs. The book's own ISBN is distinguished by the
+// Japanese C-code (e.g. `C3055`) that follows it and by sitting next to
+// colophon keywords (発行所 / Printed in Japan), which the scoring below uses.
+
+/** Hyphen, en/em dashes, minus sign, and fullwidth hyphen used as ISBN separators. */
+const ISBN_SEP = "\\-\\u2010-\\u2015\\u2212\\uFF0D";
+
+/** Keywords that mark the real colophon block (used to score ISBN candidates). */
+const COLOPHON_KEYWORDS = [
+  "発行所",
+  "発売元",
+  "発行者",
+  "発行日",
+  "発行",
+  "初版",
+  "刷発行",
+  "印刷",
+  "製本",
+  "Printed in Japan",
+  "定価",
+  "本体",
+];
+
+export interface IsbnCandidate {
+  /** ISBN as printed, separators preserved, e.g. "978-4-86354-244-0". */
+  raw: string;
+  /** Digits only (plus a trailing X), e.g. "9784863542440". */
+  normalized: string;
+  /** Whether the ISBN-10/13 check digit is valid. */
+  valid: boolean;
+  /** Japanese C-code immediately following the ISBN, e.g. "C3055", else null. */
+  cCode: string | null;
+  /** Character offset of the match within the source text. */
+  index: number;
+}
+
+export interface ParsedColophon {
+  /** Best ISBN as printed, or null when none could be extracted. */
+  isbn: string | null;
+  /** Best ISBN reduced to digits (and trailing X), or null. */
+  isbn_normalized: string | null;
+  /** Whether the chosen ISBN's check digit validates. */
+  isbn_valid: boolean;
+  /**
+   * Confidence that the chosen ISBN is the book's own (vs. an advertised
+   * title). "high" when it carries a C-code or sits next to colophon keywords;
+   * "low" when it was the best of several distant candidates (e.g. a back-cover
+   * ad list, with the real colophon being image-only). "none" when no ISBN.
+   */
+  isbn_confidence: "high" | "low" | "none";
+  /** C-code of the chosen ISBN, e.g. "C3055", or null. */
+  c_code: string | null;
+  /** First-edition publication date as YYYY-MM-DD, or "" when not found. */
+  release_date: string;
+  /** Best-effort publisher name, or "" when not found. */
+  publisher: string;
+  /** Whether the colophon carries a "Printed in Japan" marker. */
+  printed_in_japan: boolean;
+  /** Every ISBN-like token found, in document order. */
+  isbn_candidates: IsbnCandidate[];
+}
+
+/** Convert fullwidth digits (０-９) to ASCII so date/number parsing is uniform. */
+function toHalfWidthDigits(text: string): string {
+  return text.replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0));
+}
+
+/** Reduce a raw ISBN run to digits plus an optional trailing X. */
+export function normalizeIsbn(raw: string): string {
+  return raw.replace(/[^0-9Xx]/g, "").toUpperCase();
+}
+
+/** Validate an ISBN-10 or ISBN-13 check digit. */
+export function isValidIsbn(normalized: string): boolean {
+  if (/^\d{13}$/.test(normalized)) {
+    let sum = 0;
+    for (let i = 0; i < 13; i++) {
+      sum += Number(normalized[i]) * (i % 2 === 0 ? 1 : 3);
+    }
+    return sum % 10 === 0;
+  }
+  if (/^\d{9}[\dX]$/.test(normalized)) {
+    let sum = 0;
+    for (let i = 0; i < 10; i++) {
+      const c = normalized[i];
+      sum += (c === "X" ? 10 : Number(c)) * (10 - i);
+    }
+    return sum % 11 === 0;
+  }
+  return false;
+}
+
+/**
+ * Find every ISBN-like token in colophon text.
+ *
+ * Requires the literal `ISBN` prefix (avoids matching phone numbers, prices,
+ * and order codes). The digit run is allowed to span line breaks, because
+ * pdf.js often splits a colophon ISBN across artificial lines when the glyphs
+ * are placed individually (e.g. O'Reilly Japan's vertical-layout colophons
+ * render "ISBN978\n4\n87311\n..."). To avoid swallowing a trailing date or
+ * price into the run, we keep the first valid 13- or 10-digit ISBN found as a
+ * prefix of the collected digits rather than requiring the whole run to be a
+ * clean ISBN.
+ */
+export function extractIsbnCandidates(text: string): IsbnCandidate[] {
+  const runClass = new RegExp(`^[0-9Xx \\t\\r\\n${ISBN_SEP}]{0,40}`);
+  const isSep = new RegExp(`[${ISBN_SEP}]`);
+  const out: IsbnCandidate[] = [];
+  const prefix = /ISBN[\s:：]*/gi;
+
+  for (let pm = prefix.exec(text); pm !== null; pm = prefix.exec(text)) {
+    const runStart = pm.index + pm[0].length;
+    const run = (text.slice(runStart, runStart + 60).match(runClass) ?? [""])[0];
+    const compact = run.replace(/[^0-9Xx]/g, "").toUpperCase();
+
+    const try13 = /^(?:978|979)\d{10}/.test(compact) ? compact.slice(0, 13) : null;
+    const try10 = /^\d{9}[\dX]/.test(compact) ? compact.slice(0, 10) : null;
+    let normalized: string | null = null;
+    let digitCount = 0;
+    // Accept when the check digit validates, or when the run is exactly that
+    // length (clean, uncontaminated) so a rare bad check digit still surfaces.
+    if (try13 !== null && (isValidIsbn(try13) || compact.length === 13)) {
+      normalized = try13;
+      digitCount = 13;
+    } else if (try10 !== null && (isValidIsbn(try10) || compact.length === 10)) {
+      normalized = try10;
+      digitCount = 10;
+    }
+    if (normalized === null) continue;
+
+    // Reconstruct the printed form (separators kept, whitespace dropped) and
+    // find where the ISBN's digits end within the source text.
+    let seen = 0;
+    let raw = "";
+    let consumed = 0;
+    for (const ch of run) {
+      consumed++;
+      if (/[0-9Xx]/.test(ch)) {
+        raw += ch;
+        if (++seen === digitCount) break;
+      } else if (isSep.test(ch)) {
+        raw += ch;
+      }
+    }
+    // Optional Japanese C-code immediately following the ISBN (own-book marker).
+    const after = text.slice(runStart + consumed, runStart + consumed + 12);
+    const cMatch = after.match(/^[ \t\r\n]*(C\d{4})/);
+
+    out.push({
+      raw,
+      normalized,
+      valid: isValidIsbn(normalized),
+      cCode: cMatch ? cMatch[1].toUpperCase() : null,
+      index: pm.index,
+    });
+    prefix.lastIndex = runStart + consumed;
+  }
+  return out;
+}
+
+/**
+ * Pick the book's own ISBN from the candidates.
+ *
+ * Scores each by the strongest signal first — a trailing C-code (the Japanese
+ * own-book marker), then a valid check digit, then nearness to colophon
+ * keywords. Ties break toward the later occurrence, since a book's own colophon
+ * follows any advertised-titles pages.
+ */
+/** Offsets of every colophon keyword occurrence in the text. */
+function colophonKeywordPositions(text: string): number[] {
+  const positions: number[] = [];
+  for (const kw of COLOPHON_KEYWORDS) {
+    for (let i = text.indexOf(kw); i !== -1; i = text.indexOf(kw, i + kw.length)) {
+      positions.push(i);
+    }
+  }
+  return positions;
+}
+
+/** Distance from `index` to the nearest colophon keyword (Infinity if none). */
+function nearestKeywordDistance(index: number, positions: number[]): number {
+  let nearest = Infinity;
+  for (const p of positions) nearest = Math.min(nearest, Math.abs(p - index));
+  return nearest;
+}
+
+export function chooseBestIsbn(
+  candidates: IsbnCandidate[],
+  text: string,
+): IsbnCandidate | null {
+  if (candidates.length === 0) return null;
+
+  const keywordPositions = colophonKeywordPositions(text);
+
+  const score = (c: IsbnCandidate): number => {
+    let s = 0;
+    if (c.cCode) s += 100;
+    if (c.valid) s += 15;
+    const nearest = nearestKeywordDistance(c.index, keywordPositions);
+    if (nearest !== Infinity) s += Math.max(0, 50 - nearest / 30);
+    return s;
+  };
+
+  let best = candidates[0];
+  let bestScore = score(best);
+  for (const c of candidates.slice(1)) {
+    const s = score(c);
+    if (s > bestScore || (s === bestScore && c.index >= best.index)) {
+      best = c;
+      bestScore = s;
+    }
+  }
+  return best;
+}
+
+/**
+ * Extract the first-edition publication date as YYYY-MM-DD.
+ *
+ * Prefers a date tagged with 初版 (first edition) that is not a later reprint
+ * (第N刷, N≥2) or revision; otherwise falls back to the earliest date present.
+ */
+export function parseColophonDate(text: string): string {
+  const t = toHalfWidthDigits(text);
+  const re = /((?:19|20)\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/g;
+  const dates: { y: number; m: number; d: number; firstEdition: boolean }[] = [];
+  for (let m = re.exec(t); m !== null; m = re.exec(t)) {
+    const after = t.slice(m.index, m.index + m[0].length + 24);
+    const firstEdition =
+      /初版/.test(after) && !/(第\s*[2-9]\d*\s*刷|改訂|増補|新版)/.test(after);
+    dates.push({ y: +m[1], m: +m[2], d: +m[3], firstEdition });
+  }
+  if (dates.length === 0) return "";
+  const firsts = dates.filter((d) => d.firstEdition);
+  const pool = firsts.length > 0 ? firsts : dates;
+  const pick = pool.reduce((a, b) =>
+    b.y < a.y || (b.y === a.y && (b.m < a.m || (b.m === a.m && b.d < a.d))) ? b : a,
+  );
+  const mm = String(pick.m).padStart(2, "0");
+  const dd = String(pick.d).padStart(2, "0");
+  return `${pick.y}-${mm}-${dd}`;
+}
+
+/**
+ * Best-effort publisher name: the first 株式会社 / 有限会社 / 合同会社 company
+ * token at or after the first colophon keyword. Returns "" when uncertain —
+ * callers should cross-check against the raw colophon text.
+ */
+export function parseColophonPublisher(text: string): string {
+  // Only trust a company name found in a short window right after a publisher
+  // keyword. Searching the whole text would match the company name embedded in
+  // the copyright boilerplate ("…研究所に無断で複写…") and pull in running text.
+  const company = /(株式会社|有限会社|合同会社)[ \t\n]?([^\s\n、。）)】]{1,24})/;
+  for (const kw of ["発行所", "発売元", "発行者", "発行"]) {
+    const i = text.indexOf(kw);
+    if (i === -1) continue;
+    const m = text.slice(i, i + 60).match(company);
+    if (m !== null) return `${m[1]}${m[2]}`;
+  }
+  return "";
+}
+
+/** Parse a colophon text block into structured bibliographic fields. */
+export function parseColophon(text: string): ParsedColophon {
+  const candidates = extractIsbnCandidates(text);
+  const best = chooseBestIsbn(candidates, text);
+
+  let confidence: "high" | "low" | "none" = "none";
+  if (best !== null) {
+    const dist = nearestKeywordDistance(best.index, colophonKeywordPositions(text));
+    // High when: a C-code marks it as the book's own; or it sits inside the
+    // colophon block (near a keyword); or it is the sole ISBN in the tail (so
+    // there is nothing to confuse it with — e.g. Ohmsha colophons that extract
+    // no keywords at all). "low" is reserved for the genuinely ambiguous case:
+    // several candidates, none carrying a C-code or sitting near the colophon —
+    // typically a back-matter ad list when the real colophon is image-only.
+    confidence =
+      best.cCode !== null || candidates.length === 1 || dist <= 200
+        ? "high"
+        : "low";
+  }
+
+  return {
+    isbn: best ? best.raw : null,
+    isbn_normalized: best ? best.normalized : null,
+    isbn_valid: best ? best.valid : false,
+    isbn_confidence: confidence,
+    c_code: best ? best.cCode : null,
+    release_date: parseColophonDate(text),
+    publisher: parseColophonPublisher(text),
+    printed_in_japan: /Printed\s+in\s+Japan/i.test(text),
+    isbn_candidates: candidates,
+  };
+}
+
+/**
+ * pdf-parse `pagerender` hook that captures each page's text into `sink` keyed
+ * by 1-based page number. Mirrors pdf-parse's default line-break logic (a new
+ * line whenever the text item's Y coordinate changes). Returns "" so pdf-parse
+ * does not also build a giant concatenated `data.text` we would discard.
+ */
+async function renderColophonPage(
+  pageData: PdfPageData,
+  sink: Map<number, string>,
+): Promise<string> {
+  const content = await pageData.getTextContent({
+    normalizeWhitespace: false,
+    disableCombineTextItems: false,
+  });
+  let lastY: number | undefined;
+  let text = "";
+  for (const item of content.items) {
+    const y = item.transform[5];
+    if (lastY === undefined || lastY === y) {
+      text += item.str;
+    } else {
+      text += `\n${item.str}`;
+    }
+    lastY = y;
+  }
+  sink.set(pageData.pageNumber, text);
+  return "";
+}
+
+// ---------------------------------------------------------------------------
 // Server factory
 // ---------------------------------------------------------------------------
 
 export function createServer(options: CreateServerOptions = {}): Server {
   const dbPath = options.dbPath ?? getDbPath();
   const pdfParse = options.pdfParser ?? defaultPdfParse;
+  const pdftotext = options.pdftotext ?? defaultPdftotext;
 
   const server = new Server(
     { name: "riida-mcp", version: "0.1.0" },
@@ -144,6 +542,30 @@ export function createServer(options: CreateServerOptions = {}): Server {
             max_pages: {
               type: "number",
               description: "Number of pages to read (default 3, max 10)",
+            },
+          },
+        },
+      },
+      {
+        name: "read_pdf_colophon",
+        description:
+          "Extracts the colophon (奥付) from the LAST pages of a PDF and parses its " +
+          "bibliographic data. Best for Japanese books, which print the ISBN, " +
+          "first-edition date, and publisher on a final colophon page. Returns the " +
+          "detected ISBN (own-book ISBN chosen via its C-code and colophon proximity, " +
+          "so advertised foreign ISBNs are not mistaken for it), release_date, " +
+          "publisher, all ISBN candidates, and the raw tail text for cross-checking.",
+        inputSchema: {
+          type: "object" as const,
+          required: ["file_path"],
+          properties: {
+            file_path: {
+              type: "string",
+              description: "Absolute path to the PDF file",
+            },
+            max_pages: {
+              type: "number",
+              description: "Number of trailing pages to read (default 8, max 15)",
             },
           },
         },
@@ -370,6 +792,105 @@ export function createServer(options: CreateServerOptions = {}): Server {
                 pages_extracted: maxPages,
                 // Truncate to avoid flooding the context window
                 text: data.text.slice(0, 8000),
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // read_pdf_colophon
+    // -------------------------------------------------------------------------
+    if (name === "read_pdf_colophon") {
+      const filePath = args?.["file_path"] as string;
+      const requested =
+        typeof args?.["max_pages"] === "number" ? args["max_pages"] : 8;
+      const tailPages = Math.min(Math.max(requested, 1), 15);
+
+      if (!fs.existsSync(filePath)) {
+        return {
+          content: [{ type: "text", text: `File not found: ${filePath}` }],
+          isError: true,
+        };
+      }
+
+      const buffer = fs.readFileSync(filePath);
+      const pageTexts = new Map<number, string>();
+      // No `max`: pdf-parse has no start-page, so the whole document is parsed
+      // and pages are captured page-by-page; we then keep only the tail.
+      const data = await pdfParse(buffer, {
+        pagerender: (pageData) => renderColophonPage(pageData, pageTexts),
+      });
+
+      const totalPages = data.numpages;
+      let tailText: string;
+      let tailPagesRead: number | null;
+      if (pageTexts.size > 0) {
+        const from = Math.max(1, totalPages - tailPages + 1);
+        const parts: string[] = [];
+        for (let p = from; p <= totalPages; p++) {
+          const t = pageTexts.get(p);
+          if (t) parts.push(t);
+        }
+        tailText = parts.join("\n\n");
+        tailPagesRead = Math.min(tailPages, totalPages);
+      } else {
+        // pagerender was not invoked (e.g. an injected mock parser): fall back
+        // to whatever full text the parser returned.
+        tailText = data.text ?? "";
+        tailPagesRead = null;
+      }
+
+      let colophon = parseColophon(tailText);
+      let isbnSource: "pdfjs" | "pdftotext" | null = colophon.isbn ? "pdfjs" : null;
+      let reportedText = tailText;
+
+      // Some colophons (fonts without a ToUnicode CMap) yield no usable text in
+      // pdf.js but read cleanly in poppler. When pdf.js found no ISBN — or only
+      // a low-confidence one — re-read the same tail pages with pdftotext.
+      if (colophon.isbn === null || colophon.isbn_confidence === "low") {
+        const from = Math.max(1, totalPages - tailPages + 1);
+        const fallbackText = pdftotext(filePath, from, totalPages);
+        if (fallbackText !== null && fallbackText.trim() !== "") {
+          const fb = parseColophon(fallbackText);
+          // Adopt the fallback only when it strictly improves on pdf.js: it
+          // filled a missing ISBN, or upgraded a low-confidence one to high.
+          const improves =
+            fb.isbn !== null &&
+            (colophon.isbn === null ||
+              (fb.isbn_confidence === "high" && colophon.isbn_confidence !== "high"));
+          if (improves) {
+            colophon = {
+              ...fb,
+              // Keep any fields pdf.js managed to read if poppler left them blank.
+              release_date: fb.release_date || colophon.release_date,
+              publisher: fb.publisher || colophon.publisher,
+              printed_in_japan: fb.printed_in_japan || colophon.printed_in_japan,
+            };
+            isbnSource = "pdftotext";
+            reportedText = fallbackText;
+          }
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                file_path: filePath,
+                total_pages: totalPages,
+                tail_pages_read: tailPagesRead,
+                // Which engine produced the chosen ISBN: "pdfjs", "pdftotext"
+                // (poppler fallback), or null when no ISBN was found.
+                isbn_source: isbnSource,
+                colophon,
+                // Raw tail text for cross-checking; truncated to spare context.
+                text: reportedText.slice(0, 8000),
               },
               null,
               2,

@@ -6,6 +6,7 @@ MCP server for [riida](https://github.com/zonuexe/riida) — infer and update bo
 
 - Node.js 18 or later
 - [riida](https://github.com/zonuexe/riida) installed and run at least once (creates the database)
+- *(optional)* poppler's `pdftotext` on `PATH` — improves `read_pdf_colophon` ISBN coverage for PDFs whose colophon fonts pdf.js cannot read (`brew install poppler` / `apt install poppler-utils`)
 
 ## Setup
 
@@ -78,6 +79,50 @@ Extracts plain text from the first N pages of a PDF file. Use this to infer titl
 | `file_path` | string | Absolute path to the PDF file |
 | `max_pages` | number | Number of pages to read (default 3, max 10) |
 
+### `read_pdf_colophon`
+
+Extracts the colophon (奥付) from the **last** pages of a PDF and parses its
+bibliographic data. This is the counterpart to `read_pdf_pages`: Japanese books
+print the ISBN, first-edition date, and publisher on a final colophon page.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file_path` | string | Absolute path to the PDF file |
+| `max_pages` | number | Number of trailing pages to read (default 8, max 15) |
+
+The result includes `total_pages`, the raw tail `text`, an `isbn_source`
+(`pdfjs`, `pdftotext`, or `null` — see below), and a parsed `colophon` object:
+
+| Field | Description |
+|-------|-------------|
+| `isbn` | Chosen ISBN as printed (separators preserved), or `null` |
+| `isbn_normalized` | Same ISBN reduced to digits (and a trailing `X`) |
+| `isbn_valid` | Whether the ISBN-10/13 check digit validates |
+| `isbn_confidence` | `high` / `low` / `none` — see below |
+| `c_code` | Japanese C-code following the ISBN (e.g. `C3055`), or `null` |
+| `release_date` | First-edition publication date (`YYYY-MM-DD`), or `""` |
+| `publisher` | Best-effort publisher name, or `""` |
+| `printed_in_japan` | Whether a "Printed in Japan" marker is present |
+| `isbn_candidates` | Every ISBN-like token found, in document order |
+
+The own-book ISBN is chosen over advertised titles in the back matter by its
+Japanese C-code and its proximity to colophon keywords (発行所 / Printed in
+Japan). `isbn_confidence` is `low` when several ISBNs were found but none could
+be confirmed as the book's own — typically a back-cover ad list when the real
+colophon is image-only and not text-extractable. Always cross-check a `low`
+result (and the `release_date` / `publisher`, which are best-effort) against the
+returned raw `text`. ISBNs printed only as a barcode image cannot be extracted.
+
+**pdftotext fallback.** Some colophons use fonts without a ToUnicode CMap, so
+pdf.js (the default parser) extracts no usable text from them while poppler's
+`pdftotext` reads them cleanly. When pdf.js finds no ISBN — or only a
+low-confidence one — the tool re-reads the same trailing pages with `pdftotext`
+and adopts the result if it improves; `isbn_source` then reports `pdftotext`.
+This fallback is best-effort and optional: if `pdftotext` is not on `PATH` (nor
+at the usual Homebrew/`/usr/bin` locations) the tool silently degrades to
+pdf.js-only. Install it via poppler (`brew install poppler`,
+`apt install poppler-utils`) to enable it.
+
 ### `update_books_metadata`
 
 Updates metadata for one or more books in a single transaction. Only the fields you provide are changed; omitted fields keep their current values.
@@ -119,6 +164,8 @@ the metadata for all of them.
 ```
 
 Claude will call `list_books_needing_metadata`, then `read_pdf_pages` for each book, and finally `update_books_metadata` to write everything in one transaction.
+
+When the front matter is ambiguous, `read_pdf_colophon` recovers the ISBN, first-edition date, and publisher from the colophon at the end of the book — for Japanese books that is often the most reliable single source, and the extracted ISBN can seed a precise techbook-mcp lookup.
 
 ## Combining with techbook-mcp
 

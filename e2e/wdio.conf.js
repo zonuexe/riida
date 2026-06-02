@@ -24,6 +24,12 @@ let tauriDriver;
 
 export const config = {
   runner: "local",
+  // Connect to the tauri-driver WebDriver server spawned in beforeSession.
+  // Without an explicit hostname/port WebdriverIO would try to auto-launch a
+  // local browser driver and fail with "No browserName defined".
+  hostname: "127.0.0.1",
+  port: 4444,
+  path: "/",
   specs: ["./specs/**/*.e2e.js"],
   maxInstances: 1,
   capabilities: [

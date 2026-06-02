@@ -1,0 +1,15 @@
+{
+  "//": "llm-functions MCP bridge config. Place at <llm-functions>/mcp.json, then build the bridge so aichat can call these tools. Both servers are DETERMINISTIC; the LLM only bridges the fuzzy judgement between them.",
+  "mcpServers": {
+    "riida": {
+      "//": "riida's own MCP server (extract + write). Absolute path required.",
+      "command": "/Users/megurine/repo/rust/riida/mcp-server/start.sh"
+    },
+    "techbook": {
+      "//": "techbook-mcp (resolve). Pinned to latest; pin a version for reproducibility.",
+      "command": "npx",
+      "args": ["-y", "@zonuexe/techbook-mcp@latest"],
+      "env": {}
+    }
+  }
+}

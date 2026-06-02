@@ -1,0 +1,34 @@
+# aichat agent: riida-metadata
+# Place at <aichat-config-dir>/agents/riida-metadata/index.yaml
+# (per-user overrides go in <aichat-config-dir>/agents/riida-metadata/config.yaml)
+#
+# This agent is the FUZZY BRIDGE between two deterministic MCP servers:
+#   riida   (extract: read_pdf_colophon / read_pdf_pages / get_book_metadata / search_books)
+#   techbook(resolve: resolve_book / resolve_books / get_book_by_isbn / search_books)
+# It is PROPOSE-ONLY: it never writes. update_books_metadata is intentionally
+# excluded from use_tools, so the model physically cannot mutate the library.
+# riida applies approved proposals itself, deterministically.
+
+name: riida-metadata
+description: >-
+  Resolve ambiguous PDF/EPUB front-matter & colophon metadata to canonical
+  Japanese-tech-book records and emit reviewable JSON proposals. Read-only.
+
+# Default model. Override per-user (e.g. a local Ollama model to avoid cost):
+#   ollama:qwen2.5  /  claude:*  /  openai:*
+model: ollama:qwen2.5
+
+# Determinism for the judgement: keep temperature low.
+temperature: 0.0
+
+# TOOL ALLOW-LIST = the propose-only safety boundary.
+# NOTE (verify at build time): the exact tool names surfaced by the llm-functions
+# MCP bridge may be namespaced (e.g. `riida-read_pdf_colophon`). Adjust to match
+# `aichat --list-tools`. Deliberately OMITS riida-update_books_metadata.
+use_tools: >-
+  riida-read_pdf_colophon,riida-read_pdf_pages,riida-get_book_metadata,riida-search_books,techbook-resolve_book,techbook-resolve_books,techbook-get_book_by_isbn,techbook-search_books,techbook-list_publishers
+
+# Instructions live in instructions.md (kept separate for readability). Inline a
+# copy here, or load it as the agent's index.md body, depending on aichat version.
+instructions: |
+  See instructions.md — paste its contents here.

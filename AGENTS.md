@@ -560,12 +560,21 @@ fires nightly (`cron`) and on demand (`workflow_dispatch`):
   uploads `reports/mutation/`.
 - `rust-coverage` — `npm run cov:rust:html` (`cargo-llvm-cov`); uploads
   the HTML report.
+- `e2e` — Linux WebKitGTK smoke via `tauri-driver` (see the End-to-End
+  Smoke Test section).
 
-The mutation jobs exit non-zero when the mutation score regresses, so a
-red nightly is an actionable signal rather than a merge blocker; the
-coverage job is reporting-only. Reports always upload (`if: always()`).
-CI installs the tools via `taiki-e/install-action` and, for coverage,
-the `llvm-tools-preview` rustup component (the Nix dev shell uses the
+`rust-mutation` is **reporting-only**: `lib.rs` is mostly
+`#[tauri::command]` handlers and IO (thumbnails, EPUB parsing, watcher)
+that cannot be unit-tested without a running app, so surviving mutants
+are expected. `cargo-mutants` exits 2 when mutants survive; the workflow
+treats that as success and relies on the uploaded report, while real
+failures (usage `1`, timeout `3`, broken baseline `4`) still fail the
+job. `frontend-mutation` keeps a real gate because Stryker has a
+configurable score threshold (`break: 50`) and the frontend kill rate is
+high; it fails only below that threshold. `rust-coverage` is also
+reporting-only. Reports always upload (`if: always()`). CI installs the
+tools via `taiki-e/install-action` and, for coverage, the
+`llvm-tools-preview` rustup component (the Nix dev shell uses the
 `LLVM_COV`/`LLVM_PROFDATA` env wiring instead).
 
 Standard Rust static checks:

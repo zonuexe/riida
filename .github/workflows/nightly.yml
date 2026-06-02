@@ -49,7 +49,23 @@ jobs:
           tool: cargo-mutants,cargo-nextest
 
       - name: Run Rust mutation testing
-        run: npm run mutants:rust
+        # Reporting-only: lib.rs is dominated by #[tauri::command] handlers and
+        # IO (thumbnails, EPUB parsing, watcher) that are not unit-testable
+        # without a running app, so surviving mutants are expected. cargo-mutants
+        # exits 2 when mutants survive — treat that as success and rely on the
+        # uploaded report. Genuine failures (usage 1, timeout 3, broken baseline
+        # 4) still fail the job.
+        run: |
+          set +e
+          npm run mutants:rust
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ] || [ "$code" -eq 2 ]; then
+            echo "cargo-mutants exit $code (0 = all caught, 2 = surviving mutants; reporting-only)"
+            exit 0
+          fi
+          echo "cargo-mutants failed with exit $code"
+          exit "$code"
 
       - name: Upload mutants report
         if: always()

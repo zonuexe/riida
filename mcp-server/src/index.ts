@@ -112,7 +112,12 @@ function defaultPdftotext(
   for (const bin of PDFTOTEXT_BINARIES) {
     const result = spawnSync(
       bin,
-      ["-q", "-f", String(fromPage), "-l", String(toPage), filePath, "-"],
+      // `-layout` preserves the colophon's spatial table so each date stays on
+      // the same line as its 第N版第N刷 label and each 発行所/発売元 label stays
+      // beside its company. In plain reading order, multi-column colophons (e.g.
+      // O'Reilly Japan) emit all dates first and all labels after, which decouples
+      // a date from its edition.
+      ["-q", "-layout", "-f", String(fromPage), "-l", String(toPage), filePath, "-"],
       { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
     );
     if (result.error) {
@@ -373,25 +378,86 @@ export function chooseBestIsbn(
   return best;
 }
 
+/** A colophon date plus the edition/printing label that follows it. */
+interface DatedPrinting {
+  y: number;
+  m: number;
+  d: number;
+  /** 1 for 初版, N for 第N版, or null when no edition marker follows the date. */
+  edition: number | null;
+  /** N for 第N刷, or null when no printing marker follows the date. */
+  printing: number | null;
+  /** True when the label carries 改訂 / 増補 / 新版 (a later revision). */
+  revision: boolean;
+}
+
 /**
- * Extract the first-edition publication date as YYYY-MM-DD.
+ * Extract the publication date as YYYY-MM-DD.
  *
- * Prefers a date tagged with 初版 (first edition) that is not a later reprint
- * (第N刷, N≥2) or revision; otherwise falls back to the earliest date present.
+ * A colophon prints the whole printing history — e.g. a 第2版 book lists
+ * 初版第1刷, 第2版第1刷, 第2版第2刷. The date we want is the FIRST printing of
+ * the LATEST edition present (that is the edition this file actually is), so a
+ * second-edition book reports its 第2版 date, not the original 初版 date. With
+ * no edition markers we fall back to the earliest non-reprint date.
+ *
+ * The matcher tolerates whitespace between every glyph because pdf.js renders
+ * vertical-layout colophons (e.g. O'Reilly Japan) one glyph per line, splitting
+ * a single date into `2\n0\n2\n0\n年\n4\n月…`. The same whitespace stripping is
+ * applied to the trailing edition/printing label.
  */
 export function parseColophonDate(text: string): string {
   const t = toHalfWidthDigits(text);
-  const re = /((?:19|20)\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/g;
-  const dates: { y: number; m: number; d: number; firstEdition: boolean }[] = [];
+  const re =
+    /((?:1\s*9|2\s*0)(?:\s*\d){2})\s*年\s*((?:\d\s*){1,2})月\s*((?:\d\s*){1,2})日/g;
+  const matches: { y: number; m: number; d: number; index: number; end: number }[] = [];
   for (let m = re.exec(t); m !== null; m = re.exec(t)) {
-    const after = t.slice(m.index, m.index + m[0].length + 24);
-    const firstEdition =
-      /初版/.test(after) && !/(第\s*[2-9]\d*\s*刷|改訂|増補|新版)/.test(after);
-    dates.push({ y: +m[1], m: +m[2], d: +m[3], firstEdition });
+    const y = Number(m[1].replace(/\s/g, ""));
+    const mo = Number(m[2].replace(/\s/g, ""));
+    const d = Number(m[3].replace(/\s/g, ""));
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) continue;
+    matches.push({ y, m: mo, d, index: m.index, end: m.index + m[0].length });
   }
-  if (dates.length === 0) return "";
-  const firsts = dates.filter((d) => d.firstEdition);
-  const pool = firsts.length > 0 ? firsts : dates;
+  if (matches.length === 0) return "";
+
+  // Classify each date by the label that follows it, up to the next date (or a
+  // short window for the last one). Whitespace is stripped so glyph-split
+  // labels like "第\n2\n版第\n1\n刷" are still recognized.
+  const entries: DatedPrinting[] = matches.map((cur, i) => {
+    const stop = i + 1 < matches.length ? matches[i + 1].index : cur.end + 40;
+    const label = t.slice(cur.end, stop).replace(/\s/g, "");
+    let edition: number | null = /初版/.test(label) ? 1 : null;
+    const versionMatch = label.match(/第(\d+)版/);
+    if (versionMatch) edition = Math.max(edition ?? 0, Number(versionMatch[1]));
+    const printingMatch = label.match(/第(\d+)刷/);
+    return {
+      y: cur.y,
+      m: cur.m,
+      d: cur.d,
+      edition,
+      printing: printingMatch ? Number(printingMatch[1]) : null,
+      revision: /(改訂|増補|新版)/.test(label),
+    };
+  });
+
+  const editions = entries
+    .map((e) => e.edition)
+    .filter((v): v is number => v !== null);
+
+  let pool = entries;
+  if (editions.length > 0) {
+    const targetEdition = Math.max(...editions);
+    pool = entries.filter((e) => e.edition === targetEdition);
+    const firstPrinting = pool.filter((e) => e.printing === 1);
+    const unnumbered = pool.filter((e) => e.printing === null);
+    // Prefer an explicit 第1刷; else printings with no number; else earliest.
+    if (firstPrinting.length > 0) pool = firstPrinting;
+    else if (unnumbered.length > 0) pool = unnumbered;
+  } else {
+    // No edition markers: drop later reprints (第N刷, N≥2) and revisions.
+    const base = entries.filter((e) => !(e.printing !== null && e.printing >= 2) && !e.revision);
+    if (base.length > 0) pool = base;
+  }
+
   const pick = pool.reduce((a, b) =>
     b.y < a.y || (b.y === a.y && (b.m < a.m || (b.m === a.m && b.d < a.d))) ? b : a,
   );
@@ -411,9 +477,14 @@ export function parseColophonPublisher(text: string): string {
   // the copyright boilerplate ("…研究所に無断で複写…") and pull in running text.
   const company = /(株式会社|有限会社|合同会社)[ \t\n]?([^\s\n、。）)】]{1,24})/;
   for (const kw of ["発行所", "発売元", "発行者", "発行"]) {
-    const i = text.indexOf(kw);
-    if (i === -1) continue;
-    const m = text.slice(i, i + 60).match(company);
+    // pdftotext -layout pads colophon labels with spaces (発   行    所), and
+    // pdf.js vertical layouts split them across lines, so match the keyword with
+    // optional whitespace between its characters. A wider window then clears the
+    // gap to the company name.
+    const kwRe = new RegExp(kw.split("").join("\\s*"));
+    const km = kwRe.exec(text);
+    if (km === null) continue;
+    const m = text.slice(km.index, km.index + 80).match(company);
     if (m !== null) return `${m[1]}${m[2]}`;
   }
   return "";
@@ -848,21 +919,28 @@ export function createServer(options: CreateServerOptions = {}): Server {
       let isbnSource: "pdfjs" | "pdftotext" | null = colophon.isbn ? "pdfjs" : null;
       let reportedText = tailText;
 
-      // Some colophons (fonts without a ToUnicode CMap) yield no usable text in
-      // pdf.js but read cleanly in poppler. When pdf.js found no ISBN — or only
-      // a low-confidence one — re-read the same tail pages with pdftotext.
-      if (colophon.isbn === null || colophon.isbn_confidence === "low") {
+      // Some colophons (fonts without a ToUnicode CMap) yield little usable text
+      // in pdf.js but read cleanly in poppler. O'Reilly Japan is the common case:
+      // its colophon ISBN and "Printed in Japan" are ASCII and survive, while the
+      // Japanese 発行日 / 発行所 do not — so pdf.js reports a high-confidence ISBN
+      // yet an empty date and publisher. Re-read with pdftotext whenever ANY of
+      // {ISBN, release_date, publisher} is missing (not just the ISBN), then take
+      // from poppler only the fields pdf.js could not read.
+      const needsIsbn = colophon.isbn === null || colophon.isbn_confidence === "low";
+      const needsDate = colophon.release_date === "";
+      const needsPublisher = colophon.publisher === "";
+      if (needsIsbn || needsDate || needsPublisher) {
         const from = Math.max(1, totalPages - tailPages + 1);
         const fallbackText = pdftotext(filePath, from, totalPages);
         if (fallbackText !== null && fallbackText.trim() !== "") {
           const fb = parseColophon(fallbackText);
-          // Adopt the fallback only when it strictly improves on pdf.js: it
+          // Adopt poppler's ISBN only when it strictly improves on pdf.js: it
           // filled a missing ISBN, or upgraded a low-confidence one to high.
-          const improves =
+          const isbnImproves =
             fb.isbn !== null &&
             (colophon.isbn === null ||
               (fb.isbn_confidence === "high" && colophon.isbn_confidence !== "high"));
-          if (improves) {
+          if (isbnImproves) {
             colophon = {
               ...fb,
               // Keep any fields pdf.js managed to read if poppler left them blank.
@@ -871,6 +949,19 @@ export function createServer(options: CreateServerOptions = {}): Server {
               printed_in_japan: fb.printed_in_japan || colophon.printed_in_japan,
             };
             isbnSource = "pdftotext";
+            reportedText = fallbackText;
+          } else if (
+            (needsDate && fb.release_date !== "") ||
+            (needsPublisher && fb.publisher !== "")
+          ) {
+            // Keep pdf.js's ISBN, but fill the blanks poppler could read. The
+            // reported text switches to poppler's so the date/publisher are
+            // cross-checkable against the same source they came from.
+            if (needsDate && fb.release_date !== "") colophon.release_date = fb.release_date;
+            if (needsPublisher && fb.publisher !== "") colophon.publisher = fb.publisher;
+            if (!colophon.printed_in_japan && fb.printed_in_japan) {
+              colophon.printed_in_japan = true;
+            }
             reportedText = fallbackText;
           }
         }

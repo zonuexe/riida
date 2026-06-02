@@ -100,7 +100,7 @@ The result includes `total_pages`, the raw tail `text`, an `isbn_source`
 | `isbn_valid` | Whether the ISBN-10/13 check digit validates |
 | `isbn_confidence` | `high` / `low` / `none` — see below |
 | `c_code` | Japanese C-code following the ISBN (e.g. `C3055`), or `null` |
-| `release_date` | First-edition publication date (`YYYY-MM-DD`), or `""` |
+| `release_date` | Publication date (`YYYY-MM-DD`) — the first printing of the latest edition listed — or `""` |
 | `publisher` | Best-effort publisher name, or `""` |
 | `printed_in_japan` | Whether a "Printed in Japan" marker is present |
 | `isbn_candidates` | Every ISBN-like token found, in document order |
@@ -114,10 +114,16 @@ result (and the `release_date` / `publisher`, which are best-effort) against the
 returned raw `text`. ISBNs printed only as a barcode image cannot be extracted.
 
 **pdftotext fallback.** Some colophons use fonts without a ToUnicode CMap, so
-pdf.js (the default parser) extracts no usable text from them while poppler's
-`pdftotext` reads them cleanly. When pdf.js finds no ISBN — or only a
-low-confidence one — the tool re-reads the same trailing pages with `pdftotext`
-and adopts the result if it improves; `isbn_source` then reports `pdftotext`.
+pdf.js (the default parser) extracts little or no usable text from them while
+poppler's `pdftotext` reads them cleanly. O'Reilly Japan is the common case: its
+colophon ISBN and "Printed in Japan" are ASCII and survive, but the Japanese
+発行日 / 発行所 do not — so pdf.js reports a confident ISBN yet an empty date and
+publisher. The tool therefore re-reads the trailing pages with `pdftotext`
+whenever **any** of {ISBN, `release_date`, `publisher`} is missing, then takes
+from poppler only the fields pdf.js could not read. If poppler supplies a
+strictly better ISBN, `isbn_source` reports `pdftotext`; otherwise the pdf.js
+ISBN is kept and only the date/publisher are filled. `pdftotext` is run with
+`-layout` so multi-column colophons keep each date beside its 第N版第N刷 label.
 This fallback is best-effort and optional: if `pdftotext` is not on `PATH` (nor
 at the usual Homebrew/`/usr/bin` locations) the tool silently degrades to
 pdf.js-only. Install it via poppler (`brew install poppler`,

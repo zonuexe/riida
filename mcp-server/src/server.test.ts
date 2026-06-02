@@ -823,6 +823,34 @@ describe("parseColophonDate", () => {
   it("returns empty string when no date is present", () => {
     expect(parseColophonDate("ISBN978-4-86354-244-0")).toBe("");
   });
+
+  it("picks the latest edition's first printing for a multi-edition colophon", () => {
+    // Real World HTTP 第2版: the colophon lists the original 初版 plus the 第2版
+    // printings. The file is the 第2版, so its 第2版第1刷 date is what we want.
+    const text = [
+      "2017 年 6 月 13 日 初版第 1 刷発行",
+      "2020 年 4 月 17 日 第 2 版第 1 刷発行",
+      "2021 年 2 月 16 日 第 2 版第 2 刷発行",
+    ].join("\n");
+    expect(parseColophonDate(text)).toBe("2020-04-17");
+  });
+
+  it("skips later 初版 reprints and keeps the first printing", () => {
+    // JavaScript 第6版: 初版第1刷 then 初版第6刷, no further edition.
+    const text = "2012 年 8 月 15 日 初版第 1 刷発行\n2016 年 8 月 19 日 初版第 6 刷発行";
+    expect(parseColophonDate(text)).toBe("2012-08-15");
+  });
+
+  it("parses dates split one glyph per line (pdf.js vertical layout)", () => {
+    // pdf.js renders O'Reilly Japan vertical colophons one glyph per line, so a
+    // single date arrives with newlines between every character.
+    const text = "2\n0\n2\n0\n年\n4\n月\n1\n7\n日\n第\n2\n版\n第\n1\n刷\n発\n行";
+    expect(parseColophonDate(text)).toBe("2020-04-17");
+  });
+
+  it("ignores out-of-range month/day noise", () => {
+    expect(parseColophonDate("2020 年 13 月 40 日")).toBe("");
+  });
 });
 
 describe("parseColophonPublisher", () => {
@@ -834,6 +862,13 @@ describe("parseColophonPublisher", () => {
   it("does not pull the company name out of copyright boilerplate", () => {
     // No publisher keyword present; the only 株式会社 is inside running text.
     expect(parseColophonPublisher("本書を株式会社リイダに無断で複写することを禁じます")).toBe("");
+  });
+
+  it("reads a label spaced out by pdftotext -layout", () => {
+    // O'Reilly Japan colophons render as a padded table; -layout keeps the
+    // label and company on one line but inserts spaces inside the keyword.
+    const text = "発   行    所        株式会社オライリー・ジャパン\n発   売    元        株式会社オーム社";
+    expect(parseColophonPublisher(text)).toBe("株式会社オライリー・ジャパン");
   });
 });
 
@@ -976,20 +1011,68 @@ describe("read_pdf_colophon — pdftotext fallback", () => {
     expect(pdftotext).toHaveBeenCalledTimes(1);
   });
 
-  it("does not invoke pdftotext when pdf.js already found the ISBN", async () => {
-    const pdfParser = vi
-      .fn()
-      .mockResolvedValue({ text: "ISBN978-4-7981-6849-4 C3055\nPrinted in Japan", numpages: 300 });
+  it("does not invoke pdftotext when pdf.js read a complete colophon", async () => {
+    // pdf.js found the ISBN, the date, and the publisher, so there is nothing
+    // left for poppler to fill — the redundant second read is skipped.
+    const pdfParser = vi.fn().mockResolvedValue({
+      text: [
+        "発行所 株式会社 翔泳社",
+        "2021 年 6 月 14 日 初版第 1 刷発行",
+        "ISBN978-4-7981-6849-4 C3055",
+        "Printed in Japan",
+      ].join("\n"),
+      numpages: 300,
+    });
     const pdftotext = vi.fn().mockReturnValue("should not be used");
     ({ client, cleanup } = await makeClient(dbPath, { pdfParser, pdftotext }));
 
     const result = parseText(
       await callTool(client, "read_pdf_colophon", { file_path: tmpPdf }),
-    ) as { isbn_source: string; colophon: { isbn_normalized: string } };
+    ) as {
+      isbn_source: string;
+      colophon: { isbn_normalized: string; release_date: string; publisher: string };
+    };
 
     expect(result.isbn_source).toBe("pdfjs");
     expect(result.colophon.isbn_normalized).toBe("9784798168494");
+    expect(result.colophon.release_date).toBe("2021-06-14");
     expect(pdftotext).not.toHaveBeenCalled();
+  });
+
+  it("fills the date and publisher from pdftotext when pdf.js read only the ISBN", async () => {
+    // The O'Reilly Japan case: the colophon's Japanese glyphs have no ToUnicode
+    // CMap, so pdf.js extracts only the ASCII ISBN / "Printed in Japan" at high
+    // confidence, with an empty date and publisher. Poppler reads the whole
+    // colophon, so the date and publisher are filled while the pdf.js ISBN
+    // (still high confidence) is kept.
+    const pdfParser = vi.fn().mockResolvedValue({
+      text: "索引\nPrinted in Japan（ISBN978-4-87311-903-8）",
+      numpages: 497,
+    });
+    const pdftotext = vi.fn().mockReturnValue(
+      [
+        "2017 年 6 月 13 日 初版第 1 刷発行",
+        "2020 年 4 月 17 日 第 2 版第 1 刷発行",
+        "発行所 株式会社 オライリー・ジャパン",
+        "ISBN978-4-87311-903-8",
+        "Printed in Japan",
+      ].join("\n"),
+    );
+    ({ client, cleanup } = await makeClient(dbPath, { pdfParser, pdftotext }));
+
+    const result = parseText(
+      await callTool(client, "read_pdf_colophon", { file_path: tmpPdf }),
+    ) as {
+      isbn_source: string;
+      colophon: { isbn_normalized: string; release_date: string; publisher: string };
+    };
+
+    // ISBN stays from pdf.js; date/publisher come from poppler.
+    expect(result.isbn_source).toBe("pdfjs");
+    expect(result.colophon.isbn_normalized).toBe("9784873119038");
+    expect(result.colophon.release_date).toBe("2020-04-17");
+    expect(result.colophon.publisher).toBe("株式会社オライリー・ジャパン");
+    expect(pdftotext).toHaveBeenCalledTimes(1);
   });
 
   it("reports no ISBN when neither pdf.js nor pdftotext can read it", async () => {

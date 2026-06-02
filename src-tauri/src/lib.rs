@@ -1236,7 +1236,9 @@ fn is_valid_release_date(value: &str) -> bool {
         return false;
     };
 
-    if month == 0 || month > 12 || day == 0 {
+    // Months outside 1..=12 fall through the match's `_` arm below, so only the
+    // day-zero case needs an explicit guard here.
+    if day == 0 {
         return false;
     }
 
@@ -1313,10 +1315,10 @@ fn normalize_page_mode(value: &str) -> String {
 }
 
 fn normalize_binding_direction(value: &str) -> String {
+    // "auto" is the default, so an explicit arm would be redundant with `_`.
     match value.trim().to_lowercase().as_str() {
         "left" => "left".to_string(),
         "right" => "right".to_string(),
-        "auto" => "auto".to_string(),
         _ => DEFAULT_VIEWER_BINDING_DIRECTION.to_string(),
     }
 }
@@ -5187,6 +5189,162 @@ mod tests {
         assert!(!is_valid_release_date("2026-02-29"));
         assert!(!is_valid_release_date("2026-13-01"));
         assert!(!is_valid_release_date("2026-04-31"));
+    }
+
+    #[test]
+    fn release_date_validation_covers_boundaries() {
+        // Each month-length arm plus the leap-year path, and month == 12.
+        assert!(is_valid_release_date("2020-01-31"));
+        assert!(is_valid_release_date("2020-04-30"));
+        assert!(is_valid_release_date("2021-02-28"));
+        assert!(is_valid_release_date("2020-02-29"));
+        assert!(is_valid_release_date("2020-12-31"));
+
+        // Each branch of the structural guard
+        // (extra component / year / month / day length).
+        assert!(!is_valid_release_date("2020-01-01-01"));
+        assert!(!is_valid_release_date("202-01-01"));
+        assert!(!is_valid_release_date("2020-1-01"));
+        assert!(!is_valid_release_date("2020-01-1"));
+
+        // Each branch of `month == 0 || month > 12 || day == 0`.
+        assert!(!is_valid_release_date("2020-00-01"));
+        assert!(!is_valid_release_date("2020-13-01"));
+        assert!(!is_valid_release_date("2020-01-00"));
+
+        // Day exceeds the month length.
+        assert!(!is_valid_release_date("2020-02-30"));
+        assert!(!is_valid_release_date("2021-02-29"));
+    }
+
+    #[test]
+    fn should_allow_internal_navigation_classifies_schemes() {
+        let allow = |u: &str| should_allow_internal_navigation(&Url::parse(u).unwrap());
+
+        for scheme in ["tauri", "about", "blob", "data", "file", "asset", "ipc"] {
+            assert!(
+                allow(&format!("{scheme}://host/path")),
+                "scheme {scheme} should be allowed"
+            );
+        }
+
+        // http(s) only for known local hosts.
+        assert!(allow("http://localhost/app"));
+        assert!(allow("https://asset.localhost/x"));
+        assert!(allow("http://127.0.0.1/x"));
+        assert!(!allow("https://example.com/x"));
+
+        // Unknown scheme is rejected.
+        assert!(!allow("ftp://localhost/x"));
+    }
+
+    #[test]
+    fn uuid_v4_has_canonical_shape() {
+        let id = uuid_v4();
+        let bytes = id.as_bytes();
+
+        assert_eq!(id.len(), 36, "uuid {id} should be 36 chars");
+        for index in [8usize, 13, 18, 23] {
+            assert_eq!(bytes[index], b'-', "expected hyphen at {index} in {id}");
+        }
+        assert_eq!(bytes[14], b'4', "version nibble should be 4 in {id}");
+        assert!(
+            matches!(bytes[19], b'8' | b'9' | b'a' | b'b'),
+            "variant nibble in {id}"
+        );
+    }
+
+    #[test]
+    fn normalize_theme_preserves_known_themes() {
+        assert_eq!(normalize_theme("snow-white".to_string()), "snow-white");
+        assert_eq!(normalize_theme("night-city".to_string()), "night-city");
+        assert_eq!(normalize_theme("navy-blue".to_string()), "navy-blue");
+        assert_eq!(normalize_theme("bogus".to_string()), DEFAULT_THEME);
+    }
+
+    #[test]
+    fn normalize_binding_direction_preserves_known_values() {
+        assert_eq!(normalize_binding_direction("auto"), "auto");
+        assert_eq!(normalize_binding_direction("left"), "left");
+        assert_eq!(normalize_binding_direction("right"), "right");
+        assert_eq!(
+            normalize_binding_direction("bogus"),
+            DEFAULT_VIEWER_BINDING_DIRECTION
+        );
+    }
+
+    #[test]
+    fn viewer_scope_keys_have_expected_shape() {
+        assert_eq!(viewer_file_scope_key("/a.pdf", "pdf"), "/a.pdf::pdf");
+        assert_eq!(viewer_global_scope_key("epub"), "__default__:epub");
+    }
+
+    #[test]
+    fn migrate_paths_to_nfc_normalizes_book_tags() {
+        let connection = Connection::open_in_memory().expect("in-memory db should open");
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE books (file_path TEXT);
+                CREATE TABLE notes (file_path TEXT);
+                CREATE TABLE viewer_preferences (scope_key TEXT, file_path TEXT);
+                CREATE TABLE reading_positions (file_path TEXT);
+                CREATE TABLE external_books (file_path TEXT);
+                CREATE TABLE book_tags (file_path TEXT, tag TEXT);
+                ",
+            )
+            .expect("migration tables should be created");
+
+        let nfd = "cafe\u{0301}.pdf";
+        let nfc: String = nfd.nfc().collect();
+        connection
+            .execute(
+                "INSERT INTO book_tags (file_path, tag) VALUES (?1, 'fiction')",
+                rusqlite::params![nfd],
+            )
+            .expect("nfd tag row should insert");
+
+        migrate_paths_to_nfc(&connection).expect("migration should run");
+
+        let stored: String = connection
+            .query_row("SELECT file_path FROM book_tags", [], |row| row.get(0))
+            .expect("tag row should still exist");
+        assert_eq!(
+            stored, nfc,
+            "book_tags file_path should be normalized to NFC"
+        );
+    }
+
+    #[test]
+    fn is_thumbnail_fresh_compares_modification_times() {
+        let dir = unique_temp_dir("thumb-fresh");
+        let pdf = dir.join("a.pdf");
+        let thumb = dir.join("thumbnail.jpg");
+        fs::write(&pdf, b"pdf").expect("pdf fixture should write");
+        fs::write(&thumb, b"jpg").expect("thumb fixture should write");
+
+        let set_mtime = |path: &Path, secs: u64| {
+            let file = fs::File::options()
+                .write(true)
+                .open(path)
+                .expect("fixture should open");
+            file.set_modified(UNIX_EPOCH + std::time::Duration::from_secs(secs))
+                .expect("mtime should set");
+        };
+
+        // Thumbnail newer than the PDF -> fresh.
+        set_mtime(&pdf, 1_000);
+        set_mtime(&thumb, 2_000);
+        assert!(is_thumbnail_fresh(&pdf, &thumb));
+
+        // PDF newer than the thumbnail -> stale.
+        set_mtime(&pdf, 3_000);
+        assert!(!is_thumbnail_fresh(&pdf, &thumb));
+
+        // A missing thumbnail is never fresh.
+        assert!(!is_thumbnail_fresh(&pdf, &dir.join("missing.jpg")));
+
+        fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

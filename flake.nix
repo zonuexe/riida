@@ -30,6 +30,7 @@
             cargo-audit
             cargo-llvm-cov
             cargo-machete
+            cargo-mutants
             cargo-nextest
             clippy
             nodejs_22

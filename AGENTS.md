@@ -520,12 +520,15 @@ Mutation testing does not run on the per-push CI gate (too slow), but
 `cargo-mutants` is both the preferred tool for periodic local audits and
 part of the nightly workflow (see below).
 
-Suggested local workflow:
+`cargo-mutants` is provided by the Nix dev shell (no `cargo install`
+needed). Suggested local workflow:
 
 ```bash
-cargo install cargo-mutants --locked
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run mutants:rust:list
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run mutants:rust
+# Verify a single function's mutants are all caught:
+nix --extra-experimental-features 'nix-command flakes' develop --command \
+  cargo mutants --manifest-path src-tauri/Cargo.toml --re '<function-name>'
 ```
 
 Use mutation testing selectively on logic-heavy Rust code because it is much slower than the normal test suite.

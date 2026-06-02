@@ -5347,6 +5347,232 @@ mod tests {
         fs::remove_dir_all(&dir).ok();
     }
 
+    // ----- EPUB parsing fixtures -------------------------------------------
+
+    fn write_epub(entries: &[(&str, &str)]) -> (PathBuf, PathBuf) {
+        use std::io::Write as _;
+        let dir = unique_temp_dir("epub");
+        let path = dir.join("book.epub");
+        let mut zip = zip::ZipWriter::new(fs::File::create(&path).expect("epub should create"));
+        let options = zip::write::SimpleFileOptions::default();
+        for (name, contents) in entries {
+            zip.start_file(*name, options)
+                .expect("zip entry should start");
+            zip.write_all(contents.as_bytes())
+                .expect("zip entry should write");
+        }
+        zip.finish().expect("zip should finish");
+        (dir, path)
+    }
+
+    fn open_epub(path: &Path) -> ZipArchive<fs::File> {
+        ZipArchive::new(fs::File::open(path).expect("epub should open")).expect("zip should parse")
+    }
+
+    fn opf_with_manifest(items: &str) -> String {
+        format!(
+            "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\">\
+             <manifest>{items}</manifest></package>"
+        )
+    }
+
+    const OPF_FIXTURE: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+    <dc:title>The Great Book</dc:title>
+    <dc:creator opf:role="aut">Alice Author</dc:creator>
+    <dc:creator opf:role="ill">Ivan Illustrator</dc:creator>
+    <dc:creator>Bob Coauthor</dc:creator>
+    <dc:description>A fine description.</dc:description>
+    <dc:publisher>Acme Press</dc:publisher>
+    <dc:date>2021-07-15T00:00:00Z</dc:date>
+    <dc:language>en</dc:language>
+  </metadata>
+</package>"#;
+
+    #[test]
+    fn epub_opf_path_reads_rootfile_full_path() {
+        let container = r#"<?xml version="1.0"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <link full-path="DECOY.opf"/>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>"#;
+        let (dir, path) = write_epub(&[("META-INF/container.xml", container)]);
+        let mut archive = open_epub(&path);
+        // The decoy <link full-path> must be ignored; only <rootfile> counts.
+        assert_eq!(epub_opf_path(&mut archive).unwrap(), "OEBPS/content.opf");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn epub_opf_path_errors_without_rootfile() {
+        let container = r#"<?xml version="1.0"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles></rootfiles></container>"#;
+        let (dir, path) = write_epub(&[("META-INF/container.xml", container)]);
+        let mut archive = open_epub(&path);
+        assert!(epub_opf_path(&mut archive).is_err());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn epub_extract_opf_metadata_reads_dublin_core() {
+        let (dir, path) = write_epub(&[("OEBPS/content.opf", OPF_FIXTURE)]);
+        let mut archive = open_epub(&path);
+        let md = epub_extract_opf_metadata(&mut archive, "OEBPS/content.opf").unwrap();
+
+        assert_eq!(md.title, "The Great Book");
+        // The illustrator (opf:role="ill") is excluded; the roleless creator is kept.
+        assert_eq!(
+            md.authors,
+            vec!["Alice Author".to_string(), "Bob Coauthor".to_string()]
+        );
+        assert_eq!(md.description, "A fine description.");
+        assert_eq!(md.publisher, "Acme Press");
+        assert_eq!(md.release_date, "2021-07-15"); // truncated from the datetime
+        assert_eq!(md.language, "en");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn epub_cover_item_path_priority_and_fallbacks() {
+        // Each case isolates one selection mechanism so deleting the matching
+        // branch changes the result.
+        let cases: &[(&str, &str)] = &[
+            // properties="cover-image" has top priority. The plain image comes
+            // first so dropping the properties handling would change the result.
+            (
+                "<item id=\"y\" href=\"other.png\" media-type=\"image/png\"/>\
+                 <item id=\"x\" href=\"c.png\" media-type=\"image/png\" properties=\"cover-image\"/>",
+                "OEBPS/c.png",
+            ),
+            // id == "cover" when no properties.
+            (
+                "<item id=\"a\" href=\"first.png\" media-type=\"image/png\"/>\
+                 <item id=\"cover\" href=\"c2.png\" media-type=\"image/png\"/>",
+                "OEBPS/c2.png",
+            ),
+            // href stem "cover" when no id/properties.
+            (
+                "<item id=\"a\" href=\"x.png\" media-type=\"image/png\"/>\
+                 <item id=\"b\" href=\"cover.jpg\" media-type=\"image/jpeg\"/>",
+                "OEBPS/cover.jpg",
+            ),
+            // first image/* item is the fallback; non-image items are ignored.
+            (
+                "<item id=\"s\" href=\"s.css\" media-type=\"text/css\"/>\
+                 <item id=\"a\" href=\"first.png\" media-type=\"image/png\"/>\
+                 <item id=\"b\" href=\"second.png\" media-type=\"image/png\"/>",
+                "OEBPS/first.png",
+            ),
+            // The FIRST cover-stem image wins over a later one.
+            (
+                "<item id=\"a\" href=\"cover.png\" media-type=\"image/png\"/>\
+                 <item id=\"b\" href=\"cover.jpg\" media-type=\"image/jpeg\"/>",
+                "OEBPS/cover.png",
+            ),
+        ];
+
+        for (items, expected) in cases {
+            let (dir, path) = write_epub(&[("OEBPS/content.opf", &opf_with_manifest(items))]);
+            let mut archive = open_epub(&path);
+            assert_eq!(
+                epub_cover_item_path(&mut archive, "OEBPS/content.opf").unwrap(),
+                *expected,
+                "items: {items}"
+            );
+            fs::remove_dir_all(&dir).ok();
+        }
+    }
+
+    #[test]
+    fn epub_cover_item_path_resolves_relative_to_root_opf() {
+        let items =
+            "<item id=\"cover-image\" href=\"cover.png\" media-type=\"image/png\" properties=\"cover-image\"/>";
+        let (dir, path) = write_epub(&[("content.opf", &opf_with_manifest(items))]);
+        let mut archive = open_epub(&path);
+        // OPF at the archive root: href is used as-is, with no directory prefix.
+        assert_eq!(
+            epub_cover_item_path(&mut archive, "content.opf").unwrap(),
+            "cover.png"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn epub_cover_item_path_errors_without_image() {
+        let items = "<item id=\"s\" href=\"s.css\" media-type=\"text/css\"/>";
+        let (dir, path) = write_epub(&[("OEBPS/content.opf", &opf_with_manifest(items))]);
+        let mut archive = open_epub(&path);
+        assert!(epub_cover_item_path(&mut archive, "OEBPS/content.opf").is_err());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn epub_cover_item_path_ignores_non_item_elements() {
+        // A non-<item> element carrying image-like attributes must be ignored;
+        // the real first <item> image wins.
+        let items = "<itemref href=\"decoy.png\" media-type=\"image/png\"/>\
+                     <item id=\"a\" href=\"real.png\" media-type=\"image/png\"/>";
+        let (dir, path) = write_epub(&[("OEBPS/content.opf", &opf_with_manifest(items))]);
+        let mut archive = open_epub(&path);
+        assert_eq!(
+            epub_cover_item_path(&mut archive, "OEBPS/content.opf").unwrap(),
+            "OEBPS/real.png"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn epub_metadata_ignores_nested_dc_elements() {
+        // A DC element nested inside another (malformed) is seen while the
+        // parser is already inside an element, so the `state == None` guards
+        // must reject it instead of capturing the inner text.
+        fn meta(inner: &str) -> String {
+            format!(
+                "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\">\
+                 <metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">{inner}</metadata></package>"
+            )
+        }
+        let extract = |inner: &str| {
+            let (dir, path) = write_epub(&[("c.opf", &meta(inner))]);
+            let mut archive = open_epub(&path);
+            let md = epub_extract_opf_metadata(&mut archive, "c.opf").expect("metadata");
+            fs::remove_dir_all(&dir).ok();
+            md
+        };
+
+        // <title> nested in <description>: title stays empty.
+        assert_eq!(
+            extract("<dc:description>D<dc:title>NESTED</dc:title></dc:description>").title,
+            ""
+        );
+        // The rest nested inside <title>: none are captured.
+        assert!(
+            extract("<dc:title>T<dc:creator>NESTED</dc:creator></dc:title>")
+                .authors
+                .is_empty()
+        );
+        assert_eq!(
+            extract("<dc:title>T<dc:description>NESTED</dc:description></dc:title>").description,
+            ""
+        );
+        assert_eq!(
+            extract("<dc:title>T<dc:publisher>NESTED</dc:publisher></dc:title>").publisher,
+            ""
+        );
+        assert_eq!(
+            extract("<dc:title>T<dc:date>2099-09-09</dc:date></dc:title>").release_date,
+            ""
+        );
+        assert_eq!(
+            extract("<dc:title>T<dc:language>zz</dc:language></dc:title>").language,
+            ""
+        );
+    }
+
     #[test]
     fn load_snapshot_includes_external_kindle_books() {
         let connection = Connection::open_in_memory().expect("in-memory db should open");

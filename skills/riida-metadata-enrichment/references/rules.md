@@ -44,13 +44,19 @@ filenames are fallbacks.
 - Prefer **ISBN** — `resolve_book(s)` with the ISBN, or `get_book_by_isbn`. These go
   through openBD, which covers virtually all Japanese ISBNs, so they return the
   canonical title/authors/publisher **even for publishers techbook has no adapter
-  for** (e.g. CQ出版) — usually without a description.
+  for** (e.g. CQ出版, オーム社) — usually without a description.
+- **Pass both `isbn` AND `title`** to `resolve_book` / `resolve_books`. The
+  `validation.isbnTitleAgree` flag is only computed when a title is supplied; an
+  ISBN-only call omits it entirely. With the flag absent but a high-confidence ISBN
+  match, treat the match as applicable — the colophon ISBN is the authoritative key.
 - **No ISBN** — resolve by title (+author). ASCII tokens and exact full titles match
   best; pure-Japanese fragments are weaker.
 - **Descriptions are publisher-dependent**: oreilly-japan / seshop expose them;
   openBD and some adapters (e.g. gihyo) often don't. Call `get_book_detail(url)` once
-  when a description or clean authors are missing; if it still has none, accept that
-  and move on — don't keep retrying.
+  when a description or clean authors are missing — but only when `source` is a
+  supported-publisher adapter. For `source: isbn:openbd` the `url` is an openBD API
+  endpoint that `get_book_detail` rejects, so skip the probe and accept no description.
+  If detail still returns none, accept that and move on — don't keep retrying.
 
 ## Decision gate
 
@@ -58,16 +64,31 @@ filenames are fallbacks.
   ISBN but `matchScore` is high and the title clearly matches). Fill only fields that
   are currently **empty**.
 - **Ask first** — before overwriting any non-empty field, and for `confidence`
-  medium/low, `status=ambiguous`, `isbnTitleAgree=false`, or `not_found` with only
-  colophon data. Show the proposed-vs-current diff and any `candidates`.
+  medium/low, `status=ambiguous`, or `not_found` with only colophon data. Show the
+  proposed-vs-current diff and any `candidates`.
 - **Skip** — nothing found and no usable colophon data, or free excerpts with no ISBN.
   Say why.
 
-### Worked example — a swapped ISBN caught by the gate
-Input: `レガシーソフトウェア改善ガイド.pdf`, colophon ISBN `9784798134208`.
-Resolve returns `status=matched` but `isbnTitleAgree=false`, with title
-「ガベージコレクション」. The ebook printed another title's ISBN. Do **not** write;
-report the conflict and keep the file's own title.
+### Handling `isbnTitleAgree=false` (do NOT over-flag)
+A `false` flag has two very different causes — distinguish them; do not treat every
+`false` as a wrong ISBN (that wrongly leaves correct books empty):
+
+1. **Wrong / swapped ISBN** — `matchScore` ≈ 0 and the resolved title is a *different
+   work*. Example: `レガシーソフトウェア改善ガイド.pdf` prints ISBN `9784798134208`,
+   which resolves to 「ガベージコレクション」. The ebook printed another book's ISBN —
+   do **not** write; report the conflict and keep the file's own title.
+2. **Edition / title-variant noise** — `matchScore` is moderate, the publisher
+   matches, and the resolved title is the *same work* missing only an edition or
+   series suffix (`第N版`, `［増補改訂版］`, `EE`, a subtitle…). Examples:
+   `独習PHP 第4版` → 「独習PHP」, `初めての人のためのLISP［増補改訂版］` →
+   「初めての人のためのLISP」, `こうしす！社内SE…` → 「こうしす!EE社内SE…」. This is the
+   right book — don't leave it empty. Confirm by re-resolving **by title (+author)**
+   (publisher adapters like seshop return the full edition title and a description),
+   then apply; otherwise apply the file's own edition title with the resolved
+   authors/date.
+
+When unsure, prefer a title re-resolve over flagging: a moderate `matchScore` with a
+matching base title and the same publisher is almost always case 2.
 
 ## Field hygiene
 

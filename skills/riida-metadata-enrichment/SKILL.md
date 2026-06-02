@@ -34,7 +34,7 @@ is unavailable, fall back to colophon-only extraction; if riida is unavailable, 
 5. **Write** — one batched `update_books_metadata`; epub+pdf pairs identical.
 
 ## Example
-`isbnTitleAgree=false` = the ISBN resolves to a *different* book (wrong printed ISBN);
-never auto-apply.
+`isbnTitleAgree=false` may be a wrong ISBN (different book → skip) OR a same-book
+edition variant (→ re-resolve by title). See rules.md.
 
 See [references/rules.md](references/rules.md) for field hygiene, the full gate, and troubleshooting.

@@ -24,7 +24,6 @@
     ".direnv",
     "data",
     "cache",
-    "src/vendor",
     "mcp-server"
   ],
   "incremental": true,

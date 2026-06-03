@@ -272,18 +272,20 @@ real-file check is kept at `src-tauri/tests/pdfium_spike.rs`.
 
 ## 9. Phasing
 
-- **Phase 0 — Spike (de-risk).** Prove `pdfium-render` CJK extraction quality on
-  real Japanese PDFs, and lindera-tantivy/tantivy 0.26 compatibility. These are
-  the two unknowns that can sink the design.
-- **Phase 1 — Infra + metadata/notes/tags index.** Add deps; index dir +
-  `index_meta.json` lifecycle; `fulltext_index` SQLite table; background worker;
-  schema + lindera tokenizer; index metadata/notes/tags (all SQLite-rebuildable,
-  fast win, no pdfium yet); `search_fulltext`; frontend hybrid execution with
-  book-level results.
-- **Phase 2 — Body extraction.** pdfium PDF pages + EPUB section text; per-page/
-  section docs; snippets; jump-to-page / jump-to-CFI in the viewer.
-- **Phase 3 — Polish.** Progress UI, rebuild controls, incremental robustness,
-  ranking/boost tuning, settings (enable/disable, optional n-gram field).
+Implementation status (v0.7.0 work, branch `feature/fulltext-search`):
+
+- **Phase 0 — Spike (de-risk). DONE.** See §8a.
+- **Phase 1 — Infra + metadata/notes/tags index. DONE.** Deps, data-dir index,
+  `fulltext_index` table, background worker, schema + lindera tokenizer,
+  `search_fulltext`, frontend results. (No `index_meta.json` schema-version gate
+  yet — add before a schema/tokenizer change ships.)
+- **Phase 2 — Body extraction. DONE.** pdfium PDF pages + EPUB sections,
+  per-page/section docs, snippets, jump-to-page / jump-to-CFI.
+- **Phase 3 — Polish. PARTIAL.** Opt-in build + progress UI, incremental
+  reconciliation after scans, and the license/mutation gates are done.
+  **Remaining:** bundle libpdfium for release (§8) + macOS signing; an
+  `index_meta.json` version gate + rebuild control; ranking/boost tuning; an
+  optional n-gram field if partial-match recall proves insufficient.
 
 ## 10. Touch Points (where the code lands)
 

@@ -436,10 +436,49 @@ The backend currently stores at least:
 - notes
 - viewer preferences
 - reading positions
+- full-text index status (`fulltext_index`: per-file body_modified_at / indexed_at / status)
 
 Schema setup lives in the startup `CREATE TABLE IF NOT EXISTS` block in [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
 
 If schema semantics change, consider migration behavior early.
+
+## Full-Text Search
+
+Cross-library full-text search over book body (PDF/EPUB), notes, metadata,
+and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-search-design.md).
+
+- **Engine:** [tantivy](https://github.com/quickwit-oss/tantivy) `0.25` with a
+  [lindera](https://github.com/lindera/lindera) IPADIC tokenizer (registered as
+  `lang_ja`, `embed-ipadic`). These are pinned to the matched set
+  `lindera-tantivy 2.0.0` requires; newer tantivy/lindera are not usable until
+  lindera-tantivy targets them.
+- **PDF text:** [pdfium-render](https://github.com/ajrcarey/pdfium-render) with
+  runtime dynamic binding (no build-time linking). `bind_pdfium` resolves
+  libpdfium from `PDFIUM_LIB_DIR` (the Nix dev shell sets it to nixpkgs
+  `pdfium-binaries`) or the bundled resource dir, falling back to a system lib.
+- **Code:** [src-tauri/src/fulltext.rs](src-tauri/src/fulltext.rs) (schema,
+  tokenizer, index lifecycle, search + snippets),
+  [src-tauri/src/fulltext_extract.rs](src-tauri/src/fulltext_extract.rs)
+  (PDF/EPUB/metadata/note extraction), and the worker/commands/hooks in
+  [src-tauri/src/lib.rs](src-tauri/src/lib.rs). Frontend:
+  [src/fulltext-ui.ts](src/fulltext-ui.ts) (pure helpers, tested) + DOM wiring in
+  [src/main.ts](src/main.ts).
+- **Opt-in (important):** indexing consumes disk and is **never** started
+  implicitly. The tantivy index lives in the data dir and is created only when
+  the user presses *Build index* in Settings (`fulltext_build_index`). Search
+  (`search_fulltext`) and the incremental hooks/`fulltext_sync_after_scan`
+  reconciliation are all no-ops until `fulltext_built()` is true.
+- **Index model:** one doc per content unit, `kind` ∈ {metadata, note, body};
+  body docs are per PDF page / per EPUB spine section. Re-index granularity is
+  per `(file_path, kind)`. Vertical/tategaki PDFs need inter-CJK whitespace
+  normalization (`normalize_extracted_text`) before tokenizing.
+- **Commands:** `search_fulltext`, `fulltext_index_status`,
+  `fulltext_build_index`. **Events:** `fulltext-progress`, `fulltext-complete`,
+  `fulltext-error`.
+- **Release TODO:** bundle the per-platform libpdfium into `bundle.resources`
+  (+ macOS signing of the dylib) so body extraction works in distributed builds;
+  until then a release falls back to metadata/notes-only indexing without a
+  system pdfium.
 
 ## Vendored Frontend Assets
 

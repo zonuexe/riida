@@ -21,8 +21,7 @@ fn pdfium_extracts_japanese_text() {
         return;
     };
 
-    let bindings =
-        Pdfium::bind_to_library(&dylib).unwrap_or_else(|e| panic!("bind {dylib}: {e}"));
+    let bindings = Pdfium::bind_to_library(&dylib).unwrap_or_else(|e| panic!("bind {dylib}: {e}"));
     let pdfium = Pdfium::new(bindings);
 
     let document = pdfium
@@ -38,10 +37,7 @@ fn pdfium_extracts_japanese_text() {
     let mut sampled_pages = 0usize;
 
     for (idx, page) in document.pages().iter().enumerate() {
-        let text = page
-            .text()
-            .map(|t| t.all())
-            .unwrap_or_default();
+        let text = page.text().map(|t| t.all()).unwrap_or_default();
         let trimmed = text.trim();
         if trimmed.is_empty() {
             continue;

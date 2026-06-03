@@ -51,6 +51,10 @@ static DATABASE: OnceLock<Mutex<Connection>> = OnceLock::new();
 static FULLTEXT: OnceLock<fulltext::FullTextIndex> = OnceLock::new();
 static FULLTEXT_BUILDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static FULLTEXT_SYNCING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+// Directory containing libpdfium, resolved once at startup: `PDFIUM_LIB_DIR`
+// (dev shell) or the bundled Tauri resource dir (release). `None` falls back to
+// a system-installed library inside `bind_pdfium`.
+static PDFIUM_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
 
 fn should_allow_internal_navigation(url: &Url) -> bool {
     match url.scheme() {
@@ -3662,6 +3666,12 @@ fn fulltext_built() -> bool {
         .unwrap_or(false)
 }
 
+/// Directory to load libpdfium from, resolved at startup. None ⇒ rely on a
+/// system library.
+fn pdfium_dir() -> Option<PathBuf> {
+    PDFIUM_DIR.get().cloned().flatten()
+}
+
 /// Lazily open (or create) the process-wide full-text index.
 fn fulltext_index() -> Result<&'static fulltext::FullTextIndex, String> {
     if let Some(index) = FULLTEXT.get() {
@@ -3957,7 +3967,7 @@ fn run_fulltext_build(app: &AppHandle) -> Result<(), String> {
     let total = books.len();
 
     let index = fulltext_index()?;
-    let pdfium = fulltext_extract::bind_pdfium()
+    let pdfium = fulltext_extract::bind_pdfium(pdfium_dir().as_deref())
         .map_err(|e| eprintln!("pdfium unavailable, indexing metadata/notes only: {e}"))
         .ok();
 
@@ -4088,7 +4098,9 @@ fn run_fulltext_sync() -> Result<(), String> {
             .prepare("SELECT file_path, COALESCE(body_modified_at, 0) FROM fulltext_index")
             .map_err(|e| e.to_string())?;
         let rows = stmt
-            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)))
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
             .map_err(|e| e.to_string())?;
         let mut indexed: HashMap<String, i64> = HashMap::new();
         for row in rows {
@@ -4125,7 +4137,7 @@ fn run_fulltext_sync() -> Result<(), String> {
         return Ok(());
     }
 
-    let pdfium = fulltext_extract::bind_pdfium().ok();
+    let pdfium = fulltext_extract::bind_pdfium(pdfium_dir().as_deref()).ok();
     for book in to_index {
         let docs = build_docs_for_book(pdfium.as_ref(), book);
         let status = match index.index_docs(&docs) {
@@ -4182,10 +4194,7 @@ fn fulltext_tags(connection: &Connection, file_path: &str) -> Vec<String> {
 
 /// Build the metadata `ContentDoc` for one book (local or external), or None if
 /// the book no longer exists.
-fn fulltext_metadata_doc(
-    connection: &Connection,
-    file_path: &str,
-) -> Option<fulltext::ContentDoc> {
+fn fulltext_metadata_doc(connection: &Connection, file_path: &str) -> Option<fulltext::ContentDoc> {
     let tags = fulltext_tags(connection, file_path);
 
     let local = connection
@@ -4214,8 +4223,17 @@ fn fulltext_metadata_doc(
         .optional()
         .ok()
         .flatten();
-    if let Some((file_name, title, authors_json, publisher, description, release, lang, asin, url)) =
-        local
+    if let Some((
+        file_name,
+        title,
+        authors_json,
+        publisher,
+        description,
+        release,
+        lang,
+        asin,
+        url,
+    )) = local
     {
         let title = if title.trim().is_empty() {
             file_name
@@ -4258,7 +4276,8 @@ fn fulltext_metadata_doc(
         .optional()
         .ok()
         .flatten();
-    if let Some((title, authors_json, description, publisher, release, lang, url, asin)) = external {
+    if let Some((title, authors_json, description, publisher, release, lang, url, asin)) = external
+    {
         let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
         return Some(fulltext_extract::build_metadata_doc(
             file_path,
@@ -4325,6 +4344,14 @@ pub fn run() {
         .setup(|app| {
             let paths = resolve_app_paths()?;
             let _ = APP_PATHS.set(paths.clone());
+            // Resolve libpdfium's location once: the dev shell sets
+            // PDFIUM_LIB_DIR; a release build finds it in the bundled resource
+            // dir. `bind_pdfium` falls back to a system library if neither has it.
+            let pdfium_dir = std::env::var("PDFIUM_LIB_DIR")
+                .ok()
+                .map(PathBuf::from)
+                .or_else(|| app.path().resource_dir().ok());
+            let _ = PDFIUM_DIR.set(pdfium_dir);
             prepare_storage(&paths)?;
             initialize_database()?;
             migrate_legacy_config_if_needed(&paths.config_file)?;

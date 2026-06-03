@@ -14,24 +14,28 @@ use quick_xml::events::Event as XmlEvent;
 use quick_xml::reader::Reader as XmlReader;
 use std::collections::HashMap;
 use std::fs;
+use std::path::{Path, PathBuf};
 use zip::ZipArchive;
 
 // --- pdfium ----------------------------------------------------------------
 
-/// Bind to libpdfium for runtime use. Prefers `PDFIUM_LIB_DIR` (set by the Nix
-/// dev shell / by the bundled resource dir in release), then falls back to a
-/// system-installed library.
-pub fn bind_pdfium() -> Result<Pdfium, String> {
-    if let Ok(dir) = std::env::var("PDFIUM_LIB_DIR") {
+/// Bind to libpdfium for runtime use, using dynamic binding (no build-time
+/// linking). Tries, in order: the caller-provided `lib_dir` (resolved at startup
+/// from `PDFIUM_LIB_DIR` in dev or the bundled resource dir in release), then the
+/// `PDFIUM_LIB_DIR` env directly, then a system-installed library.
+pub fn bind_pdfium(lib_dir: Option<&Path>) -> Result<Pdfium, String> {
+    let dir = lib_dir
+        .map(Path::to_path_buf)
+        .or_else(|| std::env::var("PDFIUM_LIB_DIR").ok().map(PathBuf::from));
+    if let Some(dir) = dir {
         let lib = Pdfium::pdfium_platform_library_name_at_path(&dir);
-        match Pdfium::bind_to_library(&lib) {
-            Ok(bindings) => return Ok(Pdfium::new(bindings)),
-            Err(e) => return Err(format!("bind pdfium at {dir}: {e}")),
+        if let Ok(bindings) = Pdfium::bind_to_library(&lib) {
+            return Ok(Pdfium::new(bindings));
         }
     }
     Pdfium::bind_to_system_library()
         .map(Pdfium::new)
-        .map_err(|e| format!("bind system pdfium: {e}"))
+        .map_err(|e| format!("bind pdfium: {e}"))
 }
 
 /// Extract one body document per non-empty PDF page.
@@ -408,8 +412,14 @@ mod tests {
 
     #[test]
     fn join_zip_path_resolves_relative_segments() {
-        assert_eq!(join_zip_path("OEBPS", "text/ch1.xhtml"), "OEBPS/text/ch1.xhtml");
-        assert_eq!(join_zip_path("OEBPS/text", "../images/c.png"), "OEBPS/images/c.png");
+        assert_eq!(
+            join_zip_path("OEBPS", "text/ch1.xhtml"),
+            "OEBPS/text/ch1.xhtml"
+        );
+        assert_eq!(
+            join_zip_path("OEBPS/text", "../images/c.png"),
+            "OEBPS/images/c.png"
+        );
         assert_eq!(join_zip_path("OEBPS", "ch1.xhtml#frag"), "OEBPS/ch1.xhtml");
         assert_eq!(join_zip_path("", "ch1.xhtml"), "ch1.xhtml");
     }
@@ -454,7 +464,11 @@ mod tests {
         assert!(doc.text.contains("出版社"));
         assert!(doc.text.contains("プログラミング"));
         // Empty fields (description, asin, url) must not leave double spaces.
-        assert!(!doc.text.contains("  "), "no doubled spaces: {:?}", doc.text);
+        assert!(
+            !doc.text.contains("  "),
+            "no doubled spaces: {:?}",
+            doc.text
+        );
     }
 
     #[test]
@@ -481,7 +495,7 @@ mod tests {
             eprintln!("skipping: set RIIDA_EXTRACT_PDF + PDFIUM_LIB_DIR to run");
             return;
         };
-        let pdfium = bind_pdfium().expect("bind pdfium");
+        let pdfium = bind_pdfium(None).expect("bind pdfium");
         let docs = extract_pdf_body(&pdfium, &path, "title", None).expect("extract pdf");
         assert!(!docs.is_empty(), "no body pages extracted");
         assert!(docs.iter().all(|d| d.kind == ContentKind::Body));

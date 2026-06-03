@@ -5255,6 +5255,159 @@ mod tests {
     }
 
     #[test]
+    fn modified_unix_seconds_reads_file_mtime() {
+        let dir = unique_temp_dir("mtime");
+        let path = dir.join("f.bin");
+        fs::write(&path, b"x").expect("file should write");
+        fs::File::options()
+            .write(true)
+            .open(&path)
+            .expect("file should open")
+            .set_modified(UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000))
+            .expect("mtime should set");
+        let metadata = fs::metadata(&path).expect("metadata should read");
+        assert_eq!(modified_unix_seconds(&metadata), 1_700_000_000);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    fn sample_metadata_input(release_date: &str) -> BookMetadataInput {
+        BookMetadataInput {
+            file_path: "/a.pdf".to_string(),
+            source_type: None,
+            title: " Title ".to_string(),
+            authors: vec![" Alice ".to_string()],
+            description: " desc ".to_string(),
+            publisher: " Pub ".to_string(),
+            release_date: release_date.to_string(),
+            language: " en ".to_string(),
+            url: " http://x ".to_string(),
+            asin: " A1 ".to_string(),
+            cover_url: " http://c ".to_string(),
+        }
+    }
+
+    #[test]
+    fn normalize_book_metadata_validates_and_trims() {
+        let ok =
+            normalize_book_metadata(sample_metadata_input(" 2021-07-15 ")).expect("valid date");
+        assert_eq!(ok.release_date, "2021-07-15");
+        assert_eq!(ok.title, "Title");
+        assert!(normalize_book_metadata(sample_metadata_input("2021-13-01")).is_err());
+    }
+
+    #[test]
+    fn migrate_directory_contents_skips_when_source_missing_or_destination_exists() {
+        let root = unique_temp_dir("migrate-guard");
+
+        // Source missing -> no-op, destination not created.
+        migrate_directory_contents(&root.join("nope"), &root.join("dest"))
+            .expect("missing source is a no-op");
+        assert!(!root.join("dest").exists());
+
+        // Destination already exists -> no-op, existing content preserved and
+        // the source content is NOT copied in.
+        let src = root.join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("new.txt"), b"new").unwrap();
+        let dest = root.join("dest2");
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(dest.join("keep.txt"), b"keep").unwrap();
+        migrate_directory_contents(&src, &dest).expect("existing destination is a no-op");
+        assert!(dest.join("keep.txt").exists());
+        assert!(!dest.join("new.txt").exists());
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn load_config_file_reads_present_and_defaults_when_missing() {
+        let dir = unique_temp_dir("load-config");
+
+        let present = dir.join("riida.toml");
+        fs::write(
+            &present,
+            "library_roots = [\"/books\"]\npdf_renderer = \"native\"\n",
+        )
+        .unwrap();
+        let loaded = load_config_file(&present).expect("present config should load");
+        assert_eq!(loaded.pdf_renderer, "native"); // not the "pdfjs" default
+        assert_eq!(loaded.library_roots, vec!["/books".to_string()]);
+
+        let defaulted =
+            load_config_file(&dir.join("absent.toml")).expect("missing config should default");
+        assert_eq!(defaulted.pdf_renderer, DEFAULT_PDF_RENDERER);
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    fn create_snapshot_schema(connection: &Connection) {
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE books (
+                  id INTEGER PRIMARY KEY, file_path TEXT NOT NULL UNIQUE,
+                  file_name TEXT NOT NULL, file_size INTEGER NOT NULL,
+                  modified_at INTEGER NOT NULL, indexed_at INTEGER NOT NULL,
+                  source_type TEXT NOT NULL DEFAULT 'pdf'
+                );
+                CREATE TABLE book_tags (
+                  file_path TEXT NOT NULL, tag TEXT NOT NULL, PRIMARY KEY (file_path, tag)
+                );
+                CREATE TABLE book_metadata (
+                  file_path TEXT PRIMARY KEY, title TEXT NOT NULL, authors_json TEXT NOT NULL,
+                  description TEXT NOT NULL, publisher TEXT NOT NULL, release_date TEXT NOT NULL,
+                  language TEXT NOT NULL, url TEXT NOT NULL, asin TEXT NOT NULL,
+                  cover_url TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE external_books (
+                  file_path TEXT PRIMARY KEY, source_type TEXT NOT NULL, title TEXT NOT NULL,
+                  authors_json TEXT NOT NULL, description TEXT NOT NULL, publisher TEXT NOT NULL,
+                  release_date TEXT NOT NULL, language TEXT NOT NULL, url TEXT NOT NULL,
+                  asin TEXT NOT NULL, cover_url TEXT NOT NULL, updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE custom_sources (
+                  id TEXT PRIMARY KEY, name TEXT NOT NULL, icon TEXT NOT NULL,
+                  created_at INTEGER NOT NULL
+                );
+                CREATE TABLE reading_positions (
+                  file_path TEXT PRIMARY KEY, page_number INTEGER NOT NULL,
+                  page_offset_ratio REAL NOT NULL, cfi TEXT, updated_at INTEGER NOT NULL
+                );
+                ",
+            )
+            .expect("snapshot schema should be created");
+    }
+
+    #[test]
+    fn load_snapshot_labels_custom_source_books() {
+        let connection = Connection::open_in_memory().expect("in-memory db should open");
+        create_snapshot_schema(&connection);
+        connection
+            .execute(
+                "INSERT INTO custom_sources (id, name, icon, created_at) VALUES ('zenn', 'Zenn', 'i', 1)",
+                [],
+            )
+            .expect("custom source should insert");
+        connection
+            .execute(
+                "INSERT INTO external_books (file_path, source_type, title, authors_json, \
+                 description, publisher, release_date, language, url, asin, cover_url, updated_at) \
+                 VALUES ('zenn:1', 'zenn', 'Z', '[]', '', '', '', '', '', '', '', 1)",
+                [],
+            )
+            .expect("custom-source book should insert");
+
+        let snapshot = load_snapshot(&connection, &test_config(&[])).expect("snapshot should load");
+        let book = snapshot
+            .books
+            .iter()
+            .find(|b| b.file_path == "zenn:1")
+            .expect("custom-source book should be present");
+        // The label is resolved from custom_sources by matching id == source_type.
+        assert_eq!(book.location_label, Some("Zenn".to_string()));
+    }
+
+    #[test]
     fn normalize_theme_preserves_known_themes() {
         assert_eq!(normalize_theme("snow-white".to_string()), "snow-white");
         assert_eq!(normalize_theme("night-city".to_string()), "night-city");

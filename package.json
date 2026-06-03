@@ -7,6 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "fetch:pdfium": "node scripts/fetch-pdfium.mjs",
     "generate:third-party-licenses": "node scripts/generate-third-party-licenses.mjs",
     "check:licenses:npm": "license-checker --production --excludePrivatePackages --onlyAllow 'MIT;MIT OR Apache-2.0;Apache-2.0;Apache-2.0 OR MIT;(MPL-2.0 OR Apache-2.0);BSD-2-Clause;BSD-3-Clause;ISC'",
     "check:notices": "npm run generate:third-party-licenses && git diff --exit-code -- THIRD-PARTY-LICENSES-rust.md THIRD-PARTY-LICENSES-js.md",

@@ -1,0 +1,3 @@
+# Placeholder so bundle.resources "pdfium/*" always matches at least one
+# file. The real libpdfium.{dylib,so,dll} is fetched into this dir by
+# scripts/fetch-pdfium.mjs before `tauri build` and is gitignored.

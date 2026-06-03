@@ -41,6 +41,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": [
+      "pdfium"
+    ],
     "macOS": {
       "signingIdentity": "-"
     },

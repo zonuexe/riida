@@ -4350,7 +4350,7 @@ pub fn run() {
             let pdfium_dir = std::env::var("PDFIUM_LIB_DIR")
                 .ok()
                 .map(PathBuf::from)
-                .or_else(|| app.path().resource_dir().ok());
+                .or_else(|| app.path().resource_dir().ok().map(|dir| dir.join("pdfium")));
             let _ = PDFIUM_DIR.set(pdfium_dir);
             prepare_storage(&paths)?;
             initialize_database()?;

@@ -1,0 +1,50 @@
+# cargo-mutants reads .cargo/mutants.toml relative to the package being mutated
+# (src-tauri), so this lives here rather than at the repo root.
+#
+# Functions that cannot be unit-tested without a running Tauri app are excluded:
+# app-path / global-state helpers, #[tauri::command] handlers that lock the
+# process-wide DATABASE, external-process IO (qlmanage / sips / window
+# spawning), and the entry points (incl. src/main.rs). Their surviving mutants
+# are expected and not actionable; the pure logic they wrap (config and
+# viewer-preference normalization, validation, NFC migration, EPUB parsing,
+# snapshot assembly) is covered by unit tests and stays in scope.
+#
+# Patterns are regexes matched against the names shown by `cargo mutants
+# --list`, each anchored to one function.
+exclude_re = [
+  # App paths and global initialization.
+  '\bproject_root\b',
+  '\bpreferred_config_file\b',
+  '\bdevelopment_app_paths\b',
+  '\bresolve_app_paths\b',
+  '\binitialize_database\b',
+  '\bmigrate_legacy_config_if_needed\b', # wrapper; *_with_connection is tested
+  '\bsave_config_input_file\b',          # writes to the global config_file() path
+  # Thumbnail cache paths and external-process generation.
+  '\bthumbnail_cache_dir\b',
+  '\bthumbnail_output_file\b',
+  '\bgenerate_thumbnail\b',
+  '\bgenerate_epub_cover\b',
+  # #[tauri::command] handlers and watcher (lock the global DATABASE / AppHandle).
+  '\bextract_epub_metadata\b',
+  '\bemit_library_snapshot\b',
+  '\bstart_library_watcher\b',
+  '\bbook_thumbnail\b',
+  '\bopen_viewer_window\b',
+  '\brename_tag_globally\b',
+  '\bdelete_tag_globally\b',
+  '\bload_book_metadata\b',
+  '\bsave_book_metadata\b',
+  '\bdelete_book_metadata\b',
+  '\bdelete_custom_source\b',
+  '\blist_shelves\b',
+  '\bdelete_shelf\b',
+  '\breorder_shelves\b',
+  '\bload_reading_position\b',
+  '\bsave_epub_position\b',
+  '\bget_pdf_password\b',
+  '\bsave_pdf_password\b',
+  # Entry points (src/lib.rs `run` and src/main.rs `main`).
+  '\brun\b',
+  '\bmain\b',
+]

@@ -566,16 +566,17 @@ fires nightly (`cron`) and on demand (`workflow_dispatch`):
 - `e2e` — Linux WebKitGTK smoke via `tauri-driver` (see the End-to-End
   Smoke Test section).
 
-`rust-mutation` is **reporting-only**: `lib.rs` is mostly
-`#[tauri::command]` handlers and IO (thumbnails, EPUB parsing, watcher)
-that cannot be unit-tested without a running app, so surviving mutants
-are expected. `cargo-mutants` exits 2 when mutants survive; the workflow
-treats that as success and relies on the uploaded report, while real
-failures (usage `1`, timeout `3`, broken baseline `4`) still fail the
-job. `frontend-mutation` keeps a real gate because Stryker has a
-configurable score threshold (`break: 50`) and the frontend kill rate is
-high; it fails only below that threshold. `rust-coverage` is also
-reporting-only. Reports always upload (`if: always()`). CI installs the
+`rust-mutation` is an **enforced gate**: every mutant in the in-scope
+(non-excluded) functions is caught, so `cargo-mutants` exits 0. A
+surviving mutant (exit 2) fails the job — the fix is to add a killing
+unit test, or, for a genuinely untestable function (a `#[tauri::command]`
+handler, external-process IO, an app-path/global-state helper, or an
+entry point), add it to `exclude_re` in
+[src-tauri/.cargo/mutants.toml](src-tauri/.cargo/mutants.toml). The
+deletions of the EPUB read-loop `Eof`/`Err` arms are caught as timeouts
+(they cause infinite loops), which counts as caught. `frontend-mutation`
+likewise gates on Stryker's score threshold (`break: 50`). `rust-coverage`
+is reporting-only. Reports always upload (`if: always()`). CI installs the
 tools via `taiki-e/install-action` and, for coverage, the
 `llvm-tools-preview` rustup component (the Nix dev shell uses the
 `LLVM_COV`/`LLVM_PROFDATA` env wiring instead).
@@ -597,7 +598,19 @@ warnings (mostly transitive GTK / Tauri ecosystem crates we cannot
 fix locally) and exits non-zero when an actual vulnerability is
 reported.
 
-Project defaults live in [.cargo/mutants.toml](.cargo/mutants.toml), and currently focus on [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
+Project defaults live in
+[src-tauri/.cargo/mutants.toml](src-tauri/.cargo/mutants.toml) —
+cargo-mutants reads the config relative to the package being mutated
+(`src-tauri`), not the repo root. The `exclude_re`
+list there drops functions that cannot be unit-tested without a running
+Tauri app — app-path / global-state helpers, `#[tauri::command]`
+handlers that lock the process-wide `DATABASE`, external-process IO
+(`qlmanage`/`sips`), and the entry points — so the run reports only
+mutants in the pure logic that unit tests actually cover (config and
+viewer-preference normalization, validation, NFC migration, EPUB
+parsing, snapshot assembly). When adding a new pure helper, prefer a
+unit test that kills its mutants; when adding a new command handler,
+extend `exclude_re` (or extract a testable `*_with_connection` core).
 
 ## Frontend Naming Conventions
 

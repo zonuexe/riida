@@ -47,4 +47,31 @@ exclude_re = [
   # Entry points (src/lib.rs `run` and src/main.rs `main`).
   '\brun\b',
   '\bmain\b',
+  # Full-text search: native-IO and global-state glue. The pure helpers these
+  # wrap (normalize_extracted_text, strip_leading_watermark, html_to_text,
+  # join_zip_path, parent_dir, parse_opf_spine, build_metadata_doc,
+  # build_note_doc) are unit-tested and stay in scope.
+  '\bopen_or_create\b',   # MmapDirectory disk IO (tests use an in-RAM index)
+  '\bbind_pdfium\b',
+  '\bextract_pdf_body\b',
+  '\bextract_epub_body\b',
+  '\bzip_bytes\b',
+  '\bopf_rootfile\b',
+  '\bcurrent_unix_seconds\b',
+  '\bfulltext_dir\b',
+  '\bfulltext_built\b',
+  '\bfulltext_index\b',
+  '\bgather_books_for_index\b',
+  '\bbuild_docs_for_book\b',
+  '\brun_fulltext_build\b',
+  '\bfulltext_build_index\b',
+  '\bfulltext_index_status\b',
+  '\bsearch_fulltext\b',
+  '\bfulltext_sync_after_scan\b',
+  '\brun_fulltext_sync\b',
+  '\bfulltext_tags\b',
+  '\bfulltext_metadata_doc\b',
+  '\bfulltext_on_metadata_changed\b',
+  '\bfulltext_on_note_changed\b',
+  '\bfulltext_on_book_removed\b',
 ]

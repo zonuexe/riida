@@ -400,6 +400,13 @@ mod tests {
     }
 
     #[test]
+    fn parent_dir_returns_directory_portion() {
+        assert_eq!(parent_dir("OEBPS/content.opf"), "OEBPS");
+        assert_eq!(parent_dir("a/b/c.opf"), "a/b");
+        assert_eq!(parent_dir("content.opf"), "");
+    }
+
+    #[test]
     fn join_zip_path_resolves_relative_segments() {
         assert_eq!(join_zip_path("OEBPS", "text/ch1.xhtml"), "OEBPS/text/ch1.xhtml");
         assert_eq!(join_zip_path("OEBPS/text", "../images/c.png"), "OEBPS/images/c.png");

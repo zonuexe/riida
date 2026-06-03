@@ -805,7 +805,7 @@ h1 {
   color: rgb(var(--ink-rgb) / 0.8);
 }
 
-.app-settings-field input:not([type="checkbox"]),
+.app-settings-field input:not([type="checkbox"]):not([type="radio"]),
 .app-settings-field textarea,
 .app-settings-field select {
   width: 100%;
@@ -2523,6 +2523,16 @@ html.is-scrolling .book-item .book-select-checkbox {
   cursor: pointer;
   color: rgb(var(--ink-rgb) / 0.82);
   font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.field-policy-option input[type="radio"] {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 /* hide JSON import and danger zone in bulk metadata edit */

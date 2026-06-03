@@ -967,7 +967,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### bitflags 2.11.1
+### bitflags 2.12.1
 
 - License: MIT OR Apache-2.0
 - Authors: The Rust Project Developers
@@ -8586,7 +8586,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### log 0.4.30
+### log 0.4.31
 
 - License: MIT OR Apache-2.0
 - Authors: The Rust Project Developers

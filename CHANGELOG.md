@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-06-03
+
+### Added
+
+- Library rows now show the author byline directly below the title, and the publisher and publication year appear in the muted metadata strip alongside file location and size. Books without known authors omit the byline line entirely; authors past the third collapse into a suffix. The compact grid caption stays title-only.
+- MCP server gains a `read_pdf_colophon` tool that extracts bibliographic data — ISBN, publisher, and first-edition release date — from the colophon (奥付) pages at the back of a PDF. Falls back to `pdftotext` when PDF.js cannot read the colophon fonts, and handles O'Reilly Japan layouts where date and publisher are split across vertically-rendered lines.
+
+### Changed
+
+- Library rescans no longer block the UI: the filesystem walk and database write are now split so background rescans run concurrently with other commands without freezing the interface.
+- Release binary is smaller and starts faster: LTO, a single codegen unit, and symbol stripping are now enabled for production builds.
+
+### Fixed
+
+- Registering a Kindle book by ASIN now prevents a duplicate entry if the same ASIN is already in the library.
+- Launching the app no longer crashes for users with saved global viewer preferences. A NULL-column read in the NFC path migration aborted the startup hook; the migration now skips global-scope rows that carry no file path.
+- Metadata bulk-edit policy radio buttons no longer stretch to fill the full form width.
+
 ## [0.6.1] - 2026-05-21
 
 ### Added
@@ -400,7 +418,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/zonuexe/riida/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/zonuexe/riida/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/zonuexe/riida/compare/v0.5.5...v0.6.0
 [0.5.5]: https://github.com/zonuexe/riida/compare/v0.5.4...v0.5.5

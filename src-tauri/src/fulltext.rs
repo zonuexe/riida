@@ -169,8 +169,8 @@ impl FullTextIndex {
         std::fs::create_dir_all(dir).map_err(|e| format!("create index dir: {e}"))?;
         let (schema, fields) = build_schema();
         let mmap = MmapDirectory::open(dir).map_err(|e| format!("open index dir: {e}"))?;
-        let index =
-            Index::open_or_create(mmap, schema).map_err(|e| format!("open_or_create index: {e}"))?;
+        let index = Index::open_or_create(mmap, schema)
+            .map_err(|e| format!("open_or_create index: {e}"))?;
         Self::finish(index, fields)
     }
 
@@ -319,7 +319,9 @@ impl FullTextIndex {
                 file_path: stored_text(&tdoc, self.fields.file_path),
                 title: stored_text(&tdoc, self.fields.title),
                 kind: stored_text(&tdoc, self.fields.kind),
-                page: tdoc.get_first(self.fields.loc_page).and_then(|v| v.as_u64()),
+                page: tdoc
+                    .get_first(self.fields.loc_page)
+                    .and_then(|v| v.as_u64()),
                 anchor: tdoc
                     .get_first(self.fields.loc_anchor)
                     .and_then(|v| v.as_str())
@@ -412,10 +414,7 @@ mod tests {
 
     #[test]
     fn collapses_newlines_and_fullwidth_space_between_glyphs() {
-        assert_eq!(
-            normalize_extracted_text("内部\n\u{3000}文字"),
-            "内部文字"
-        );
+        assert_eq!(normalize_extracted_text("内部\n\u{3000}文字"), "内部文字");
     }
 
     #[test]
@@ -475,7 +474,12 @@ mod tests {
     fn indexes_and_searches_japanese_body() {
         let idx = FullTextIndex::in_ram().unwrap();
         idx.index_docs(&[
-            body_doc("a.pdf", "形態素の本", 12, "全文検索エンジンと形態素解析の解説"),
+            body_doc(
+                "a.pdf",
+                "形態素の本",
+                12,
+                "全文検索エンジンと形態素解析の解説",
+            ),
             body_doc("b.pdf", "料理の本", 3, "これは料理のレシピであって関係ない"),
         ])
         .unwrap();

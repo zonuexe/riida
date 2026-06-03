@@ -50,6 +50,7 @@ static APP_PATHS: OnceLock<AppPaths> = OnceLock::new();
 static DATABASE: OnceLock<Mutex<Connection>> = OnceLock::new();
 static FULLTEXT: OnceLock<fulltext::FullTextIndex> = OnceLock::new();
 static FULLTEXT_BUILDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static FULLTEXT_SYNCING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn should_allow_internal_navigation(url: &Url) -> bool {
     match url.scheme() {
@@ -2078,9 +2079,15 @@ fn refresh_library_snapshot(config: &AppConfig) -> Result<LibrarySnapshot, Strin
     let books = collect_indexable_books(config, &excluded_patterns)?;
     let scan_token = current_scan_token()?;
 
-    let mut connection = lock_database()?;
-    index_books(&mut connection, &books, scan_token)?;
-    load_snapshot(&connection, config)
+    let snapshot = {
+        let mut connection = lock_database()?;
+        index_books(&mut connection, &books, scan_token)?;
+        load_snapshot(&connection, config)?
+    };
+    // Catch the index up to any added/removed/changed files (no-op unless the
+    // user already opted in by building the index). Runs in the background.
+    fulltext_sync_after_scan();
+    Ok(snapshot)
 }
 
 fn thumbnail_cache_dir(file_path: &str) -> PathBuf {
@@ -3674,6 +3681,7 @@ fn fulltext_index() -> Result<&'static fulltext::FullTextIndex, String> {
 struct BookIndexInput {
     file_path: String,
     source_type: String,
+    modified_at: u64,
     title: String,
     authors: Vec<String>,
     publisher: String,
@@ -3753,7 +3761,7 @@ fn gather_books_for_index(connection: &Connection) -> Result<Vec<BookIndexInput>
     {
         let mut stmt = connection
             .prepare(
-                "SELECT b.file_path, b.file_name, b.source_type,
+                "SELECT b.file_path, b.file_name, b.source_type, b.modified_at,
                         COALESCE(m.title, ''), COALESCE(m.authors_json, '[]'),
                         COALESCE(m.publisher, ''), COALESCE(m.description, ''),
                         COALESCE(m.release_date, ''), COALESCE(m.language, ''),
@@ -3768,7 +3776,7 @@ fn gather_books_for_index(connection: &Connection) -> Result<Vec<BookIndexInput>
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
+                    row.get::<_, i64>(3)?,
                     row.get::<_, String>(4)?,
                     row.get::<_, String>(5)?,
                     row.get::<_, String>(6)?,
@@ -3776,6 +3784,7 @@ fn gather_books_for_index(connection: &Connection) -> Result<Vec<BookIndexInput>
                     row.get::<_, String>(8)?,
                     row.get::<_, String>(9)?,
                     row.get::<_, String>(10)?,
+                    row.get::<_, String>(11)?,
                 ))
             })
             .map_err(|e| e.to_string())?;
@@ -3784,6 +3793,7 @@ fn gather_books_for_index(connection: &Connection) -> Result<Vec<BookIndexInput>
                 file_path,
                 file_name,
                 source_type,
+                modified_at,
                 title,
                 authors_json,
                 publisher,
@@ -3805,6 +3815,7 @@ fn gather_books_for_index(connection: &Connection) -> Result<Vec<BookIndexInput>
                 password: password_by_path.get(&file_path).cloned(),
                 file_path,
                 source_type,
+                modified_at: modified_at.max(0) as u64,
                 title,
                 authors,
                 publisher,
@@ -3862,6 +3873,7 @@ fn gather_books_for_index(connection: &Connection) -> Result<Vec<BookIndexInput>
                 password: None,
                 file_path,
                 source_type,
+                modified_at: 0,
                 title,
                 authors,
                 publisher,
@@ -3961,9 +3973,15 @@ fn run_fulltext_build(app: &AppHandle) -> Result<(), String> {
         if let Ok(connection) = lock_database() {
             let _ = connection.execute(
                 "INSERT INTO fulltext_index (file_path, body_modified_at, indexed_at, status, error)
-                 VALUES (?1, NULL, ?2, ?3, NULL)
-                 ON CONFLICT(file_path) DO UPDATE SET indexed_at = ?2, status = ?3, error = NULL",
-                params![book.file_path, current_unix_seconds() as i64, status],
+                 VALUES (?1, ?2, ?3, ?4, NULL)
+                 ON CONFLICT(file_path) DO UPDATE SET
+                   body_modified_at = ?2, indexed_at = ?3, status = ?4, error = NULL",
+                params![
+                    book.file_path,
+                    book.modified_at as i64,
+                    current_unix_seconds() as i64,
+                    status
+                ],
             );
         }
         let _ = app.emit(
@@ -4038,6 +4056,100 @@ fn fulltext_build_index(app: AppHandle) -> Result<(), String> {
         }
         FULLTEXT_BUILDING.store(false, Ordering::SeqCst);
     });
+    Ok(())
+}
+
+/// After a library scan, reconcile the index with added/removed/changed files —
+/// but only if the user already opted in by building the index. Runs in the
+/// background so the scan/snapshot path is never blocked, and is a no-op when a
+/// full build or another sync is already running.
+fn fulltext_sync_after_scan() {
+    use std::sync::atomic::Ordering;
+    if !fulltext_built() || FULLTEXT_BUILDING.load(Ordering::SeqCst) {
+        return;
+    }
+    if FULLTEXT_SYNCING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    std::thread::spawn(move || {
+        if let Err(e) = run_fulltext_sync() {
+            eprintln!("full-text incremental sync failed: {e}");
+        }
+        FULLTEXT_SYNCING.store(false, Ordering::SeqCst);
+    });
+}
+
+fn run_fulltext_sync() -> Result<(), String> {
+    // Snapshot the current library and the index's per-file record under the lock.
+    let (books, indexed) = {
+        let connection = lock_database()?;
+        let books = gather_books_for_index(&connection)?;
+        let mut stmt = connection
+            .prepare("SELECT file_path, COALESCE(body_modified_at, 0) FROM fulltext_index")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)))
+            .map_err(|e| e.to_string())?;
+        let mut indexed: HashMap<String, i64> = HashMap::new();
+        for row in rows {
+            let (path, ts) = row.map_err(|e| e.to_string())?;
+            indexed.insert(path, ts);
+        }
+        (books, indexed)
+    };
+
+    let current: HashSet<&str> = books.iter().map(|b| b.file_path.as_str()).collect();
+    let index = fulltext_index()?;
+
+    // Removed: recorded in the index but no longer present in the library.
+    for path in indexed.keys().filter(|p| !current.contains(p.as_str())) {
+        let _ = index.delete_book(path);
+        if let Ok(connection) = lock_database() {
+            let _ = connection.execute(
+                "DELETE FROM fulltext_index WHERE file_path = ?1",
+                params![path],
+            );
+        }
+    }
+
+    // New or changed file-backed books need their body (re)extracted.
+    let to_index: Vec<&BookIndexInput> = books
+        .iter()
+        .filter(|b| b.is_pdf() || b.is_epub())
+        .filter(|b| match indexed.get(&b.file_path) {
+            None => true,
+            Some(&ts) => b.modified_at as i64 > ts,
+        })
+        .collect();
+    if to_index.is_empty() {
+        return Ok(());
+    }
+
+    let pdfium = fulltext_extract::bind_pdfium().ok();
+    for book in to_index {
+        let docs = build_docs_for_book(pdfium.as_ref(), book);
+        let status = match index.index_docs(&docs) {
+            Ok(()) => "indexed",
+            Err(e) => {
+                eprintln!("incremental index failed for {}: {e}", book.file_path);
+                "failed"
+            }
+        };
+        if let Ok(connection) = lock_database() {
+            let _ = connection.execute(
+                "INSERT INTO fulltext_index (file_path, body_modified_at, indexed_at, status, error)
+                 VALUES (?1, ?2, ?3, ?4, NULL)
+                 ON CONFLICT(file_path) DO UPDATE SET
+                   body_modified_at = ?2, indexed_at = ?3, status = ?4, error = NULL",
+                params![
+                    book.file_path,
+                    book.modified_at as i64,
+                    current_unix_seconds() as i64,
+                    status
+                ],
+            );
+        }
+    }
     Ok(())
 }
 

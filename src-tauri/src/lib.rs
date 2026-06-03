@@ -3,7 +3,7 @@ use globset::{Glob, GlobMatcher};
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use quick_xml::events::Event as XmlEvent;
 use quick_xml::reader::Reader as XmlReader;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
@@ -21,6 +21,9 @@ use tauri_plugin_opener::OpenerExt;
 use unicode_normalization::UnicodeNormalization;
 use walkdir::WalkDir;
 use zip::ZipArchive;
+
+mod fulltext;
+mod fulltext_extract;
 
 const CONFIG_FILE: &str = "riida.toml";
 const DEFAULT_EXCLUDED_PATTERNS: &[&str] = &["**/backup/**", "*.bak.pdf"];
@@ -45,6 +48,8 @@ const NAVY_BLUE_VIEWER_BACKGROUND_MODE: &str = "navy-blue";
 
 static APP_PATHS: OnceLock<AppPaths> = OnceLock::new();
 static DATABASE: OnceLock<Mutex<Connection>> = OnceLock::new();
+static FULLTEXT: OnceLock<fulltext::FullTextIndex> = OnceLock::new();
+static FULLTEXT_BUILDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn should_allow_internal_navigation(url: &Url) -> bool {
     match url.scheme() {
@@ -914,6 +919,13 @@ fn open_database() -> Result<Connection, String> {
               sort_order INTEGER NOT NULL DEFAULT 0,
               created_at INTEGER NOT NULL,
               updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS fulltext_index (
+              file_path TEXT PRIMARY KEY,
+              body_modified_at INTEGER,
+              indexed_at INTEGER,
+              status TEXT NOT NULL DEFAULT 'pending',
+              error TEXT
             );
             ",
         )
@@ -2708,6 +2720,8 @@ fn save_note(file_path: String, content: String) -> Result<NoteDocument, String>
         )
         .map_err(|error| error.to_string())?;
 
+    fulltext_on_note_changed(&connection, &file_path, &content);
+
     Ok(NoteDocument {
         file_path,
         format: "markdown".to_string(),
@@ -2741,6 +2755,8 @@ fn save_book_tags(file_path: String, tags: Vec<String>) -> Result<BookTagsPayloa
     }
 
     transaction.commit().map_err(|error| error.to_string())?;
+
+    fulltext_on_metadata_changed(&connection, &file_path);
 
     Ok(BookTagsPayload {
         file_path,
@@ -3124,6 +3140,7 @@ fn save_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPayload, S
     }
 
     payload.updated_at = Some(updated_at);
+    fulltext_on_metadata_changed(&connection, &payload.file_path);
     Ok(payload)
 }
 
@@ -3169,6 +3186,14 @@ fn delete_book_metadata(file_path: String) -> Result<(), String> {
                 params![&file_path],
             )
             .map_err(|error| error.to_string())?;
+    }
+
+    if file_path.starts_with("kindle:") || file_path.starts_with("custom:") {
+        // External book entry removed entirely.
+        fulltext_on_book_removed(&file_path);
+    } else {
+        // Local book stays; only its saved metadata was cleared.
+        fulltext_on_metadata_changed(&connection, &file_path);
     }
 
     Ok(())
@@ -3236,6 +3261,7 @@ fn delete_custom_source(id: String) -> Result<(), String> {
                 params![fp],
             )
             .map_err(|error| error.to_string())?;
+        fulltext_on_book_removed(fp);
     }
     connection
         .execute(
@@ -3604,6 +3630,583 @@ fn save_pdf_password(file_path: String, password: String) -> Result<(), String> 
     upsert_pdf_password(&connection, &file_path, &password)
 }
 
+// ---------------------------------------------------------------------------
+// Full-text search
+// ---------------------------------------------------------------------------
+
+fn current_unix_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// On-disk location of the tantivy index. Lives in the data dir (not cache) so
+/// the expensive body extraction survives a cache clear.
+fn fulltext_dir() -> Result<PathBuf, String> {
+    Ok(app_paths()?.data_dir.join("fulltext-index"))
+}
+
+/// Whether the index has been built at least once (opt-in: the user triggers
+/// the first build). tantivy writes `meta.json` when the index is created.
+fn fulltext_built() -> bool {
+    fulltext_dir()
+        .map(|dir| dir.join("meta.json").exists())
+        .unwrap_or(false)
+}
+
+/// Lazily open (or create) the process-wide full-text index.
+fn fulltext_index() -> Result<&'static fulltext::FullTextIndex, String> {
+    if let Some(index) = FULLTEXT.get() {
+        return Ok(index);
+    }
+    let dir = fulltext_dir()?;
+    let index = fulltext::FullTextIndex::open_or_create(&dir)?;
+    // A concurrent caller may have won the race; either way return the stored one.
+    let _ = FULLTEXT.set(index);
+    FULLTEXT
+        .get()
+        .ok_or_else(|| "full-text index unavailable".to_string())
+}
+
+/// All data needed to index one book, gathered under the DB lock so the slow
+/// extraction can run lock-free afterwards.
+struct BookIndexInput {
+    file_path: String,
+    source_type: String,
+    title: String,
+    authors: Vec<String>,
+    publisher: String,
+    description: String,
+    release_date: String,
+    language: String,
+    asin: String,
+    url: String,
+    tags: Vec<String>,
+    note: Option<String>,
+    password: Option<String>,
+}
+
+impl BookIndexInput {
+    fn is_pdf(&self) -> bool {
+        self.source_type == "pdf"
+    }
+    fn is_epub(&self) -> bool {
+        self.source_type == "epub"
+    }
+}
+
+/// Read every book (local + external) plus its tags, note, and password into
+/// owned structs. Three small full-table maps avoid N+1 queries.
+fn gather_books_for_index(connection: &Connection) -> Result<Vec<BookIndexInput>, String> {
+    let mut tags_by_path: HashMap<String, Vec<String>> = HashMap::new();
+    {
+        let mut stmt = connection
+            .prepare("SELECT file_path, tag FROM book_tags ORDER BY tag")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (path, tag) = row.map_err(|e| e.to_string())?;
+            tags_by_path.entry(path).or_default().push(tag);
+        }
+    }
+
+    let mut note_by_path: HashMap<String, String> = HashMap::new();
+    {
+        let mut stmt = connection
+            .prepare("SELECT file_path, content FROM notes")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (path, content) = row.map_err(|e| e.to_string())?;
+            note_by_path.insert(path, content);
+        }
+    }
+
+    let mut password_by_path: HashMap<String, String> = HashMap::new();
+    {
+        let mut stmt = connection
+            .prepare("SELECT file_path, password FROM pdf_passwords")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (path, password) = row.map_err(|e| e.to_string())?;
+            password_by_path.insert(path, password);
+        }
+    }
+
+    let mut books = Vec::new();
+
+    // Local, file-backed books (PDF/EPUB) with optional metadata override.
+    {
+        let mut stmt = connection
+            .prepare(
+                "SELECT b.file_path, b.file_name, b.source_type,
+                        COALESCE(m.title, ''), COALESCE(m.authors_json, '[]'),
+                        COALESCE(m.publisher, ''), COALESCE(m.description, ''),
+                        COALESCE(m.release_date, ''), COALESCE(m.language, ''),
+                        COALESCE(m.asin, ''), COALESCE(m.url, '')
+                 FROM books b
+                 LEFT JOIN book_metadata m ON m.file_path = b.file_path",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, String>(9)?,
+                    row.get::<_, String>(10)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (
+                file_path,
+                file_name,
+                source_type,
+                title,
+                authors_json,
+                publisher,
+                description,
+                release_date,
+                language,
+                asin,
+                url,
+            ) = row.map_err(|e| e.to_string())?;
+            let title = if title.trim().is_empty() {
+                file_name
+            } else {
+                title
+            };
+            let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
+            books.push(BookIndexInput {
+                tags: tags_by_path.get(&file_path).cloned().unwrap_or_default(),
+                note: note_by_path.get(&file_path).cloned(),
+                password: password_by_path.get(&file_path).cloned(),
+                file_path,
+                source_type,
+                title,
+                authors,
+                publisher,
+                description,
+                release_date,
+                language,
+                asin,
+                url,
+            });
+        }
+    }
+
+    // External books (Kindle, custom sources): metadata-only, no body.
+    {
+        let mut stmt = connection
+            .prepare(
+                "SELECT file_path, source_type, title, authors_json, description,
+                        publisher, release_date, language, url, asin
+                 FROM external_books",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, String>(9)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (
+                file_path,
+                source_type,
+                title,
+                authors_json,
+                description,
+                publisher,
+                release_date,
+                language,
+                url,
+                asin,
+            ) = row.map_err(|e| e.to_string())?;
+            let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
+            books.push(BookIndexInput {
+                tags: tags_by_path.get(&file_path).cloned().unwrap_or_default(),
+                note: note_by_path.get(&file_path).cloned(),
+                password: None,
+                file_path,
+                source_type,
+                title,
+                authors,
+                publisher,
+                description,
+                release_date,
+                language,
+                asin,
+                url,
+            });
+        }
+    }
+
+    Ok(books)
+}
+
+/// Build the `ContentDoc`s for one book (metadata + note + body).
+fn build_docs_for_book(
+    pdfium: Option<&pdfium_render::prelude::Pdfium>,
+    book: &BookIndexInput,
+) -> Vec<fulltext::ContentDoc> {
+    let mut docs = vec![fulltext_extract::build_metadata_doc(
+        &book.file_path,
+        &book.title,
+        &book.authors,
+        &book.publisher,
+        &book.description,
+        &book.release_date,
+        &book.language,
+        &book.asin,
+        &book.url,
+        &book.tags,
+    )];
+
+    if let Some(note) = &book.note {
+        let note_doc = fulltext_extract::build_note_doc(&book.file_path, &book.title, note);
+        if !note_doc.text.trim().is_empty() {
+            docs.push(note_doc);
+        }
+    }
+
+    let body = if book.is_pdf() {
+        pdfium.and_then(|p| {
+            fulltext_extract::extract_pdf_body(
+                p,
+                &book.file_path,
+                &book.title,
+                book.password.as_deref(),
+            )
+            .map_err(|e| eprintln!("pdf body extraction failed for {}: {e}", book.file_path))
+            .ok()
+        })
+    } else if book.is_epub() {
+        fulltext_extract::extract_epub_body(&book.file_path, &book.title)
+            .map_err(|e| eprintln!("epub body extraction failed for {}: {e}", book.file_path))
+            .ok()
+    } else {
+        None
+    };
+    if let Some(body_docs) = body {
+        docs.extend(body_docs);
+    }
+
+    docs
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct FullTextProgress {
+    done: usize,
+    total: usize,
+    file_path: String,
+}
+
+/// Run a full index (re)build. Gathers inputs under the lock, then extracts and
+/// indexes lock-free, emitting progress events. Runs on a worker thread.
+fn run_fulltext_build(app: &AppHandle) -> Result<(), String> {
+    let books = {
+        let connection = lock_database()?;
+        gather_books_for_index(&connection)?
+    };
+    let total = books.len();
+
+    let index = fulltext_index()?;
+    let pdfium = fulltext_extract::bind_pdfium()
+        .map_err(|e| eprintln!("pdfium unavailable, indexing metadata/notes only: {e}"))
+        .ok();
+
+    for (done, book) in books.iter().enumerate() {
+        let docs = build_docs_for_book(pdfium.as_ref(), book);
+        let status = match index.index_docs(&docs) {
+            Ok(()) => "indexed",
+            Err(e) => {
+                eprintln!("index failed for {}: {e}", book.file_path);
+                "failed"
+            }
+        };
+        if let Ok(connection) = lock_database() {
+            let _ = connection.execute(
+                "INSERT INTO fulltext_index (file_path, body_modified_at, indexed_at, status, error)
+                 VALUES (?1, NULL, ?2, ?3, NULL)
+                 ON CONFLICT(file_path) DO UPDATE SET indexed_at = ?2, status = ?3, error = NULL",
+                params![book.file_path, current_unix_seconds() as i64, status],
+            );
+        }
+        let _ = app.emit(
+            "fulltext-progress",
+            FullTextProgress {
+                done: done + 1,
+                total,
+                file_path: book.file_path.clone(),
+            },
+        );
+    }
+
+    let _ = app.emit("fulltext-complete", total);
+    Ok(())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FullTextStatus {
+    total: i64,
+    indexed: i64,
+    failed: i64,
+    building: bool,
+    built: bool,
+}
+
+#[tauri::command]
+fn fulltext_index_status() -> Result<FullTextStatus, String> {
+    let connection = lock_database()?;
+    let total: i64 = connection
+        .query_row(
+            "SELECT (SELECT COUNT(*) FROM books) + (SELECT COUNT(*) FROM external_books)",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    let indexed: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM fulltext_index WHERE status = 'indexed'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    let failed: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM fulltext_index WHERE status = 'failed'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(FullTextStatus {
+        total,
+        indexed,
+        failed,
+        building: FULLTEXT_BUILDING.load(std::sync::atomic::Ordering::SeqCst),
+        built: fulltext_built(),
+    })
+}
+
+/// Opt-in trigger: (re)build the whole index in the background. Returns
+/// immediately; progress arrives via `fulltext-progress` / `fulltext-complete`.
+#[tauri::command]
+fn fulltext_build_index(app: AppHandle) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    if FULLTEXT_BUILDING.swap(true, Ordering::SeqCst) {
+        return Err("full-text index build already in progress".to_string());
+    }
+    std::thread::spawn(move || {
+        if let Err(e) = run_fulltext_build(&app) {
+            eprintln!("full-text index build failed: {e}");
+            let _ = app.emit("fulltext-error", e);
+        }
+        FULLTEXT_BUILDING.store(false, Ordering::SeqCst);
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn search_fulltext(
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<fulltext::FullTextHit>, String> {
+    if !fulltext_built() {
+        return Ok(Vec::new());
+    }
+    let index = fulltext_index()?;
+    index.search(&query, limit.unwrap_or(50) as usize)
+}
+
+// --- incremental updates (run while the caller still holds the DB lock, so
+// these take &Connection and must never re-lock) --------------------------
+
+fn fulltext_tags(connection: &Connection, file_path: &str) -> Vec<String> {
+    let Ok(mut stmt) =
+        connection.prepare("SELECT tag FROM book_tags WHERE file_path = ?1 ORDER BY tag")
+    else {
+        return Vec::new();
+    };
+    let Ok(rows) = stmt.query_map(params![file_path], |row| row.get::<_, String>(0)) else {
+        return Vec::new();
+    };
+    rows.flatten().collect()
+}
+
+/// Build the metadata `ContentDoc` for one book (local or external), or None if
+/// the book no longer exists.
+fn fulltext_metadata_doc(
+    connection: &Connection,
+    file_path: &str,
+) -> Option<fulltext::ContentDoc> {
+    let tags = fulltext_tags(connection, file_path);
+
+    let local = connection
+        .query_row(
+            "SELECT b.file_name, COALESCE(m.title, ''), COALESCE(m.authors_json, '[]'),
+                    COALESCE(m.publisher, ''), COALESCE(m.description, ''),
+                    COALESCE(m.release_date, ''), COALESCE(m.language, ''),
+                    COALESCE(m.asin, ''), COALESCE(m.url, '')
+             FROM books b LEFT JOIN book_metadata m ON m.file_path = b.file_path
+             WHERE b.file_path = ?1",
+            params![file_path],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                ))
+            },
+        )
+        .optional()
+        .ok()
+        .flatten();
+    if let Some((file_name, title, authors_json, publisher, description, release, lang, asin, url)) =
+        local
+    {
+        let title = if title.trim().is_empty() {
+            file_name
+        } else {
+            title
+        };
+        let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
+        return Some(fulltext_extract::build_metadata_doc(
+            file_path,
+            &title,
+            &authors,
+            &publisher,
+            &description,
+            &release,
+            &lang,
+            &asin,
+            &url,
+            &tags,
+        ));
+    }
+
+    let external = connection
+        .query_row(
+            "SELECT title, authors_json, description, publisher, release_date, language, url, asin
+             FROM external_books WHERE file_path = ?1",
+            params![file_path],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                ))
+            },
+        )
+        .optional()
+        .ok()
+        .flatten();
+    if let Some((title, authors_json, description, publisher, release, lang, url, asin)) = external {
+        let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
+        return Some(fulltext_extract::build_metadata_doc(
+            file_path,
+            &title,
+            &authors,
+            &publisher,
+            &description,
+            &release,
+            &lang,
+            &asin,
+            &url,
+            &tags,
+        ));
+    }
+
+    None
+}
+
+/// Re-index a book's metadata doc after a metadata/tag edit (no body re-extract).
+fn fulltext_on_metadata_changed(connection: &Connection, file_path: &str) {
+    if !fulltext_built() {
+        return;
+    }
+    let Some(doc) = fulltext_metadata_doc(connection, file_path) else {
+        return;
+    };
+    if let Ok(index) = fulltext_index() {
+        let _ = index.index_docs(&[doc]);
+    }
+}
+
+/// Re-index (or clear) a book's note doc after a note edit.
+fn fulltext_on_note_changed(connection: &Connection, file_path: &str, content: &str) {
+    if !fulltext_built() {
+        return;
+    }
+    let Ok(index) = fulltext_index() else {
+        return;
+    };
+    if content.trim().is_empty() {
+        let _ = index.delete_kind(file_path, fulltext::ContentKind::Note);
+        return;
+    }
+    let title = fulltext_metadata_doc(connection, file_path)
+        .map(|doc| doc.title)
+        .unwrap_or_else(|| file_path.to_owned());
+    let note_doc = fulltext_extract::build_note_doc(file_path, &title, content);
+    let _ = index.index_docs(&[note_doc]);
+}
+
+/// Remove a book entirely from the index (book deleted from the library).
+fn fulltext_on_book_removed(file_path: &str) {
+    if !fulltext_built() {
+        return;
+    }
+    if let Ok(index) = fulltext_index() {
+        let _ = index.delete_book(file_path);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -3673,7 +4276,10 @@ pub fn run() {
             clear_file_viewer_preferences,
             get_pdf_password,
             save_pdf_password,
-            open_viewer_window
+            open_viewer_window,
+            search_fulltext,
+            fulltext_index_status,
+            fulltext_build_index
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

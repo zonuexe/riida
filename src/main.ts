@@ -47,8 +47,11 @@ import {
   deriveTags,
   describeEmptyLibraryState,
   filterVisibleBooks,
+  formatAuthorByline,
   formatBookLocation,
+  formatBookMetaLine,
   formatFileSize,
+  formatReleaseYear,
   type DirectoryNode,
 } from "./library-utils";
 import {
@@ -156,6 +159,7 @@ type BookSummary = {
   asin: string | null;
   url: string | null;
   publisher: string | null;
+  releaseDate: string | null;
   language: string | null;
   lastReadAt: number | null;
   indexedAt: number;
@@ -3364,6 +3368,7 @@ async function saveBookMetadataChanges() {
             asin: payload.asin || null,
             url: payload.url || null,
             publisher: payload.publisher || null,
+            releaseDate: payload.releaseDate || null,
             language: payload.language || null,
             lastReadAt: null,
             indexedAt: Math.floor(Date.now() / 1000),
@@ -6212,9 +6217,21 @@ function showBookGridPopup(
   titleEl.style.cursor = "pointer";
   titleEl.addEventListener("click", onClickBook);
 
+  const byline = formatAuthorByline(book.authors);
+  let bylineEl: HTMLElement | null = null;
+  if (byline) {
+    bylineEl = document.createElement("span");
+    bylineEl.className = "book-byline";
+    bylineEl.textContent = byline;
+  }
+
   const metaEl = document.createElement("small");
   metaEl.className = "book-meta";
-  metaEl.textContent = book.sourceType === "pdf" ? formatFileSize(book.fileSize) : "";
+  metaEl.textContent = formatBookMetaLine([
+    book.publisher,
+    formatReleaseYear(book.releaseDate),
+    book.sourceType === "pdf" ? formatFileSize(book.fileSize) : null,
+  ]);
 
   const tagsRowEl = document.createElement("div");
   tagsRowEl.className = "book-tags-row";
@@ -6267,10 +6284,13 @@ function showBookGridPopup(
   tagsRowEl.appendChild(actionsEl);
 
   copyEl.appendChild(titleEl);
-  copyEl.appendChild(tagsRowEl);
+  if (bylineEl) {
+    copyEl.appendChild(bylineEl);
+  }
   if (metaEl.textContent) {
     copyEl.appendChild(metaEl);
   }
+  copyEl.appendChild(tagsRowEl);
 
   if (book.asin || book.url) {
     const linksEl = document.createElement("div");
@@ -6427,12 +6447,23 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     const titleEl = document.createElement("strong");
     titleEl.textContent = book.title ?? book.fileName;
 
-    const pathEl = document.createElement("span");
-    pathEl.textContent = book.locationLabel ?? formatBookLocation(book.filePath, cachedHomeDir);
+    const byline = formatAuthorByline(book.authors);
+    let bylineEl: HTMLElement | null = null;
+    if (byline) {
+      bylineEl = document.createElement("span");
+      bylineEl.className = "book-byline";
+      bylineEl.textContent = byline;
+    }
 
+    const locationLabel = book.locationLabel ?? formatBookLocation(book.filePath, cachedHomeDir);
     const metaEl = document.createElement("small");
     metaEl.className = "book-meta";
-    metaEl.textContent = book.sourceType === "pdf" ? formatFileSize(book.fileSize) : "";
+    metaEl.textContent = formatBookMetaLine([
+      book.publisher,
+      formatReleaseYear(book.releaseDate),
+      locationLabel,
+      book.sourceType === "pdf" ? formatFileSize(book.fileSize) : null,
+    ]);
 
     const tagsRowEl = document.createElement("div");
     tagsRowEl.className = "book-tags-row";
@@ -6487,13 +6518,15 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
     });
 
     bodyEl.appendChild(titleEl);
-    bodyEl.appendChild(pathEl);
+    if (bylineEl) {
+      bodyEl.appendChild(bylineEl);
+    }
+    bodyEl.appendChild(metaEl);
     tagsRowEl.appendChild(tagsEl);
     actionsEl.appendChild(editMetadataEl);
     actionsEl.appendChild(editTagsEl);
     tagsRowEl.appendChild(actionsEl);
     bodyEl.appendChild(tagsRowEl);
-    bodyEl.appendChild(metaEl);
 
     if (book.asin || book.url) {
       const linksEl = document.createElement("div");

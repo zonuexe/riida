@@ -121,6 +121,7 @@ struct BookSummary {
     asin: Option<String>,
     url: Option<String>,
     publisher: Option<String>,
+    release_date: Option<String>,
     language: Option<String>,
     last_read_at: Option<u64>,
     indexed_at: u64,
@@ -1788,6 +1789,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
               COALESCE(book_metadata.title, ''),
               books.source_type,
               COALESCE(book_metadata.publisher, ''),
+              COALESCE(book_metadata.release_date, ''),
               COALESCE(book_metadata.language, ''),
               reading_positions.updated_at,
               books.indexed_at
@@ -1814,8 +1816,9 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 row.get::<_, String>(9)?,
                 row.get::<_, String>(10)?,
                 row.get::<_, String>(11)?,
-                row.get::<_, Option<u64>>(12)?,
-                row.get::<_, u64>(13)?,
+                row.get::<_, String>(12)?,
+                row.get::<_, Option<u64>>(13)?,
+                row.get::<_, u64>(14)?,
             ))
         })
         .map_err(|error| error.to_string())?;
@@ -1833,6 +1836,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
             title,
             source_type,
             publisher,
+            release_date,
             language,
             last_read_at,
             indexed_at,
@@ -1861,6 +1865,11 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                     None
                 } else {
                     Some(publisher)
+                },
+                release_date: if release_date.is_empty() {
+                    None
+                } else {
+                    Some(release_date)
                 },
                 language: if language.is_empty() {
                     None
@@ -1917,6 +1926,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
               eb.asin,
               eb.url,
               eb.publisher,
+              eb.release_date,
               eb.language,
               rp.updated_at,
               eb.updated_at
@@ -1940,8 +1950,9 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                 row.get::<_, String>(7)?,
                 row.get::<_, String>(8)?,
                 row.get::<_, String>(9)?,
-                row.get::<_, Option<u64>>(10)?,
-                row.get::<_, u64>(11)?,
+                row.get::<_, String>(10)?,
+                row.get::<_, Option<u64>>(11)?,
+                row.get::<_, u64>(12)?,
             ))
         })
         .map_err(|error| error.to_string())?;
@@ -1973,6 +1984,7 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
             asin,
             url,
             publisher,
+            release_date,
             language,
             last_read_at,
             indexed_at,
@@ -2009,6 +2021,11 @@ fn load_snapshot(connection: &Connection, config: &AppConfig) -> Result<LibraryS
                     None
                 } else {
                     Some(publisher)
+                },
+                release_date: if release_date.is_empty() {
+                    None
+                } else {
+                    Some(release_date)
                 },
                 language: if language.is_empty() {
                     None

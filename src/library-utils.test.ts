@@ -7,8 +7,11 @@ import {
   deriveTags,
   describeEmptyLibraryState,
   filterVisibleBooks,
+  formatAuthorByline,
   formatBookLocation,
+  formatBookMetaLine,
   formatFileSize,
+  formatReleaseYear,
   normalizeSearchText,
   parseAbsoluteDateSeconds,
   parseRelativeDurationSeconds,
@@ -31,6 +34,57 @@ describe("formatBookLocation", () => {
 
   it("omits the file name even without a home directory hint", () => {
     expect(formatBookLocation("/Books/Tech/Rust Book.pdf", null)).toBe("/Books/Tech");
+  });
+});
+
+describe("formatAuthorByline", () => {
+  it("joins authors with a comma", () => {
+    expect(formatAuthorByline(["Steven van Deursen", "Mark Seemann"])).toBe(
+      "Steven van Deursen, Mark Seemann",
+    );
+  });
+
+  it("returns an empty string when there are no authors", () => {
+    expect(formatAuthorByline([])).toBe("");
+    expect(formatAuthorByline(["", "  "])).toBe("");
+  });
+
+  it("trims entries and drops blanks", () => {
+    expect(formatAuthorByline([" A ", "", "B"])).toBe("A, B");
+  });
+
+  it("collapses authors past the cap into a 他N名 suffix", () => {
+    expect(formatAuthorByline(["A", "B", "C", "D"])).toBe("A, B, C 他1名");
+    expect(formatAuthorByline(["A", "B", "C", "D", "E"], 2)).toBe("A, B 他3名");
+  });
+});
+
+describe("formatReleaseYear", () => {
+  it("extracts the year from a YYYY-MM-DD date", () => {
+    expect(formatReleaseYear("2019-09-25")).toBe("2019");
+  });
+
+  it("returns null for missing or malformed values", () => {
+    expect(formatReleaseYear(null)).toBeNull();
+    expect(formatReleaseYear(undefined)).toBeNull();
+    expect(formatReleaseYear("")).toBeNull();
+    expect(formatReleaseYear("2019")).toBeNull();
+    expect(formatReleaseYear("2019/09/25")).toBeNull();
+  });
+});
+
+describe("formatBookMetaLine", () => {
+  it("joins present parts with a middot", () => {
+    expect(formatBookMetaLine(["マイナビ出版", "2019", "~/Dropbox/EBook/mynavi", "14.2 MB"])).toBe(
+      "マイナビ出版 · 2019 · ~/Dropbox/EBook/mynavi · 14.2 MB",
+    );
+  });
+
+  it("drops null, undefined, and blank parts so separators collapse", () => {
+    expect(formatBookMetaLine([null, undefined, "  ", "~/Books", "11.4 MB"])).toBe(
+      "~/Books · 11.4 MB",
+    );
+    expect(formatBookMetaLine([null, undefined])).toBe("");
   });
 });
 

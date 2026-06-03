@@ -114,6 +114,47 @@ export function formatFileSize(fileSize: number) {
   return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
+/**
+ * Build the author "byline" shown under a book title. Authors past `maxAuthors`
+ * collapse into a trailing `他N名` so long translator lists do not fill the row.
+ * Returns "" when there are no authors so the caller can skip the line entirely.
+ */
+export function formatAuthorByline(authors: string[], maxAuthors = 3): string {
+  const cleaned = authors.map((author) => author.trim()).filter((author) => author.length > 0);
+  if (cleaned.length === 0) {
+    return "";
+  }
+  if (cleaned.length <= maxAuthors) {
+    return cleaned.join(", ");
+  }
+  const shown = cleaned.slice(0, maxAuthors).join(", ");
+  return `${shown} 他${cleaned.length - maxAuthors}名`;
+}
+
+/**
+ * Extract a 4-digit publication year from a `YYYY-MM-DD` release date.
+ * Returns null when the value is absent or not in the expected shape.
+ */
+export function formatReleaseYear(releaseDate: string | null | undefined): string | null {
+  if (!releaseDate) {
+    return null;
+  }
+  const match = /^(\d{4})-\d{2}-\d{2}$/.exec(releaseDate.trim());
+  return match?.[1] ?? null;
+}
+
+/**
+ * Join the muted metadata strip (publisher · year · location · size) with a
+ * middot separator, dropping any empty/null parts so missing fields collapse
+ * cleanly instead of leaving dangling separators.
+ */
+export function formatBookMetaLine(parts: Array<string | null | undefined>): string {
+  return parts
+    .map((part) => (part == null ? "" : part.trim()))
+    .filter((part) => part.length > 0)
+    .join(" · ");
+}
+
 export function normalizeSearchText(value: string) {
   return value
     .normalize("NFKC")

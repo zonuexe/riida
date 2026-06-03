@@ -416,6 +416,15 @@ Pattern:
 - Title shifts to accent on hover/focus
 - Selected row uses a subtle accent wash
 
+Metadata stack hierarchy (top to bottom):
+
+- Title — primary serif weight; the only line that takes accent on hover/focus
+- Author byline — one step below the title in weight and ink opacity, acting like a book's printed byline; authors past the third collapse into a `他N名` suffix, and the line is omitted entirely when no authors are known
+- Muted metadata strip — a single small low-opacity line joining publisher, publication year, file location, and file size with middot (`·`) separators; missing fields drop out so separators never dangle
+- Tag row — user-applied chips plus the row's edit actions
+
+The strip deliberately demotes the file location and size (technical detail) to the same muted line as the bibliographic publisher/year so the title and author byline carry the visual weight. The grid hover popup uses the same byline-then-strip treatment (omitting the location); the compact grid caption stays title-only.
+
 Thumbnail rules:
 
 - `72 × 102`

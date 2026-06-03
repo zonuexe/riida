@@ -2327,9 +2327,21 @@ html.is-scrolling .book-item .book-select-checkbox {
   word-break: break-all;
 }
 
+/* Author byline: a step below the title, above the muted metadata strip. */
+.book-item .book-byline,
+.book-grid-popup .book-byline {
+  color: rgb(var(--ink-rgb) / 0.74);
+  font-size: 0.9rem;
+  word-break: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .book-meta {
   color: rgb(var(--ink-rgb) / 0.48);
   font-size: 0.8rem;
+  word-break: break-word;
 }
 
 .book-reveal-btn {

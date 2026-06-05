@@ -252,6 +252,18 @@ impl FullTextIndex {
         Ok(())
     }
 
+    /// Remove every document from the index (used by "clear index").
+    pub fn delete_all(&self) -> Result<(), String> {
+        let _guard = self.lock_writes();
+        let mut writer = self.writer()?;
+        writer
+            .delete_all_documents()
+            .map_err(|e| format!("delete all: {e}"))?;
+        writer.commit().map_err(|e| format!("commit: {e}"))?;
+        self.reader.reload().map_err(|e| format!("reload: {e}"))?;
+        Ok(())
+    }
+
     /// Delete every document for a book (all kinds) — used when a file is
     /// removed from the library.
     pub fn delete_book(&self, file_path: &str) -> Result<(), String> {
@@ -545,6 +557,20 @@ mod tests {
         idx.delete_kind("a.pdf", ContentKind::Body).unwrap();
         assert!(idx.search("本文", 10).unwrap().is_empty(), "body removed");
         assert_eq!(idx.search("メタ", 10).unwrap().len(), 1, "metadata kept");
+    }
+
+    #[test]
+    fn delete_all_empties_the_index() {
+        let idx = FullTextIndex::in_ram().unwrap();
+        idx.index_docs(&[
+            meta_doc("a.pdf", "本A", "著者", "", "メタ"),
+            body_doc("b.pdf", "本B", 1, "本文テキスト"),
+        ])
+        .unwrap();
+        assert!(!idx.search("本", 10).unwrap().is_empty());
+        idx.delete_all().unwrap();
+        assert!(idx.search("本", 10).unwrap().is_empty());
+        assert!(idx.search("本文", 10).unwrap().is_empty());
     }
 
     #[test]

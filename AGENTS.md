@@ -465,16 +465,27 @@ and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-s
   [src/main.ts](src/main.ts).
 - **Opt-in (important):** indexing consumes disk and is **never** started
   implicitly. The tantivy index lives in the data dir and is created only when
-  the user presses *Build index* in Settings (`fulltext_build_index`). Search
-  (`search_fulltext`) and the incremental hooks/`fulltext_sync_after_scan`
-  reconciliation are all no-ops until `fulltext_built()` is true.
+  the user presses *Build index* in Settings (`fulltext_build_index`). Opt-in is
+  tracked by the `.riida-built` sentinel in the index dir (`fulltext_built()`);
+  search (`search_fulltext`), the incremental hooks, and
+  `fulltext_sync_after_scan` are all no-ops until it exists. *Clear*
+  (`fulltext_clear_index`) empties the index, removes the sentinel, and returns
+  to the not-built state.
+- **Cloud / online-only files (important):** scanning reads only metadata, which
+  does **not** materialize cloud placeholders, but body extraction reads the
+  whole file and would force a download. So online-only files (detected via
+  `is_dataless`: a non-empty file with zero allocated blocks, e.g. macOS File
+  Provider / Dropbox) have their **body skipped** (status `deferred`, metadata/
+  notes still indexed) unless the user enables *download online-only files*
+  (`fulltext_build_index(include_online_only)`). The scan reconciliation indexes
+  a deferred file's body once it becomes local.
 - **Index model:** one doc per content unit, `kind` ∈ {metadata, note, body};
   body docs are per PDF page / per EPUB spine section. Re-index granularity is
-  per `(file_path, kind)`. Vertical/tategaki PDFs need inter-CJK whitespace
-  normalization (`normalize_extracted_text`) before tokenizing.
+  per `(file_path, kind)`. Vertical/tategaki PDFs and OCR'd scans need inter-CJK
+  whitespace normalization (`normalize_extracted_text`) before tokenizing.
 - **Commands:** `search_fulltext`, `fulltext_index_status`,
-  `fulltext_build_index`. **Events:** `fulltext-progress`, `fulltext-complete`,
-  `fulltext-error`.
+  `fulltext_build_index`, `fulltext_clear_index`. **Events:**
+  `fulltext-progress`, `fulltext-complete`, `fulltext-error`.
 - **Release TODO:** bundle the per-platform libpdfium into `bundle.resources`
   (+ macOS signing of the dylib) so body extraction works in distributed builds;
   until then a release falls back to metadata/notes-only indexing without a

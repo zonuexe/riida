@@ -3658,12 +3658,28 @@ fn fulltext_dir() -> Result<PathBuf, String> {
     Ok(app_paths()?.data_dir.join("fulltext-index"))
 }
 
-/// Whether the index has been built at least once (opt-in: the user triggers
-/// the first build). tantivy writes `meta.json` when the index is created.
+/// Sentinel marking that the user has opted in and built the index. Created by
+/// the build worker, removed by `fulltext_clear_index`. Used instead of the
+/// tantivy `meta.json` so a clear can fully disable indexing again.
+fn fulltext_built_marker() -> Result<PathBuf, String> {
+    Ok(fulltext_dir()?.join(".riida-built"))
+}
+
+/// Whether the index has been built at least once (opt-in). Search and all
+/// incremental/reconciliation work are no-ops until this is true.
 fn fulltext_built() -> bool {
-    fulltext_dir()
-        .map(|dir| dir.join("meta.json").exists())
+    fulltext_built_marker()
+        .map(|marker| marker.exists())
         .unwrap_or(false)
+}
+
+fn mark_fulltext_built() {
+    if let Ok(marker) = fulltext_built_marker() {
+        if let Some(parent) = marker.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(&marker, b"");
+    }
 }
 
 /// Directory to load libpdfium from, resolved at startup. None ⇒ rely on a
@@ -3899,10 +3915,31 @@ fn gather_books_for_index(connection: &Connection) -> Result<Vec<BookIndexInput>
     Ok(books)
 }
 
-/// Build the `ContentDoc`s for one book (metadata + note + body).
+/// Whether a file is a cloud "online-only" (dataless) placeholder, judged from
+/// its size and allocated blocks: a non-empty file with zero allocated blocks
+/// has no local content (macOS File Provider / Dropbox etc.). Reading it would
+/// force a download, so the indexer skips its body unless asked otherwise.
+fn is_dataless_blocks(len: u64, blocks: u64) -> bool {
+    len > 0 && blocks == 0
+}
+
+fn is_dataless(path: &str) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match fs::metadata(path) {
+        Ok(meta) => is_dataless_blocks(meta.len(), meta.blocks()),
+        // If we cannot stat it, treat it as present and let extraction fail
+        // gracefully rather than silently skipping.
+        Err(_) => false,
+    }
+}
+
+/// Build the `ContentDoc`s for one book. Metadata and note docs are always built
+/// (they read only SQLite); the body is extracted only when `include_body` is
+/// set (the caller skips it for online-only cloud files to avoid downloads).
 fn build_docs_for_book(
     pdfium: Option<&pdfium_render::prelude::Pdfium>,
     book: &BookIndexInput,
+    include_body: bool,
 ) -> Vec<fulltext::ContentDoc> {
     let mut docs = vec![fulltext_extract::build_metadata_doc(
         &book.file_path,
@@ -3924,7 +3961,9 @@ fn build_docs_for_book(
         }
     }
 
-    let body = if book.is_pdf() {
+    let body = if !include_body {
+        None
+    } else if book.is_pdf() {
         pdfium.and_then(|p| {
             fulltext_extract::extract_pdf_body(
                 p,
@@ -3957,9 +3996,41 @@ struct FullTextProgress {
     file_path: String,
 }
 
+/// Decide whether to extract a book's body now. Online-only cloud placeholders
+/// are deferred (body skipped) unless the user opted to download them.
+fn should_index_body(book: &BookIndexInput, include_online_only: bool) -> (bool, &'static str) {
+    if !(book.is_pdf() || book.is_epub()) {
+        return (false, "indexed"); // external/metadata-only book; nothing deferred
+    }
+    if !include_online_only && is_dataless(&book.file_path) {
+        return (false, "deferred");
+    }
+    (true, "indexed")
+}
+
+/// Persist a book's index status row.
+fn record_fulltext_status(book: &BookIndexInput, status: &str) {
+    if let Ok(connection) = lock_database() {
+        let _ = connection.execute(
+            "INSERT INTO fulltext_index (file_path, body_modified_at, indexed_at, status, error)
+             VALUES (?1, ?2, ?3, ?4, NULL)
+             ON CONFLICT(file_path) DO UPDATE SET
+               body_modified_at = ?2, indexed_at = ?3, status = ?4, error = NULL",
+            params![
+                book.file_path,
+                book.modified_at as i64,
+                current_unix_seconds() as i64,
+                status
+            ],
+        );
+    }
+}
+
 /// Run a full index (re)build. Gathers inputs under the lock, then extracts and
 /// indexes lock-free, emitting progress events. Runs on a worker thread.
-fn run_fulltext_build(app: &AppHandle) -> Result<(), String> {
+/// `include_online_only` forces downloading + indexing the body of cloud
+/// placeholder files; otherwise their body is deferred until they are local.
+fn run_fulltext_build(app: &AppHandle, include_online_only: bool) -> Result<(), String> {
     let books = {
         let connection = lock_database()?;
         gather_books_for_index(&connection)?
@@ -3967,33 +4038,19 @@ fn run_fulltext_build(app: &AppHandle) -> Result<(), String> {
     let total = books.len();
 
     let index = fulltext_index()?;
+    mark_fulltext_built();
     let pdfium = fulltext_extract::bind_pdfium(pdfium_dir().as_deref())
         .map_err(|e| eprintln!("pdfium unavailable, indexing metadata/notes only: {e}"))
         .ok();
 
     for (done, book) in books.iter().enumerate() {
-        let docs = build_docs_for_book(pdfium.as_ref(), book);
-        let status = match index.index_docs(&docs) {
-            Ok(()) => "indexed",
-            Err(e) => {
-                eprintln!("index failed for {}: {e}", book.file_path);
-                "failed"
-            }
-        };
-        if let Ok(connection) = lock_database() {
-            let _ = connection.execute(
-                "INSERT INTO fulltext_index (file_path, body_modified_at, indexed_at, status, error)
-                 VALUES (?1, ?2, ?3, ?4, NULL)
-                 ON CONFLICT(file_path) DO UPDATE SET
-                   body_modified_at = ?2, indexed_at = ?3, status = ?4, error = NULL",
-                params![
-                    book.file_path,
-                    book.modified_at as i64,
-                    current_unix_seconds() as i64,
-                    status
-                ],
-            );
+        let (include_body, mut status) = should_index_body(book, include_online_only);
+        let docs = build_docs_for_book(pdfium.as_ref(), book, include_body);
+        if let Err(e) = index.index_docs(&docs) {
+            eprintln!("index failed for {}: {e}", book.file_path);
+            status = "failed";
         }
+        record_fulltext_status(book, status);
         let _ = app.emit(
             "fulltext-progress",
             FullTextProgress {
@@ -4013,9 +4070,27 @@ fn run_fulltext_build(app: &AppHandle) -> Result<(), String> {
 struct FullTextStatus {
     total: i64,
     indexed: i64,
+    /// File-backed books whose body was skipped because they are online-only.
+    deferred: i64,
     failed: i64,
     building: bool,
     built: bool,
+    /// Disk used by the tantivy index, in bytes.
+    index_size_bytes: u64,
+}
+
+/// Total size of the on-disk index directory.
+fn fulltext_index_size_bytes() -> u64 {
+    let Ok(dir) = fulltext_dir() else {
+        return 0;
+    };
+    WalkDir::new(dir)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+        .filter_map(|e| e.metadata().ok())
+        .map(|m| m.len())
+        .sum()
 }
 
 #[tauri::command]
@@ -4028,44 +4103,64 @@ fn fulltext_index_status() -> Result<FullTextStatus, String> {
             |row| row.get(0),
         )
         .map_err(|e| e.to_string())?;
-    let indexed: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM fulltext_index WHERE status = 'indexed'",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
-    let failed: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM fulltext_index WHERE status = 'failed'",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
+    let count_status = |status: &str| -> Result<i64, String> {
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM fulltext_index WHERE status = ?1",
+                params![status],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())
+    };
     Ok(FullTextStatus {
         total,
-        indexed,
-        failed,
+        indexed: count_status("indexed")?,
+        deferred: count_status("deferred")?,
+        failed: count_status("failed")?,
         building: FULLTEXT_BUILDING.load(std::sync::atomic::Ordering::SeqCst),
         built: fulltext_built(),
+        index_size_bytes: fulltext_index_size_bytes(),
     })
 }
 
 /// Opt-in trigger: (re)build the whole index in the background. Returns
 /// immediately; progress arrives via `fulltext-progress` / `fulltext-complete`.
+/// `include_online_only` downloads + indexes the body of cloud placeholder
+/// files instead of deferring them.
 #[tauri::command]
-fn fulltext_build_index(app: AppHandle) -> Result<(), String> {
+fn fulltext_build_index(app: AppHandle, include_online_only: Option<bool>) -> Result<(), String> {
     use std::sync::atomic::Ordering;
     if FULLTEXT_BUILDING.swap(true, Ordering::SeqCst) {
         return Err("full-text index build already in progress".to_string());
     }
+    let include_online_only = include_online_only.unwrap_or(false);
     std::thread::spawn(move || {
-        if let Err(e) = run_fulltext_build(&app) {
+        if let Err(e) = run_fulltext_build(&app, include_online_only) {
             eprintln!("full-text index build failed: {e}");
             let _ = app.emit("fulltext-error", e);
         }
         FULLTEXT_BUILDING.store(false, Ordering::SeqCst);
     });
+    Ok(())
+}
+
+/// Empty the index and disable it again (frees disk; returns to the opt-in
+/// "not built" state). A no-op if a build is in progress.
+#[tauri::command]
+fn fulltext_clear_index() -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    if FULLTEXT_BUILDING.load(Ordering::SeqCst) {
+        return Err("cannot clear while the index is building".to_string());
+    }
+    if let Ok(index) = fulltext_index() {
+        index.delete_all()?;
+    }
+    if let Ok(connection) = lock_database() {
+        let _ = connection.execute("DELETE FROM fulltext_index", []);
+    }
+    if let Ok(marker) = fulltext_built_marker() {
+        let _ = fs::remove_file(marker);
+    }
     Ok(())
 }
 
@@ -4089,23 +4184,39 @@ fn fulltext_sync_after_scan() {
     });
 }
 
+/// Decide whether a scan-time reconciliation needs to (re)index a book.
+/// `dataless` is the file's current online-only state. Returns false when the
+/// index is already up to date for that book.
+fn sync_needs_reindex(book: &BookIndexInput, prev: Option<&(i64, String)>, dataless: bool) -> bool {
+    match prev {
+        None => true, // never indexed
+        Some((ts, status)) => {
+            book.modified_at as i64 > *ts            // file changed
+                || (status == "deferred" && !dataless) // online-only file became local
+        }
+    }
+}
+
 fn run_fulltext_sync() -> Result<(), String> {
     // Snapshot the current library and the index's per-file record under the lock.
     let (books, indexed) = {
         let connection = lock_database()?;
         let books = gather_books_for_index(&connection)?;
         let mut stmt = connection
-            .prepare("SELECT file_path, COALESCE(body_modified_at, 0) FROM fulltext_index")
+            .prepare("SELECT file_path, COALESCE(body_modified_at, 0), status FROM fulltext_index")
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    (row.get::<_, i64>(1)?, row.get::<_, String>(2)?),
+                ))
             })
             .map_err(|e| e.to_string())?;
-        let mut indexed: HashMap<String, i64> = HashMap::new();
+        let mut indexed: HashMap<String, (i64, String)> = HashMap::new();
         for row in rows {
-            let (path, ts) = row.map_err(|e| e.to_string())?;
-            indexed.insert(path, ts);
+            let (path, value) = row.map_err(|e| e.to_string())?;
+            indexed.insert(path, value);
         }
         (books, indexed)
     };
@@ -4124,13 +4235,19 @@ fn run_fulltext_sync() -> Result<(), String> {
         }
     }
 
-    // New or changed file-backed books need their body (re)extracted.
-    let to_index: Vec<&BookIndexInput> = books
+    // File-backed books that are new, changed, or were deferred and are now local.
+    // Online-only files are never downloaded here (incremental sync stays cheap);
+    // their body waits until they are local.
+    let to_index: Vec<(&BookIndexInput, bool)> = books
         .iter()
         .filter(|b| b.is_pdf() || b.is_epub())
-        .filter(|b| match indexed.get(&b.file_path) {
-            None => true,
-            Some(&ts) => b.modified_at as i64 > ts,
+        .filter_map(|b| {
+            let dataless = is_dataless(&b.file_path);
+            if sync_needs_reindex(b, indexed.get(&b.file_path), dataless) {
+                Some((b, dataless))
+            } else {
+                None
+            }
         })
         .collect();
     if to_index.is_empty() {
@@ -4138,29 +4255,17 @@ fn run_fulltext_sync() -> Result<(), String> {
     }
 
     let pdfium = fulltext_extract::bind_pdfium(pdfium_dir().as_deref()).ok();
-    for book in to_index {
-        let docs = build_docs_for_book(pdfium.as_ref(), book);
-        let status = match index.index_docs(&docs) {
-            Ok(()) => "indexed",
-            Err(e) => {
-                eprintln!("incremental index failed for {}: {e}", book.file_path);
-                "failed"
-            }
-        };
-        if let Ok(connection) = lock_database() {
-            let _ = connection.execute(
-                "INSERT INTO fulltext_index (file_path, body_modified_at, indexed_at, status, error)
-                 VALUES (?1, ?2, ?3, ?4, NULL)
-                 ON CONFLICT(file_path) DO UPDATE SET
-                   body_modified_at = ?2, indexed_at = ?3, status = ?4, error = NULL",
-                params![
-                    book.file_path,
-                    book.modified_at as i64,
-                    current_unix_seconds() as i64,
-                    status
-                ],
-            );
+    for (book, dataless) in to_index {
+        // Sync never force-downloads: a still-online-only file is body-deferred.
+        // (Only PDF/EPUB reach here, so body is wanted iff the file is local.)
+        let include_body = !dataless;
+        let mut status = if include_body { "indexed" } else { "deferred" };
+        let docs = build_docs_for_book(pdfium.as_ref(), book, include_body);
+        if let Err(e) = index.index_docs(&docs) {
+            eprintln!("incremental index failed for {}: {e}", book.file_path);
+            status = "failed";
         }
+        record_fulltext_status(book, status);
     }
     Ok(())
 }
@@ -4418,7 +4523,8 @@ pub fn run() {
             open_viewer_window,
             search_fulltext,
             fulltext_index_status,
-            fulltext_build_index
+            fulltext_build_index,
+            fulltext_clear_index
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -4432,6 +4538,73 @@ mod tests {
     use proptest::prelude::*;
     use rusqlite::Connection;
     use std::{fs, path::PathBuf};
+
+    fn fulltext_book(file_path: &str, source_type: &str, modified_at: u64) -> BookIndexInput {
+        BookIndexInput {
+            file_path: file_path.into(),
+            source_type: source_type.into(),
+            modified_at,
+            title: "T".into(),
+            authors: vec![],
+            publisher: String::new(),
+            description: String::new(),
+            release_date: String::new(),
+            language: String::new(),
+            asin: String::new(),
+            url: String::new(),
+            tags: vec![],
+            note: None,
+            password: None,
+        }
+    }
+
+    #[test]
+    fn is_dataless_blocks_detects_online_only_files() {
+        // Non-empty file with no allocated blocks = online-only placeholder.
+        assert!(is_dataless_blocks(5_000_000, 0));
+        // Materialized file has allocated blocks.
+        assert!(!is_dataless_blocks(5_000_000, 9766));
+        // A genuinely empty file is not "online-only".
+        assert!(!is_dataless_blocks(0, 0));
+    }
+
+    #[test]
+    fn should_index_body_defers_only_dataless_file_backed_books() {
+        // External (metadata-only) book: never has a body, never deferred.
+        let ext = fulltext_book("kindle:abc", "kindle", 0);
+        assert_eq!(should_index_body(&ext, false), (false, "indexed"));
+    }
+
+    #[test]
+    fn sync_needs_reindex_logic() {
+        let book = fulltext_book("a.pdf", "pdf", 100);
+        // Never indexed → yes.
+        assert!(sync_needs_reindex(&book, None, false));
+        // Up to date, local → no.
+        assert!(!sync_needs_reindex(
+            &book,
+            Some(&(100, "indexed".into())),
+            false
+        ));
+        // File changed (newer modified_at than recorded) → yes.
+        assert!(sync_needs_reindex(
+            &book,
+            Some(&(50, "indexed".into())),
+            false
+        ));
+        // Deferred and still online-only → no (do not download).
+        assert!(!sync_needs_reindex(
+            &book,
+            Some(&(100, "deferred".into())),
+            true
+        ));
+        // Deferred and now local → yes (pick up the body).
+        assert!(sync_needs_reindex(
+            &book,
+            Some(&(100, "deferred".into())),
+            false
+        ));
+    }
 
     fn test_connection() -> Connection {
         let connection = Connection::open_in_memory().expect("in-memory db should open");

@@ -526,18 +526,32 @@
           <section class="app-settings-field app-settings-field--block">
             <div class="app-settings-field-header">
               <span>Full-text search</span>
-              <button
-                id="fulltext-build"
-                class="app-settings-secondary app-settings-secondary--small"
-                type="button"
-              >
-                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Build index
-              </button>
+              <div class="fulltext-actions">
+                <button
+                  id="fulltext-build"
+                  class="app-settings-secondary app-settings-secondary--small"
+                  type="button"
+                >
+                  <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Build index
+                </button>
+                <button
+                  id="fulltext-clear"
+                  class="app-settings-secondary app-settings-secondary--small"
+                  type="button"
+                  hidden
+                >
+                  <i class="fa-solid fa-trash-can" aria-hidden="true"></i> Clear
+                </button>
+              </div>
             </div>
             <p id="fulltext-status" class="app-settings-hint">全文検索の索引は未構築です</p>
+            <label class="app-settings-checkbox">
+              <input id="fulltext-include-online-only" type="checkbox" />
+              <span>オンラインのみのクラウドファイルもダウンロードして索引する</span>
+            </label>
             <p class="app-settings-hint app-settings-hint--muted">
               本の中身（PDF/EPUB
-              本文）まで検索できるようにします。索引はディスクを消費するため、ここで明示的に構築したときだけ作成されます。
+              本文）まで検索できるようにします。索引はディスクを消費するため、ここで明示的に構築したときだけ作成されます。既定では、クラウド上の「オンラインのみ」ファイルはダウンロードせず本文をスキップします（後でファイルを開けば自動で索引されます）。
             </p>
           </section>
           <p id="app-settings-config-path" class="app-settings-path"></p>

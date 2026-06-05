@@ -2196,6 +2196,11 @@ h1 {
   margin: 0;
 }
 
+.fulltext-actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* In-content ("本の中身") full-text search results, shown above the book list. */
 .fulltext-results {
   margin: 0 0 14px;

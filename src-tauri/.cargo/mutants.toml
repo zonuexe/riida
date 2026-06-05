@@ -74,4 +74,13 @@ exclude_re = [
   '\bfulltext_on_metadata_changed\b',
   '\bfulltext_on_note_changed\b',
   '\bfulltext_on_book_removed\b',
+  '\bis_dataless\b',
+  '\bshould_index_body\b',
+  '\brecord_fulltext_status\b',
+  '\bfulltext_built_marker\b',
+  '\bfulltext_built\b',
+  '\bmark_fulltext_built\b',
+  '\bfulltext_index_size_bytes\b',
+  '\bfulltext_clear_index\b',
+  '\brun_fulltext_sync\b',
 ]

@@ -972,6 +972,7 @@ async function primeHomeDirCache() {
 }
 
 const EPUB_PREVIEW_NOTICE_STORAGE_KEY = "riida.epub.previewNoticeShown";
+const FULLTEXT_INCLUDE_ONLINE_KEY = "riida.fulltext.includeOnlineOnly";
 
 async function maybeShowEpubPreviewNotice(): Promise<void> {
   try {
@@ -6865,10 +6866,15 @@ async function renderFulltextResults(query: string) {
   containerEl.hidden = false;
 }
 
-/** Refresh the settings panel's full-text status line and build-button state. */
+/** Refresh the settings panel's full-text status line and controls. */
 async function refreshFulltextStatus() {
   const statusEl = document.querySelector<HTMLElement>("#fulltext-status");
   const buildEl = document.querySelector<HTMLButtonElement>("#fulltext-build");
+  const clearEl = document.querySelector<HTMLButtonElement>("#fulltext-clear");
+  const includeOnlineEl = document.querySelector<HTMLInputElement>("#fulltext-include-online-only");
+  if (includeOnlineEl) {
+    includeOnlineEl.checked = localStorage.getItem(FULLTEXT_INCLUDE_ONLINE_KEY) === "1";
+  }
   let status: FullTextIndexStatus | null;
   try {
     status = await invoke<FullTextIndexStatus | null>("fulltext_index_status");
@@ -6885,6 +6891,13 @@ async function refreshFulltextStatus() {
   }
   if (buildEl) {
     buildEl.disabled = !canStartBuild(status);
+    buildEl.innerHTML = status.built
+      ? '<i class="fa-solid fa-rotate" aria-hidden="true"></i> Rebuild index'
+      : '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Build index';
+  }
+  if (clearEl) {
+    clearEl.hidden = !status.built;
+    clearEl.disabled = status.building;
   }
 }
 
@@ -7561,13 +7574,42 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   const fulltextBuildEl = document.querySelector<HTMLButtonElement>("#fulltext-build");
+  const fulltextIncludeOnlineEl = document.querySelector<HTMLInputElement>(
+    "#fulltext-include-online-only",
+  );
+  fulltextIncludeOnlineEl?.addEventListener("change", () => {
+    localStorage.setItem(FULLTEXT_INCLUDE_ONLINE_KEY, fulltextIncludeOnlineEl.checked ? "1" : "0");
+  });
   fulltextBuildEl?.addEventListener("click", async () => {
     fulltextBuildEl.disabled = true;
     try {
-      await invoke("fulltext_build_index");
+      await invoke("fulltext_build_index", {
+        includeOnlineOnly: fulltextIncludeOnlineEl?.checked ?? false,
+      });
     } catch (error) {
       console.error("fulltext_build_index failed:", error);
     }
+    await refreshFulltextStatus();
+  });
+
+  const fulltextClearEl = document.querySelector<HTMLButtonElement>("#fulltext-clear");
+  fulltextClearEl?.addEventListener("click", async () => {
+    const confirmed = await confirm(
+      "全文検索の索引を削除します。ディスクは解放されますが、再度検索するには作り直しが必要です。",
+      { title: "索引をクリア", kind: "warning" },
+    );
+    if (!confirmed) {
+      return;
+    }
+    fulltextClearEl.disabled = true;
+    try {
+      await invoke("fulltext_clear_index");
+      fulltextBuilt = false;
+      void renderFulltextResults(viewerState.searchQuery);
+    } catch (error) {
+      console.error("fulltext_clear_index failed:", error);
+    }
+    fulltextClearEl.disabled = false;
     await refreshFulltextStatus();
   });
 

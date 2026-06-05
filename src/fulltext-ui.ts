@@ -18,9 +18,13 @@ export type FullTextHit = {
 export type FullTextIndexStatus = {
   total: number;
   indexed: number;
+  /** File-backed books whose body was skipped because they are online-only. */
+  deferred: number;
   failed: number;
   building: boolean;
   built: boolean;
+  /** Disk used by the on-disk index, in bytes. */
+  indexSizeBytes: number;
 };
 
 /** One matched location within a book (a page, a section, or a metadata/note hit). */
@@ -114,6 +118,18 @@ export function locationLabel(location: Pick<FullTextHitLocation, "kind" | "page
   return "本文";
 }
 
+/** Format a byte count as a short human-readable size. */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** exponent;
+  const rounded = exponent === 0 ? value : Math.round(value * 10) / 10;
+  return `${rounded} ${units[exponent]}`;
+}
+
 /** Human label describing index coverage / state, for the settings panel. */
 export function formatIndexStatusLabel(status: FullTextIndexStatus): string {
   if (status.building) {
@@ -122,8 +138,17 @@ export function formatIndexStatusLabel(status: FullTextIndexStatus): string {
   if (!status.built) {
     return "全文検索の索引は未構築です";
   }
-  const base = `索引済み ${status.indexed.toLocaleString()} / ${status.total.toLocaleString()} 冊`;
-  return status.failed > 0 ? `${base}（${status.failed.toLocaleString()} 冊が失敗）` : base;
+  const parts = [
+    `索引済み ${status.indexed.toLocaleString()} / ${status.total.toLocaleString()} 冊`,
+  ];
+  if (status.deferred > 0) {
+    parts.push(`オンラインのみ ${status.deferred.toLocaleString()} 冊は本文スキップ`);
+  }
+  if (status.failed > 0) {
+    parts.push(`${status.failed.toLocaleString()} 冊が失敗`);
+  }
+  parts.push(formatBytes(status.indexSizeBytes));
+  return parts.join("・");
 }
 
 /** Whether the "build index" action should be enabled right now. */

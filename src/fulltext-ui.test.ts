@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canStartBuild,
+  formatBytes,
   formatIndexStatusLabel,
   type FullTextHit,
   groupHitsByBook,
@@ -83,36 +84,80 @@ describe("locationLabel", () => {
   });
 });
 
+describe("formatBytes", () => {
+  it("formats sizes across units", () => {
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(2048)).toBe("2 KB");
+    expect(formatBytes(5 * 1024 * 1024)).toBe("5 MB");
+    expect(formatBytes(3.5 * 1024 * 1024 * 1024)).toBe("3.5 GB");
+  });
+
+  it("handles non-positive input", () => {
+    expect(formatBytes(-1)).toBe("0 B");
+    expect(formatBytes(NaN)).toBe("0 B");
+  });
+});
+
 describe("formatIndexStatusLabel", () => {
+  const base = {
+    total: 100,
+    indexed: 0,
+    deferred: 0,
+    failed: 0,
+    building: false,
+    built: false,
+    indexSizeBytes: 0,
+  };
+
   it("shows building progress", () => {
-    expect(
-      formatIndexStatusLabel({ total: 100, indexed: 30, failed: 0, building: true, built: false }),
-    ).toContain("構築中");
+    expect(formatIndexStatusLabel({ ...base, indexed: 30, building: true })).toContain("構築中");
   });
 
   it("shows unbuilt state", () => {
-    expect(
-      formatIndexStatusLabel({ total: 100, indexed: 0, failed: 0, building: false, built: false }),
-    ).toContain("未構築");
+    expect(formatIndexStatusLabel(base)).toContain("未構築");
   });
 
-  it("shows indexed counts and failures", () => {
+  it("shows indexed counts, deferred online-only, failures, and size", () => {
     const label = formatIndexStatusLabel({
+      ...base,
       total: 1200,
-      indexed: 1180,
+      indexed: 1000,
+      deferred: 180,
       failed: 20,
-      building: false,
       built: true,
+      indexSizeBytes: 52_428_800,
     });
-    expect(label).toContain("1,180");
+    expect(label).toContain("1,000");
     expect(label).toContain("1,200");
-    expect(label).toContain("20");
+    expect(label).toContain("180"); // deferred online-only
+    expect(label).toContain("20"); // failed
+    expect(label).toContain("50 MB"); // index size
+  });
+
+  it("omits deferred/failed clauses when zero", () => {
+    const label = formatIndexStatusLabel({
+      ...base,
+      total: 10,
+      indexed: 10,
+      built: true,
+      indexSizeBytes: 1024,
+    });
+    expect(label).not.toContain("スキップ");
+    expect(label).not.toContain("失敗");
   });
 });
 
 describe("canStartBuild", () => {
   it("is disabled only while building", () => {
-    const base = { total: 1, indexed: 0, failed: 0, built: false };
+    const base = {
+      total: 1,
+      indexed: 0,
+      deferred: 0,
+      failed: 0,
+      built: false,
+      indexSizeBytes: 0,
+    };
     expect(canStartBuild({ ...base, building: false })).toBe(true);
     expect(canStartBuild({ ...base, building: true })).toBe(false);
   });

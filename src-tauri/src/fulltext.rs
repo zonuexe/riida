@@ -31,9 +31,16 @@ use tantivy::{doc, Index, IndexReader, IndexWriter, TantivyDocument, Term};
 /// Tokenizer name registered on the index for all Japanese text fields.
 const TOKENIZER: &str = "lang_ja";
 
-/// Writer heap budget. tantivy requires at least a few MB; 50 MB is comfortable
-/// for batched book indexing without excessive memory.
-const WRITER_HEAP_BYTES: usize = 50_000_000;
+/// Writer heap budget for bulk indexing. tantivy splits this across its worker
+/// threads (≥15 MB each), so 100 MB yields ~6 indexing threads — transient
+/// memory during a build only.
+const WRITER_HEAP_BYTES: usize = 100_000_000;
+
+/// Batches at or below this many docs use a minimal single-threaded writer
+/// (15 MB, tantivy's floor). The incremental save hooks index one doc at a
+/// time; spinning up the full multi-threaded writer for that wastes most of
+/// its setup cost.
+const SMALL_BATCH_MAX_DOCS: usize = 8;
 
 /// Kind of content a document represents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -200,10 +207,56 @@ impl FullTextIndex {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    fn writer(&self) -> Result<IndexWriter, String> {
-        self.index
-            .writer(WRITER_HEAP_BYTES)
-            .map_err(|e| format!("index writer: {e}"))
+    /// Writer sized to the batch: bulk batches get the multi-threaded writer,
+    /// tiny batches (save hooks, deletes) a minimal single-threaded one.
+    fn writer(&self, batch_docs: usize) -> Result<IndexWriter, String> {
+        if batch_docs <= SMALL_BATCH_MAX_DOCS {
+            // 15 MB is tantivy's MEMORY_BUDGET_NUM_BYTES_MIN (not re-exported).
+            self.index.writer_with_num_threads(1, 15_000_000)
+        } else {
+            self.index.writer(WRITER_HEAP_BYTES)
+        }
+        .map_err(|e| format!("index writer: {e}"))
+    }
+
+    /// Finish a mutation: commit, refresh the reader, and — for small batches —
+    /// wait for the merges this commit kicked off.
+    ///
+    /// Dropping an `IndexWriter` aborts its in-flight merges, and every call
+    /// here uses a fresh writer. Aborted merges leave superseded/partial
+    /// segment files on disk that the next writer does not reclaim; measured on
+    /// a real ~740 MB index, a handful of single-doc commits ballooned the
+    /// directory to 5 GB. Small batches are the save hooks' path (background
+    /// worker, latency-tolerant), so they wait. Bulk chunk commits skip the
+    /// wait to keep merging overlapped with extraction; the bulk callers must
+    /// call [`consolidate`](Self::consolidate) once at the end instead.
+    fn finish_write(&self, writer: IndexWriter, batch_docs: usize) -> Result<(), String> {
+        let mut writer = writer;
+        writer.commit().map_err(|e| format!("commit: {e}"))?;
+        self.reader.reload().map_err(|e| format!("reload: {e}"))?;
+        if batch_docs <= SMALL_BATCH_MAX_DOCS {
+            writer
+                .wait_merging_threads()
+                .map_err(|e| format!("wait merging threads: {e}"))?;
+        }
+        Ok(())
+    }
+
+    /// Run pending segment merges to completion and let tantivy delete the
+    /// superseded files. Called once after a bulk build/sync, whose per-chunk
+    /// writers abort their merges on drop (see [`finish_write`](Self::finish_write)).
+    pub fn consolidate(&self) -> Result<(), String> {
+        let _guard = self.lock_writes();
+        let mut writer = self.writer(usize::MAX)?;
+        // An (empty) commit makes the merge policy evaluate the current
+        // segment set; waiting then runs those merges to completion and
+        // garbage-collects replaced segment files.
+        writer.commit().map_err(|e| format!("commit: {e}"))?;
+        writer
+            .wait_merging_threads()
+            .map_err(|e| format!("wait merging threads: {e}"))?;
+        self.reader.reload().map_err(|e| format!("reload: {e}"))?;
+        Ok(())
     }
 
     /// Replace-and-insert a batch of documents. Every `(file_path, kind)` pair
@@ -214,7 +267,7 @@ impl FullTextIndex {
             return Ok(());
         }
         let _guard = self.lock_writes();
-        let mut writer = self.writer()?;
+        let writer = self.writer(docs.len())?;
 
         // Distinct doc_keys → one delete each (deletes precede adds in opstamp
         // order, so the freshly added docs survive).
@@ -247,43 +300,35 @@ impl FullTextIndex {
                 .map_err(|e| format!("add document: {e}"))?;
         }
 
-        writer.commit().map_err(|e| format!("commit: {e}"))?;
-        self.reader.reload().map_err(|e| format!("reload: {e}"))?;
-        Ok(())
+        self.finish_write(writer, docs.len())
     }
 
     /// Remove every document from the index (used by "clear index").
     pub fn delete_all(&self) -> Result<(), String> {
         let _guard = self.lock_writes();
-        let mut writer = self.writer()?;
+        let writer = self.writer(0)?;
         writer
             .delete_all_documents()
             .map_err(|e| format!("delete all: {e}"))?;
-        writer.commit().map_err(|e| format!("commit: {e}"))?;
-        self.reader.reload().map_err(|e| format!("reload: {e}"))?;
-        Ok(())
+        self.finish_write(writer, 0)
     }
 
     /// Delete every document for a book (all kinds) — used when a file is
     /// removed from the library.
     pub fn delete_book(&self, file_path: &str) -> Result<(), String> {
         let _guard = self.lock_writes();
-        let mut writer = self.writer()?;
+        let writer = self.writer(0)?;
         writer.delete_term(Term::from_field_text(self.fields.file_path, file_path));
-        writer.commit().map_err(|e| format!("commit: {e}"))?;
-        self.reader.reload().map_err(|e| format!("reload: {e}"))?;
-        Ok(())
+        self.finish_write(writer, 0)
     }
 
     /// Delete only the documents of one kind for a book.
     pub fn delete_kind(&self, file_path: &str, kind: ContentKind) -> Result<(), String> {
         let key = format!("{}\u{0}{}", file_path, kind.as_str());
         let _guard = self.lock_writes();
-        let mut writer = self.writer()?;
+        let writer = self.writer(0)?;
         writer.delete_term(Term::from_field_text(self.fields.doc_key, &key));
-        writer.commit().map_err(|e| format!("commit: {e}"))?;
-        self.reader.reload().map_err(|e| format!("reload: {e}"))?;
-        Ok(())
+        self.finish_write(writer, 0)
     }
 
     /// Search and return scored hits with highlighted snippets. The query runs

@@ -22,8 +22,10 @@ use unicode_normalization::UnicodeNormalization;
 use walkdir::WalkDir;
 use zip::ZipArchive;
 
-mod fulltext;
-mod fulltext_extract;
+// Public so the profiling harness (`examples/fulltext_profile.rs`) can drive
+// the index/extraction core against real library data.
+pub mod fulltext;
+pub mod fulltext_extract;
 
 const CONFIG_FILE: &str = "riida.toml";
 const DEFAULT_EXCLUDED_PATTERNS: &[&str] = &["**/backup/**", "*.bak.pdf"];
@@ -4009,7 +4011,7 @@ fn should_index_body(book: &BookIndexInput, include_online_only: bool) -> (bool,
 }
 
 /// Persist a book's index status row.
-fn record_fulltext_status(book: &BookIndexInput, status: &str) {
+fn record_fulltext_status(file_path: &str, modified_at: i64, status: &str) {
     if let Ok(connection) = lock_database() {
         let _ = connection.execute(
             "INSERT INTO fulltext_index (file_path, body_modified_at, indexed_at, status, error)
@@ -4017,12 +4019,90 @@ fn record_fulltext_status(book: &BookIndexInput, status: &str) {
              ON CONFLICT(file_path) DO UPDATE SET
                body_modified_at = ?2, indexed_at = ?3, status = ?4, error = NULL",
             params![
-                book.file_path,
-                book.modified_at as i64,
+                file_path,
+                modified_at,
                 current_unix_seconds() as i64,
                 status
             ],
         );
+    }
+}
+
+/// Books per index commit during bulk indexing. A per-book `index_docs` call
+/// pays a large fixed cost (writer setup + segment flush + fsync + reader
+/// reload — ~250 ms measured on real data, regardless of book size), so bulk
+/// paths accumulate extracted docs and commit per chunk instead. The write
+/// lock is held only while a chunk commits, so the note/metadata save hooks
+/// stay responsive during a long build.
+const FULLTEXT_CHUNK_BOOKS: usize = 32;
+/// Flush a chunk early once this much extracted text is pending, bounding
+/// memory when a chunk happens to contain several very large books.
+const FULLTEXT_CHUNK_TEXT_BYTES: usize = 16_000_000;
+
+/// Accumulates extracted docs for several books and commits them in one
+/// `index_docs` call. Status rows are reported by `flush` only after the
+/// commit succeeded, so a crash mid-build never leaves a book marked
+/// `indexed` without its documents.
+struct FulltextChunk {
+    docs: Vec<fulltext::ContentDoc>,
+    /// (file_path, modified_at, status) for each pending book.
+    books: Vec<(String, i64, &'static str)>,
+    text_bytes: usize,
+}
+
+impl FulltextChunk {
+    fn new() -> Self {
+        Self {
+            docs: Vec::new(),
+            books: Vec::new(),
+            text_bytes: 0,
+        }
+    }
+
+    fn add(
+        &mut self,
+        book: &BookIndexInput,
+        status: &'static str,
+        docs: Vec<fulltext::ContentDoc>,
+    ) {
+        self.text_bytes += docs.iter().map(|d| d.text.len()).sum::<usize>();
+        self.docs.extend(docs);
+        self.books
+            .push((book.file_path.clone(), book.modified_at as i64, status));
+    }
+
+    fn should_flush(&self) -> bool {
+        self.books.len() >= FULLTEXT_CHUNK_BOOKS || self.text_bytes >= FULLTEXT_CHUNK_TEXT_BYTES
+    }
+
+    /// Commit pending docs and return the status rows to persist. If the
+    /// commit fails, every book in the chunk is reported `failed`.
+    fn flush(&mut self, index: &fulltext::FullTextIndex) -> Vec<(String, i64, &'static str)> {
+        if self.books.is_empty() {
+            return Vec::new();
+        }
+        let failed = if let Err(e) = index.index_docs(&self.docs) {
+            eprintln!("index chunk failed ({} books): {e}", self.books.len());
+            true
+        } else {
+            false
+        };
+        self.docs.clear();
+        self.text_bytes = 0;
+        let mut rows: Vec<(String, i64, &'static str)> = self.books.drain(..).collect();
+        if failed {
+            for row in &mut rows {
+                row.2 = "failed";
+            }
+        }
+        rows
+    }
+}
+
+/// Flush a chunk and persist the resulting status rows.
+fn flush_fulltext_chunk(chunk: &mut FulltextChunk, index: &fulltext::FullTextIndex) {
+    for (path, modified_at, status) in chunk.flush(index) {
+        record_fulltext_status(&path, modified_at, status);
     }
 }
 
@@ -4043,14 +4123,14 @@ fn run_fulltext_build(app: &AppHandle, include_online_only: bool) -> Result<(), 
         .map_err(|e| eprintln!("pdfium unavailable, indexing metadata/notes only: {e}"))
         .ok();
 
+    let mut chunk = FulltextChunk::new();
     for (done, book) in books.iter().enumerate() {
-        let (include_body, mut status) = should_index_body(book, include_online_only);
+        let (include_body, status) = should_index_body(book, include_online_only);
         let docs = build_docs_for_book(pdfium.as_ref(), book, include_body);
-        if let Err(e) = index.index_docs(&docs) {
-            eprintln!("index failed for {}: {e}", book.file_path);
-            status = "failed";
+        chunk.add(book, status, docs);
+        if chunk.should_flush() {
+            flush_fulltext_chunk(&mut chunk, index);
         }
-        record_fulltext_status(book, status);
         let _ = app.emit(
             "fulltext-progress",
             FullTextProgress {
@@ -4059,6 +4139,12 @@ fn run_fulltext_build(app: &AppHandle, include_online_only: bool) -> Result<(), 
                 file_path: book.file_path.clone(),
             },
         );
+    }
+    flush_fulltext_chunk(&mut chunk, index);
+    // Per-chunk writers abort their merges on drop; run them to completion
+    // once so the index ends compact and superseded segment files are freed.
+    if let Err(e) = index.consolidate() {
+        eprintln!("fulltext consolidate after build failed: {e}");
     }
 
     let _ = app.emit("fulltext-complete", total);
@@ -4255,17 +4341,21 @@ fn run_fulltext_sync() -> Result<(), String> {
     }
 
     let pdfium = fulltext_extract::bind_pdfium(pdfium_dir().as_deref()).ok();
+    let mut chunk = FulltextChunk::new();
     for (book, dataless) in to_index {
         // Sync never force-downloads: a still-online-only file is body-deferred.
         // (Only PDF/EPUB reach here, so body is wanted iff the file is local.)
         let include_body = !dataless;
-        let mut status = if include_body { "indexed" } else { "deferred" };
+        let status = if include_body { "indexed" } else { "deferred" };
         let docs = build_docs_for_book(pdfium.as_ref(), book, include_body);
-        if let Err(e) = index.index_docs(&docs) {
-            eprintln!("incremental index failed for {}: {e}", book.file_path);
-            status = "failed";
+        chunk.add(book, status, docs);
+        if chunk.should_flush() {
+            flush_fulltext_chunk(&mut chunk, index);
         }
-        record_fulltext_status(book, status);
+    }
+    flush_fulltext_chunk(&mut chunk, index);
+    if let Err(e) = index.consolidate() {
+        eprintln!("fulltext consolidate after sync failed: {e}");
     }
     Ok(())
 }
@@ -4401,6 +4491,43 @@ fn fulltext_metadata_doc(connection: &Connection, file_path: &str) -> Option<ful
     None
 }
 
+/// An index mutation queued by a save hook.
+enum FulltextHookOp {
+    Index(Vec<fulltext::ContentDoc>),
+    DeleteKind(String, fulltext::ContentKind),
+    DeleteBook(String),
+}
+
+static FULLTEXT_HOOK_TX: OnceLock<std::sync::mpsc::Sender<FulltextHookOp>> = OnceLock::new();
+
+/// Queue an index mutation for the single background worker. The hooks run
+/// while their caller holds the global database lock, and a tantivy commit
+/// costs ~100 ms (segment flush + fsync + reader reload) — far too slow to run
+/// inline on every debounced note autosave. One worker applies ops strictly in
+/// send order, so a stale save can never overwrite a newer one.
+fn fulltext_enqueue(op: FulltextHookOp) {
+    let tx = FULLTEXT_HOOK_TX.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<FulltextHookOp>();
+        std::thread::spawn(move || {
+            for op in rx {
+                let Ok(index) = fulltext_index() else {
+                    continue;
+                };
+                let result = match &op {
+                    FulltextHookOp::Index(docs) => index.index_docs(docs),
+                    FulltextHookOp::DeleteKind(path, kind) => index.delete_kind(path, *kind),
+                    FulltextHookOp::DeleteBook(path) => index.delete_book(path),
+                };
+                if let Err(e) = result {
+                    eprintln!("fulltext hook update failed: {e}");
+                }
+            }
+        });
+        tx
+    });
+    let _ = tx.send(op);
+}
+
 /// Re-index a book's metadata doc after a metadata/tag edit (no body re-extract).
 fn fulltext_on_metadata_changed(connection: &Connection, file_path: &str) {
     if !fulltext_built() {
@@ -4409,9 +4536,7 @@ fn fulltext_on_metadata_changed(connection: &Connection, file_path: &str) {
     let Some(doc) = fulltext_metadata_doc(connection, file_path) else {
         return;
     };
-    if let Ok(index) = fulltext_index() {
-        let _ = index.index_docs(&[doc]);
-    }
+    fulltext_enqueue(FulltextHookOp::Index(vec![doc]));
 }
 
 /// Re-index (or clear) a book's note doc after a note edit.
@@ -4419,18 +4544,18 @@ fn fulltext_on_note_changed(connection: &Connection, file_path: &str, content: &
     if !fulltext_built() {
         return;
     }
-    let Ok(index) = fulltext_index() else {
-        return;
-    };
     if content.trim().is_empty() {
-        let _ = index.delete_kind(file_path, fulltext::ContentKind::Note);
+        fulltext_enqueue(FulltextHookOp::DeleteKind(
+            file_path.to_owned(),
+            fulltext::ContentKind::Note,
+        ));
         return;
     }
     let title = fulltext_metadata_doc(connection, file_path)
         .map(|doc| doc.title)
         .unwrap_or_else(|| file_path.to_owned());
     let note_doc = fulltext_extract::build_note_doc(file_path, &title, content);
-    let _ = index.index_docs(&[note_doc]);
+    fulltext_enqueue(FulltextHookOp::Index(vec![note_doc]));
 }
 
 /// Remove a book entirely from the index (book deleted from the library).
@@ -4438,9 +4563,7 @@ fn fulltext_on_book_removed(file_path: &str) {
     if !fulltext_built() {
         return;
     }
-    if let Ok(index) = fulltext_index() {
-        let _ = index.delete_book(file_path);
-    }
+    fulltext_enqueue(FulltextHookOp::DeleteBook(file_path.to_owned()));
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -4604,6 +4727,93 @@ mod tests {
             Some(&(100, "deferred".into())),
             false
         ));
+    }
+
+    fn chunk_doc(path: &str, text: &str) -> fulltext::ContentDoc {
+        fulltext::ContentDoc {
+            file_path: path.into(),
+            kind: fulltext::ContentKind::Metadata,
+            title: "T".into(),
+            authors: String::new(),
+            tags: String::new(),
+            text: text.into(),
+            loc_page: None,
+            loc_anchor: None,
+        }
+    }
+
+    #[test]
+    fn fulltext_chunk_flushes_on_book_count() {
+        let book = fulltext_book("a.pdf", "pdf", 1);
+        let mut chunk = FulltextChunk::new();
+        assert!(!chunk.should_flush());
+        for _ in 0..FULLTEXT_CHUNK_BOOKS - 1 {
+            chunk.add(&book, "indexed", vec![]);
+        }
+        assert!(!chunk.should_flush(), "one below the book threshold");
+        chunk.add(&book, "indexed", vec![]);
+        assert!(chunk.should_flush(), "at the book threshold");
+    }
+
+    #[test]
+    fn fulltext_chunk_flushes_on_accumulated_text_bytes() {
+        let book = fulltext_book("a.pdf", "pdf", 1);
+        let half = "x".repeat(FULLTEXT_CHUNK_TEXT_BYTES / 2);
+        let mut chunk = FulltextChunk::new();
+        chunk.add(&book, "indexed", vec![chunk_doc("a.pdf", &half)]);
+        assert!(!chunk.should_flush(), "half the text budget");
+        chunk.add(&book, "indexed", vec![chunk_doc("a.pdf", &half)]);
+        assert!(chunk.should_flush(), "text bytes accumulate across adds");
+    }
+
+    #[test]
+    fn fulltext_chunk_flush_commits_docs_and_reports_statuses() {
+        let index = fulltext::FullTextIndex::in_ram().unwrap();
+        let mut chunk = FulltextChunk::new();
+        chunk.add(
+            &fulltext_book("a.pdf", "pdf", 7),
+            "indexed",
+            vec![chunk_doc("a.pdf", "チャンク収集テスト")],
+        );
+        chunk.add(&fulltext_book("b.pdf", "pdf", 8), "deferred", vec![]);
+        let rows = chunk.flush(&index);
+        assert_eq!(
+            rows,
+            vec![
+                ("a.pdf".to_string(), 7, "indexed"),
+                ("b.pdf".to_string(), 8, "deferred"),
+            ]
+        );
+        assert_eq!(index.search("チャンク", 10).unwrap().len(), 1);
+        // Flushing emptied the chunk: nothing left to flush or re-index.
+        assert!(chunk.flush(&index).is_empty());
+        assert!(!chunk.should_flush());
+    }
+
+    #[test]
+    fn fulltext_chunk_flush_marks_all_books_failed_when_commit_fails() {
+        use std::os::unix::fs::PermissionsExt;
+        // A read-only index directory makes the commit (writer lock) fail.
+        let dir = unique_temp_dir("fulltext-chunk-fail");
+        let index = fulltext::FullTextIndex::open_or_create(&dir).unwrap();
+        let mut perms = fs::metadata(&dir).unwrap().permissions();
+        perms.set_mode(0o555);
+        fs::set_permissions(&dir, perms).unwrap();
+
+        let mut chunk = FulltextChunk::new();
+        chunk.add(
+            &fulltext_book("a.pdf", "pdf", 1),
+            "indexed",
+            vec![chunk_doc("a.pdf", "本文")],
+        );
+        let rows = chunk.flush(&index);
+
+        let mut perms = fs::metadata(&dir).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&dir, perms).unwrap();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert_eq!(rows, vec![("a.pdf".to_string(), 1, "failed")]);
     }
 
     fn test_connection() -> Connection {

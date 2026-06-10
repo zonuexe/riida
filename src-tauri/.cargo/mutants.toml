@@ -71,6 +71,9 @@ exclude_re = [
   '\brun_fulltext_sync\b',
   '\bfulltext_tags\b',
   '\bfulltext_metadata_doc\b',
+  '\bfulltext_enqueue\b',     # global channel + worker thread
+  '\bflush_fulltext_chunk\b', # writes status rows via the global DATABASE
+  '\bFullTextIndex::writer\b', # both writer sizes behave identically in tests
   '\bfulltext_on_metadata_changed\b',
   '\bfulltext_on_note_changed\b',
   '\bfulltext_on_book_removed\b',

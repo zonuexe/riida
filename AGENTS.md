@@ -486,6 +486,48 @@ and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-s
 - **Commands:** `search_fulltext`, `fulltext_index_status`,
   `fulltext_build_index`, `fulltext_clear_index`. **Events:**
   `fulltext-progress`, `fulltext-complete`, `fulltext-error`.
+- **Performance (measured on real library data, see the harness below):**
+  - A tantivy `index_docs` call has a large *fixed* cost (writer setup +
+    segment flush + fsync + reader reload — ~250 ms regardless of doc count),
+    so the bulk paths (`run_fulltext_build`, `run_fulltext_sync`) accumulate
+    extracted docs in a `FulltextChunk` and commit per `FULLTEXT_CHUNK_BOOKS`
+    (32) books / `FULLTEXT_CHUNK_TEXT_BYTES` (16 MB) of text, not per book.
+    On a 100-file real-data sample this cut index time 22.2 s → 1.9 s and
+    halved the on-disk index size (fewer, better-merged segments). Status rows
+    are persisted only after the chunk commits, so a crash never records
+    `indexed` without the documents. Do not regress to per-book commits.
+  - The save hooks (`fulltext_on_note_changed` / `_metadata_changed` /
+    `_book_removed`) run while the caller holds the global `DATABASE` lock, so
+    they only *enqueue* ops; a single background worker (`fulltext_enqueue`)
+    applies them strictly in send order. Never call `index_docs` inline from a
+    hook — a debounced note autosave would otherwise stall every DB command by
+    ~100 ms per keystroke burst.
+  - **Merge-abort trap:** every mutation creates a fresh `IndexWriter`, and
+    dropping a writer aborts its in-flight segment merges, stranding
+    superseded/partial segment files (measured: a few single-doc commits on a
+    ~740 MB index left 5 GB on disk). So small-batch mutations call
+    `wait_merging_threads` before returning (`finish_write`), and the bulk
+    paths — which deliberately skip that wait per chunk so merging overlaps
+    extraction — call `FullTextIndex::consolidate()` once at the end (empty
+    commit + wait, which also garbage-collects stale files). Keep both halves
+    when touching the write path.
+  - Extraction is pdfium-bound (hot frames are pdfium's CFF font interpreter;
+    ~50 MB/s of source PDF). `pdfium-render`'s `thread_safe` feature serializes
+    all FFI, so parallel extraction threads do not help. tantivy's segment
+    merging already overlaps extraction on its own threads.
+  - Search latency scales with hit count (~0.6 ms per returned hit, dominated
+    by per-hit snippet generation over the stored page text), not with index
+    size; `limit: 50` keeps it interactive.
+- **Profiling harness:**
+  [src-tauri/examples/fulltext_profile.rs](src-tauri/examples/fulltext_profile.rs)
+  drives the same extraction/index/search core against real library files with
+  per-phase timing — modes `per-book` / `chunked:N` / `batched`, plus
+  `--update-bench` (save-hook cost) and `--search-only`. Build with the
+  `profiling` cargo profile (release-grade + debug symbols for `samply`):
+  `cargo build --profile profiling --example fulltext_profile`, then e.g.
+  `target/profiling/examples/fulltext_profile --root ~/Dropbox/EBook
+  --limit 100 --mode chunked:32`. It always skips online-only (dataless)
+  placeholders, so it never triggers cloud downloads.
 - **Release TODO:** bundle the per-platform libpdfium into `bundle.resources`
   (+ macOS signing of the dylib) so body extraction works in distributed builds;
   until then a release falls back to metadata/notes-only indexing without a

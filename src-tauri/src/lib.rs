@@ -3927,13 +3927,20 @@ fn is_dataless_blocks(len: u64, blocks: u64) -> bool {
 }
 
 fn is_dataless(path: &str) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    match fs::metadata(path) {
-        Ok(meta) => is_dataless_blocks(meta.len(), meta.blocks()),
-        // If we cannot stat it, treat it as present and let extraction fail
-        // gracefully rather than silently skipping.
-        Err(_) => false,
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        match fs::metadata(path) {
+            Ok(meta) => is_dataless_blocks(meta.len(), meta.blocks()),
+            // If we cannot stat it, treat it as present and let extraction fail
+            // gracefully rather than silently skipping.
+            Err(_) => false,
+        }
     }
+    // Windows has no sparse-file / cloud-placeholder block count via std; always
+    // treat files as locally present.
+    #[cfg(not(unix))]
+    false
 }
 
 /// Build the `ContentDoc`s for one book. Metadata and note docs are always built
@@ -4876,6 +4883,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn fulltext_chunk_flush_marks_all_books_failed_when_commit_fails() {
         use std::os::unix::fs::PermissionsExt;
         // A read-only index directory makes the commit (writer lock) fail.

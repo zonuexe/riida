@@ -390,29 +390,58 @@ impl FullTextIndex {
             .search(&query, &TopDocs::with_limit(limit))
             .map_err(|e| format!("search: {e}"))?;
 
-        let mut hits = Vec::with_capacity(top.len());
-        for (score, addr) in top {
-            let tdoc: TantivyDocument = searcher
-                .doc(addr)
-                .map_err(|e| format!("retrieve doc: {e}"))?;
-            let snippet = snippet_gen.snippet_from_doc(&tdoc).to_html();
-            hits.push(FullTextHit {
-                file_path: stored_text(&tdoc, self.fields.file_path),
-                title: stored_text(&tdoc, self.fields.title),
-                kind: stored_text(&tdoc, self.fields.kind),
-                page: tdoc
-                    .get_first(self.fields.loc_page)
-                    .and_then(|v| v.as_u64()),
-                anchor: tdoc
-                    .get_first(self.fields.loc_anchor)
-                    .and_then(|v| v.as_str())
-                    .map(str::to_owned),
-                score,
-                snippet_html: snippet,
-            });
-        }
-        Ok(hits)
+        // Per-hit cost is dominated by snippet generation (it tokenizes the
+        // whole stored page text, ~0.6 ms per hit), so fan the hits out over a
+        // few scoped threads. `snippet_from_doc` takes &self (it clones its
+        // tokenizer internally), so the generator and searcher are shared.
+        let per_thread = top.len().div_ceil(SNIPPET_THREADS).max(1);
+        let mut slots: Vec<Option<FullTextHit>> = Vec::new();
+        slots.resize_with(top.len(), || None);
+        std::thread::scope(|scope| {
+            let searcher = &searcher;
+            let snippet_gen = &snippet_gen;
+            let fields = &self.fields;
+            for (top_chunk, out_chunk) in top.chunks(per_thread).zip(slots.chunks_mut(per_thread)) {
+                scope.spawn(move || {
+                    for ((score, addr), slot) in top_chunk.iter().zip(out_chunk.iter_mut()) {
+                        *slot = build_hit(searcher, snippet_gen, fields, *score, *addr);
+                    }
+                });
+            }
+        });
+        Ok(slots.into_iter().flatten().collect())
     }
+}
+
+/// How many threads share snippet generation for one search. Hits are cheap to
+/// retrieve but each snippet tokenizes a full stored page; 4 threads cut a
+/// 50-hit search's latency roughly in proportion without monopolizing cores.
+const SNIPPET_THREADS: usize = 4;
+
+/// Retrieve one hit's stored doc and render its snippet. Returns `None` if the
+/// doc cannot be retrieved (practically impossible for a committed doc; the
+/// remaining hits still succeed rather than failing the whole search).
+fn build_hit(
+    searcher: &tantivy::Searcher,
+    snippet_gen: &SnippetGenerator,
+    fields: &Fields,
+    score: f32,
+    addr: tantivy::DocAddress,
+) -> Option<FullTextHit> {
+    let tdoc: TantivyDocument = searcher.doc(addr).ok()?;
+    let snippet = snippet_gen.snippet_from_doc(&tdoc).to_html();
+    Some(FullTextHit {
+        file_path: stored_text(&tdoc, fields.file_path),
+        title: stored_text(&tdoc, fields.title),
+        kind: stored_text(&tdoc, fields.kind),
+        page: tdoc.get_first(fields.loc_page).and_then(|v| v.as_u64()),
+        anchor: tdoc
+            .get_first(fields.loc_anchor)
+            .and_then(|v| v.as_str())
+            .map(str::to_owned),
+        score,
+        snippet_html: snippet,
+    })
 }
 
 /// Replace tantivy query-syntax metacharacters with spaces so the input can be

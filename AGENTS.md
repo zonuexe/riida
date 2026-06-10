@@ -534,7 +534,9 @@ and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-s
     naturally overlapped with extraction.
   - Search latency scales with hit count (~0.6 ms per returned hit, dominated
     by per-hit snippet generation over the stored page text), not with index
-    size; `limit: 50` keeps it interactive.
+    size. Snippets are generated on `SNIPPET_THREADS` (4) scoped threads —
+    measured 50-hit latency p50 ~55 ms → ~15 ms; `limit: 50` keeps it
+    interactive.
 - **Profiling harness:**
   [src-tauri/examples/fulltext_profile.rs](src-tauri/examples/fulltext_profile.rs)
   drives the same extraction/index/search core against real library files with

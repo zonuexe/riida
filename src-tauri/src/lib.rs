@@ -4746,6 +4746,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn is_dataless_blocks_detects_online_only_files() {
         // Non-empty file with no allocated blocks = online-only placeholder.
         assert!(is_dataless_blocks(5_000_000, 0));

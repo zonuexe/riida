@@ -91,8 +91,16 @@ fn parse_args() -> Args {
 /// Online-only cloud placeholder: non-empty file with zero allocated blocks.
 /// (Same rule as `is_dataless` in lib.rs, which is private to the app crate.)
 fn is_dataless(meta: &std::fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    meta.len() > 0 && meta.blocks() == 0
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        meta.len() > 0 && meta.blocks() == 0
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = meta;
+        false
+    }
 }
 
 struct Candidate {

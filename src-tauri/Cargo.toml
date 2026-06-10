@@ -33,7 +33,7 @@ globset = "0.4"
 unicode-normalization = "0.1"
 quick-xml = "0.39.2"
 zip = "8.5.1"
-tantivy = "0.25"
+tantivy = { version = "0.25", features = ["zstd-compression"] }
 lindera = { version = "2.0.1", features = ["embed-ipadic"] }
 lindera-tantivy = { version = "2.0.0", features = ["embed-ipadic"] }
 pdfium-render = { version = "0.9", default-features = false, features = ["thread_safe", "pdfium_7543"] }

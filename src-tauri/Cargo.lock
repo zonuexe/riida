@@ -5013,6 +5013,7 @@ dependencies = [
  "time",
  "uuid",
  "winapi",
+ "zstd",
 ]
 
 [[package]]

@@ -176,7 +176,19 @@ impl FullTextIndex {
         std::fs::create_dir_all(dir).map_err(|e| format!("create index dir: {e}"))?;
         let (schema, fields) = build_schema();
         let mmap = MmapDirectory::open(dir).map_err(|e| format!("open index dir: {e}"))?;
-        let index = Index::open_or_create(mmap, schema)
+        // Zstd for the doc store (the stored page text that snippets read).
+        // Settings are persisted in meta.json at creation; an index created
+        // before this change keeps lz4 until it is rebuilt.
+        let settings = tantivy::IndexSettings {
+            docstore_compression: tantivy::store::Compressor::Zstd(
+                tantivy::store::ZstdCompressor::default(),
+            ),
+            ..Default::default()
+        };
+        let index = Index::builder()
+            .schema(schema)
+            .settings(settings)
+            .open_or_create(mmap)
             .map_err(|e| format!("open_or_create index: {e}"))?;
         Self::finish(index, fields)
     }

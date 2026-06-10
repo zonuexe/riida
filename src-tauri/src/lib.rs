@@ -4491,6 +4491,26 @@ fn fulltext_metadata_doc(connection: &Connection, file_path: &str) -> Option<ful
     None
 }
 
+/// Repair the index in the background at startup. Quitting (or crashing)
+/// mid-build drops per-chunk writers whose in-flight merges abort, stranding
+/// superseded segment files — and the incremental sync never touches a book
+/// that is already up to date, so nothing else would ever reclaim that space.
+/// `consolidate` is a near-no-op on an already-compact index, so this is cheap
+/// in the common case. Skipped entirely until the user opts in to indexing.
+fn fulltext_consolidate_on_startup() {
+    if !fulltext_built() {
+        return;
+    }
+    std::thread::spawn(|| {
+        let Ok(index) = fulltext_index() else {
+            return;
+        };
+        if let Err(e) = index.consolidate() {
+            eprintln!("fulltext startup consolidate failed: {e}");
+        }
+    });
+}
+
 /// An index mutation queued by a save hook.
 enum FulltextHookOp {
     Index(Vec<fulltext::ContentDoc>),
@@ -4589,6 +4609,7 @@ pub fn run() {
                 config: Mutex::new(config),
             });
             app.manage(start_thumbnail_worker(app.handle().clone()));
+            fulltext_consolidate_on_startup();
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())

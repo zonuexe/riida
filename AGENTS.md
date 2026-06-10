@@ -510,7 +510,14 @@ and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-s
     paths — which deliberately skip that wait per chunk so merging overlaps
     extraction — call `FullTextIndex::consolidate()` once at the end (empty
     commit + wait, which also garbage-collects stale files). Keep both halves
-    when touching the write path.
+    when touching the write path. Quitting mid-build still aborts merges, so
+    `fulltext_consolidate_on_startup` repairs the index in the background on
+    launch (a near-no-op when the index is already compact).
+  - The doc store (stored page text that snippets read) is zstd-compressed
+    (`IndexSettings.docstore_compression`, set at index creation): −14% index
+    size vs the lz4 default with no measurable build or search cost. An index
+    directory created before this change keeps lz4 until it is rebuilt from a
+    fresh directory; both open fine.
   - Extraction is pdfium-bound (hot frames are pdfium's CFF font interpreter;
     ~50 MB/s of source PDF). `pdfium-render`'s `thread_safe` feature serializes
     all FFI, so parallel extraction threads do not help. tantivy's segment

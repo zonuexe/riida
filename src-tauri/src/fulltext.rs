@@ -354,9 +354,20 @@ impl FullTextIndex {
         parser.set_field_boost(self.fields.authors, 2.0);
         parser.set_field_boost(self.fields.tags, 2.0);
 
-        let query = parser
-            .parse_query(trimmed)
-            .map_err(|e| format!("parse query: {e}"))?;
+        // Lenient parsing: user input is not query syntax. Bare operators
+        // ("AND"), trailing colons ("futures::"), unknown fields ("title:"),
+        // and unclosed quotes must degrade to a best-effort term query
+        // instead of failing the whole search. When the input is not valid
+        // syntax, re-parse it with the metacharacters stripped — the lenient
+        // parse alone would silently drop terms like `futures:` (an unknown
+        // field reference) rather than match them as text.
+        let (query, parse_errors) = parser.parse_query_lenient(trimmed);
+        let query = if parse_errors.is_empty() {
+            query
+        } else {
+            let (fallback, _) = parser.parse_query_lenient(&strip_query_syntax(trimmed));
+            fallback
+        };
 
         let mut snippet_gen = SnippetGenerator::create(&searcher, &query, self.fields.text)
             .map_err(|e| format!("snippet generator: {e}"))?;
@@ -389,6 +400,21 @@ impl FullTextIndex {
         }
         Ok(hits)
     }
+}
+
+/// Replace tantivy query-syntax metacharacters with spaces so the input can be
+/// re-parsed as plain search terms. Used as the fallback when the raw input is
+/// not valid query syntax; the lindera/default tokenizers discard this
+/// punctuation anyway, so nothing searchable is lost.
+fn strip_query_syntax(input: &str) -> String {
+    input
+        .chars()
+        .map(|ch| match ch {
+            '+' | '-' | '!' | '(' | ')' | '{' | '}' | '[' | ']' | '^' | '"' | '~' | '*' | '?'
+            | ':' | '\\' => ' ',
+            _ => ch,
+        })
+        .collect()
 }
 
 fn stored_text(doc: &TantivyDocument, field: Field) -> String {
@@ -624,5 +650,71 @@ mod tests {
         idx.index_docs(&[body_doc("a.pdf", "本", 1, "テキスト")])
             .unwrap();
         assert!(idx.search("   ", 10).unwrap().is_empty());
+    }
+
+    // --- query-syntax robustness ----------------------------------------------
+    //
+    // Users type plain text, not tantivy query syntax. Inputs that are invalid
+    // as syntax (bare operators, trailing colons, unclosed quotes) must not
+    // error out; they should parse leniently and still match where possible.
+
+    #[test]
+    fn strip_query_syntax_replaces_metacharacters_with_spaces() {
+        assert_eq!(strip_query_syntax("futures::"), "futures  ");
+        assert_eq!(strip_query_syntax("\"未閉じ"), " 未閉じ");
+        assert_eq!(strip_query_syntax("a+b-c"), "a b c");
+        assert_eq!(strip_query_syntax("日本語 rust"), "日本語 rust");
+    }
+
+    #[test]
+    fn bare_operator_query_does_not_error() {
+        let idx = FullTextIndex::in_ram().unwrap();
+        idx.index_docs(&[body_doc("a.pdf", "本", 1, "rust の非同期処理")])
+            .unwrap();
+        assert!(idx.search("AND", 10).is_ok());
+        assert!(idx.search("OR", 10).is_ok());
+    }
+
+    #[test]
+    fn leading_operator_query_still_matches_terms() {
+        let idx = FullTextIndex::in_ram().unwrap();
+        idx.index_docs(&[body_doc("a.pdf", "本", 1, "rust の非同期処理")])
+            .unwrap();
+        let hits = idx.search("OR rust", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].file_path, "a.pdf");
+    }
+
+    #[test]
+    fn trailing_colon_query_still_matches_terms() {
+        let idx = FullTextIndex::in_ram().unwrap();
+        idx.index_docs(&[body_doc(
+            "a.pdf",
+            "本",
+            1,
+            "futures::executor::block_on の使い方",
+        )])
+        .unwrap();
+        let hits = idx.search("futures::", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].file_path, "a.pdf");
+    }
+
+    #[test]
+    fn bare_field_prefix_query_does_not_error() {
+        let idx = FullTextIndex::in_ram().unwrap();
+        idx.index_docs(&[body_doc("a.pdf", "本", 1, "テキスト")])
+            .unwrap();
+        assert!(idx.search("title:", 10).is_ok());
+    }
+
+    #[test]
+    fn unclosed_quote_query_still_matches_terms() {
+        let idx = FullTextIndex::in_ram().unwrap();
+        idx.index_docs(&[body_doc("a.pdf", "本", 1, "未閉じの引用符を含む本文")])
+            .unwrap();
+        let hits = idx.search("\"未閉じ", 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].file_path, "a.pdf");
     }
 }

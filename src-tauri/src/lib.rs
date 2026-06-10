@@ -3922,24 +3922,26 @@ fn gather_books_for_index(connection: &Connection) -> Result<Vec<BookIndexInput>
 /// its size and allocated blocks: a non-empty file with zero allocated blocks
 /// has no local content (macOS File Provider / Dropbox etc.). Reading it would
 /// force a download, so the indexer skips its body unless asked otherwise.
+#[cfg(unix)]
 fn is_dataless_blocks(len: u64, blocks: u64) -> bool {
     len > 0 && blocks == 0
 }
 
+#[cfg(unix)]
 fn is_dataless(path: &str) -> bool {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        match fs::metadata(path) {
-            Ok(meta) => is_dataless_blocks(meta.len(), meta.blocks()),
-            // If we cannot stat it, treat it as present and let extraction fail
-            // gracefully rather than silently skipping.
-            Err(_) => false,
-        }
+    use std::os::unix::fs::MetadataExt;
+    match fs::metadata(path) {
+        Ok(meta) => is_dataless_blocks(meta.len(), meta.blocks()),
+        // If we cannot stat it, treat it as present and let extraction fail
+        // gracefully rather than silently skipping.
+        Err(_) => false,
     }
-    // Windows has no sparse-file / cloud-placeholder block count via std; always
-    // treat files as locally present.
-    #[cfg(not(unix))]
+}
+
+// Windows has no sparse-file / cloud-placeholder block count via std; always
+// treat files as locally present.
+#[cfg(not(unix))]
+fn is_dataless(_path: &str) -> bool {
     false
 }
 

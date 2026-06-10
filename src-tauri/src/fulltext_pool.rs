@@ -151,10 +151,7 @@ pub fn run_extraction(
             let pdfium_dir = pdfium_dir.clone();
             scope.spawn(move || {
                 let mut child: Option<(Child, BufReader<std::process::ChildStdout>)> = None;
-                loop {
-                    let Some(req) = queue.lock().ok().and_then(|mut q| q.pop_front()) else {
-                        break;
-                    };
+                while let Some(req) = queue.lock().ok().and_then(|mut q| q.pop_front()) {
                     // (Re)spawn lazily so an idle pool costs nothing.
                     if child.is_none() {
                         match spawn_worker(&exe, pdfium_dir.as_ref()) {

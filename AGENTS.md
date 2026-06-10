@@ -519,9 +519,19 @@ and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-s
     directory created before this change keeps lz4 until it is rebuilt from a
     fresh directory; both open fine.
   - Extraction is pdfium-bound (hot frames are pdfium's CFF font interpreter;
-    ~50 MB/s of source PDF). `pdfium-render`'s `thread_safe` feature serializes
-    all FFI, so parallel extraction threads do not help. tantivy's segment
-    merging already overlaps extraction on its own threads.
+    ~50 MB/s of source PDF per process). `pdfium-render`'s `thread_safe`
+    feature serializes all FFI, so parallel *threads* do not help — the bulk
+    paths instead extract in parallel worker *processes*
+    ([src-tauri/src/fulltext_pool.rs](src-tauri/src/fulltext_pool.rs)): the
+    same executable relaunched with `--fulltext-extract-worker` (dispatched in
+    `main()` before Tauri init), JSON-lines over stdin/stdout, work-stealing
+    queue. Scaling measured on real data: 1.97× with 2 workers, 3.74× with 4
+    (default: `available_parallelism()/2` clamped to 2..=4; 6 workers gained
+    only ~10% more). The parent process no longer loads pdfium at all for bulk
+    indexing, and a pdfium crash on a corrupt PDF now kills only the worker —
+    the file is marked failed and the worker respawns (verified by killing
+    workers mid-build). tantivy indexing happens on the parent thread,
+    naturally overlapped with extraction.
   - Search latency scales with hit count (~0.6 ms per returned hit, dominated
     by per-hit snippet generation over the stored page text), not with index
     size; `limit: 50` keeps it interactive.

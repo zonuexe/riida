@@ -26,6 +26,7 @@ use zip::ZipArchive;
 // the index/extraction core against real library data.
 pub mod fulltext;
 pub mod fulltext_extract;
+pub mod fulltext_pool;
 
 const CONFIG_FILE: &str = "riida.toml";
 const DEFAULT_EXCLUDED_PATTERNS: &[&str] = &["**/backup/**", "*.bak.pdf"];
@@ -3938,11 +3939,7 @@ fn is_dataless(path: &str) -> bool {
 /// Build the `ContentDoc`s for one book. Metadata and note docs are always built
 /// (they read only SQLite); the body is extracted only when `include_body` is
 /// set (the caller skips it for online-only cloud files to avoid downloads).
-fn build_docs_for_book(
-    pdfium: Option<&pdfium_render::prelude::Pdfium>,
-    book: &BookIndexInput,
-    include_body: bool,
-) -> Vec<fulltext::ContentDoc> {
+fn base_docs_for_book(book: &BookIndexInput) -> Vec<fulltext::ContentDoc> {
     let mut docs = vec![fulltext_extract::build_metadata_doc(
         &book.file_path,
         &book.title,
@@ -3963,31 +3960,79 @@ fn build_docs_for_book(
         }
     }
 
-    let body = if !include_body {
-        None
-    } else if book.is_pdf() {
-        pdfium.and_then(|p| {
-            fulltext_extract::extract_pdf_body(
-                p,
-                &book.file_path,
-                &book.title,
-                book.password.as_deref(),
-            )
-            .map_err(|e| eprintln!("pdf body extraction failed for {}: {e}", book.file_path))
-            .ok()
-        })
-    } else if book.is_epub() {
-        fulltext_extract::extract_epub_body(&book.file_path, &book.title)
-            .map_err(|e| eprintln!("epub body extraction failed for {}: {e}", book.file_path))
-            .ok()
-    } else {
-        None
-    };
-    if let Some(body_docs) = body {
-        docs.extend(body_docs);
+    docs
+}
+
+/// The worker-pool request for a book's body.
+fn extract_request_for_book(book: &BookIndexInput) -> fulltext_pool::ExtractRequest {
+    fulltext_pool::ExtractRequest {
+        file_path: book.file_path.clone(),
+        title: book.title.clone(),
+        is_pdf: book.is_pdf(),
+        password: book.password.clone(),
+    }
+}
+
+/// Index a set of books, extracting bodies in parallel worker processes while
+/// this thread builds the cheap metadata/note docs and chunk-commits results
+/// as they stream in. `plan` pairs each book with (extract body?, status);
+/// `on_book_done` fires once per book, in completion order.
+fn index_books_with_pool(
+    index: &'static fulltext::FullTextIndex,
+    plan: Vec<(&BookIndexInput, bool, &'static str)>,
+    mut on_book_done: impl FnMut(&BookIndexInput),
+) {
+    let mut chunk = FulltextChunk::new();
+
+    // Books without body extraction (external books, deferred online-only
+    // placeholders) are indexed inline.
+    let mut requests = Vec::new();
+    let mut body_books: HashMap<&str, (&BookIndexInput, &'static str)> = HashMap::new();
+    for (book, include_body, status) in &plan {
+        if *include_body {
+            requests.push(extract_request_for_book(book));
+            body_books.insert(book.file_path.as_str(), (book, status));
+        } else {
+            chunk.add(book, status, base_docs_for_book(book));
+            if chunk.should_flush() {
+                flush_fulltext_chunk(&mut chunk, index);
+            }
+            on_book_done(book);
+        }
     }
 
-    docs
+    if !requests.is_empty() {
+        let workers = fulltext_pool::default_worker_count().min(requests.len());
+        let (tx, rx) = std::sync::mpsc::channel();
+        let pdfium = pdfium_dir();
+        let producer = std::thread::spawn(move || {
+            fulltext_pool::run_extraction(requests, workers, pdfium, tx)
+        });
+        for resp in rx {
+            let Some((book, status)) = body_books.get(resp.file_path.as_str()).copied() else {
+                continue;
+            };
+            if let Some(e) = &resp.error {
+                // Match the previous inline behavior: an extraction failure
+                // still indexes the metadata/note docs and the book counts as
+                // indexed (its body is simply absent).
+                eprintln!("body extraction failed for {}: {e}", resp.file_path);
+            }
+            let mut docs = base_docs_for_book(book);
+            docs.extend(resp.docs);
+            chunk.add(book, status, docs);
+            if chunk.should_flush() {
+                flush_fulltext_chunk(&mut chunk, index);
+            }
+            on_book_done(book);
+        }
+        let _ = producer.join();
+    }
+
+    flush_fulltext_chunk(&mut chunk, index);
+    if let Err(e) = index.consolidate() {
+        eprintln!("fulltext consolidate after bulk indexing failed: {e}");
+    }
 }
 
 #[derive(Serialize, Clone)]
@@ -4106,8 +4151,9 @@ fn flush_fulltext_chunk(chunk: &mut FulltextChunk, index: &fulltext::FullTextInd
     }
 }
 
-/// Run a full index (re)build. Gathers inputs under the lock, then extracts and
-/// indexes lock-free, emitting progress events. Runs on a worker thread.
+/// Run a full index (re)build. Gathers inputs under the lock, then extracts
+/// bodies in parallel worker processes and indexes lock-free, emitting
+/// progress events in completion order. Runs on a worker thread.
 /// `include_online_only` forces downloading + indexing the body of cloud
 /// placeholder files; otherwise their body is deferred until they are local.
 fn run_fulltext_build(app: &AppHandle, include_online_only: bool) -> Result<(), String> {
@@ -4119,33 +4165,27 @@ fn run_fulltext_build(app: &AppHandle, include_online_only: bool) -> Result<(), 
 
     let index = fulltext_index()?;
     mark_fulltext_built();
-    let pdfium = fulltext_extract::bind_pdfium(pdfium_dir().as_deref())
-        .map_err(|e| eprintln!("pdfium unavailable, indexing metadata/notes only: {e}"))
-        .ok();
 
-    let mut chunk = FulltextChunk::new();
-    for (done, book) in books.iter().enumerate() {
-        let (include_body, status) = should_index_body(book, include_online_only);
-        let docs = build_docs_for_book(pdfium.as_ref(), book, include_body);
-        chunk.add(book, status, docs);
-        if chunk.should_flush() {
-            flush_fulltext_chunk(&mut chunk, index);
-        }
+    let plan: Vec<(&BookIndexInput, bool, &'static str)> = books
+        .iter()
+        .map(|book| {
+            let (include_body, status) = should_index_body(book, include_online_only);
+            (book, include_body, status)
+        })
+        .collect();
+
+    let mut done = 0usize;
+    index_books_with_pool(index, plan, |book| {
+        done += 1;
         let _ = app.emit(
             "fulltext-progress",
             FullTextProgress {
-                done: done + 1,
+                done,
                 total,
                 file_path: book.file_path.clone(),
             },
         );
-    }
-    flush_fulltext_chunk(&mut chunk, index);
-    // Per-chunk writers abort their merges on drop; run them to completion
-    // once so the index ends compact and superseded segment files are freed.
-    if let Err(e) = index.consolidate() {
-        eprintln!("fulltext consolidate after build failed: {e}");
-    }
+    });
 
     let _ = app.emit("fulltext-complete", total);
     Ok(())
@@ -4340,23 +4380,17 @@ fn run_fulltext_sync() -> Result<(), String> {
         return Ok(());
     }
 
-    let pdfium = fulltext_extract::bind_pdfium(pdfium_dir().as_deref()).ok();
-    let mut chunk = FulltextChunk::new();
-    for (book, dataless) in to_index {
-        // Sync never force-downloads: a still-online-only file is body-deferred.
-        // (Only PDF/EPUB reach here, so body is wanted iff the file is local.)
-        let include_body = !dataless;
-        let status = if include_body { "indexed" } else { "deferred" };
-        let docs = build_docs_for_book(pdfium.as_ref(), book, include_body);
-        chunk.add(book, status, docs);
-        if chunk.should_flush() {
-            flush_fulltext_chunk(&mut chunk, index);
-        }
-    }
-    flush_fulltext_chunk(&mut chunk, index);
-    if let Err(e) = index.consolidate() {
-        eprintln!("fulltext consolidate after sync failed: {e}");
-    }
+    // Sync never force-downloads: a still-online-only file is body-deferred.
+    // (Only PDF/EPUB reach here, so body is wanted iff the file is local.)
+    let plan: Vec<(&BookIndexInput, bool, &'static str)> = to_index
+        .into_iter()
+        .map(|(book, dataless)| {
+            let include_body = !dataless;
+            let status = if include_body { "indexed" } else { "deferred" };
+            (book, include_body, status)
+        })
+        .collect();
+    index_books_with_pool(index, plan, |_| {});
     Ok(())
 }
 
@@ -4761,6 +4795,36 @@ mod tests {
             loc_page: None,
             loc_anchor: None,
         }
+    }
+
+    #[test]
+    fn base_docs_for_book_builds_metadata_and_nonempty_note() {
+        let mut book = fulltext_book("a.pdf", "pdf", 1);
+        let docs = base_docs_for_book(&book);
+        assert_eq!(docs.len(), 1, "metadata only when no note");
+        assert_eq!(docs[0].kind, fulltext::ContentKind::Metadata);
+
+        book.note = Some("メモ本文".into());
+        let docs = base_docs_for_book(&book);
+        assert_eq!(docs.len(), 2);
+        assert_eq!(docs[1].kind, fulltext::ContentKind::Note);
+        assert_eq!(docs[1].text, "メモ本文");
+
+        book.note = Some("   ".into());
+        let docs = base_docs_for_book(&book);
+        assert_eq!(docs.len(), 1, "blank note is not indexed");
+    }
+
+    #[test]
+    fn extract_request_carries_book_identity() {
+        let mut book = fulltext_book("a.epub", "epub", 1);
+        book.title = "本のタイトル".into();
+        book.password = Some("pw".into());
+        let req = extract_request_for_book(&book);
+        assert_eq!(req.file_path, "a.epub");
+        assert_eq!(req.title, "本のタイトル");
+        assert!(!req.is_pdf);
+        assert_eq!(req.password.as_deref(), Some("pw"));
     }
 
     #[test]

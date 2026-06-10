@@ -43,7 +43,7 @@ const WRITER_HEAP_BYTES: usize = 100_000_000;
 const SMALL_BATCH_MAX_DOCS: usize = 8;
 
 /// Kind of content a document represents.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ContentKind {
     Metadata,
     Note,
@@ -60,8 +60,9 @@ impl ContentKind {
     }
 }
 
-/// A single content-unit document to index.
-#[derive(Debug, Clone)]
+/// A single content-unit document to index. Serde because the extraction
+/// worker processes return these over the JSON-lines pipe (fulltext_pool).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContentDoc {
     pub file_path: String,
     pub kind: ContentKind,

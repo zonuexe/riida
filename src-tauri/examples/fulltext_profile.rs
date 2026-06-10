@@ -14,6 +14,7 @@
 
 use riida_lib::fulltext::{ContentDoc, FullTextIndex};
 use riida_lib::fulltext_extract::{bind_pdfium, extract_epub_body, extract_pdf_body};
+use riida_lib::fulltext_pool::{run_extraction, worker_main, ExtractRequest, WORKER_FLAG};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -38,6 +39,8 @@ struct Args {
     search_only: bool,
     update_bench: bool,
     consolidate: bool,
+    /// 0 = in-process serial extraction; N = N extraction worker processes.
+    workers: usize,
 }
 
 fn parse_args() -> Args {
@@ -51,6 +54,7 @@ fn parse_args() -> Args {
         search_only: false,
         update_bench: false,
         consolidate: false,
+        workers: 0,
     };
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -77,6 +81,7 @@ fn parse_args() -> Args {
             "--search-only" => args.search_only = true,
             "--update-bench" => args.update_bench = true,
             "--consolidate" => args.consolidate = true,
+            "--workers" => args.workers = val().parse().expect("bad --workers"),
             other => panic!("unknown flag: {other}"),
         }
     }
@@ -287,7 +292,103 @@ fn bench_update(index: &FullTextIndex) {
     );
 }
 
+/// Pipelined build: extraction runs in `workers` child processes while this
+/// (main) thread chunk-indexes results as they arrive.
+fn run_with_workers(args: &Args, index: &FullTextIndex, candidates: &[Candidate]) {
+    let chunk_books = match args.mode {
+        Mode::Chunked(n) => n,
+        _ => 32,
+    };
+    let requests: Vec<ExtractRequest> = candidates
+        .iter()
+        .map(|c| ExtractRequest {
+            file_path: c.path.to_string_lossy().into_owned(),
+            title: c
+                .path
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            is_pdf: c.is_pdf,
+            password: None,
+        })
+        .collect();
+    let total = requests.len();
+    let sample_bytes: u64 = candidates.iter().map(|c| c.size).sum();
+
+    let t_total = Instant::now();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let workers = args.workers;
+    let pdfium_dir = std::env::var("PDFIUM_LIB_DIR").ok().map(PathBuf::from);
+    let producer = std::thread::spawn(move || run_extraction(requests, workers, pdfium_dir, tx));
+
+    let mut pending: Vec<ContentDoc> = Vec::new();
+    let mut pending_books = 0usize;
+    let mut index_total = Duration::ZERO;
+    let mut failed = 0usize;
+    let mut done = 0usize;
+    let mut units_total = 0usize;
+    let mut text_total = 0usize;
+
+    for resp in rx {
+        done += 1;
+        if let Some(e) = &resp.error {
+            failed += 1;
+            eprintln!("  extract failed: {}: {e}", resp.file_path);
+        }
+        units_total += resp.docs.len();
+        text_total += resp.docs.iter().map(|d| d.text.len()).sum::<usize>();
+        pending.extend(resp.docs);
+        pending_books += 1;
+        if pending_books >= chunk_books {
+            let t = Instant::now();
+            index.index_docs(&pending).expect("index_docs");
+            index_total += t.elapsed();
+            pending.clear();
+            pending_books = 0;
+        }
+        if done.is_multiple_of(10) {
+            eprintln!("  …{done}/{total}");
+        }
+    }
+    if !pending.is_empty() {
+        let t = Instant::now();
+        index.index_docs(&pending).expect("index_docs (final)");
+        index_total += t.elapsed();
+    }
+    producer.join().expect("extraction producer");
+    let t = Instant::now();
+    index.consolidate().expect("consolidate");
+    let consolidate_time = t.elapsed();
+    let total_wall = t_total.elapsed();
+
+    println!("\n== build profile (workers={workers}, chunk={chunk_books}) ==");
+    println!(
+        "files ok={} failed={failed}  units(docs)={units_total}  extracted text={:.1} MB",
+        total - failed,
+        text_total as f64 / 1e6
+    );
+    println!(
+        "index (main thread): {}  consolidate: {}  total wall: {}",
+        fmt_dur(index_total),
+        fmt_dur(consolidate_time),
+        fmt_dur(total_wall)
+    );
+    println!(
+        "throughput: {:.1} files/min, {:.2} MB source/s end-to-end",
+        total as f64 / total_wall.as_secs_f64() * 60.0,
+        sample_bytes as f64 / 1e6 / total_wall.as_secs_f64()
+    );
+    println!(
+        "index size on disk: {:.1} MB",
+        dir_size(&args.index_dir) as f64 / 1e6
+    );
+}
+
 fn main() {
+    if std::env::args().any(|a| a == WORKER_FLAG) {
+        worker_main(None);
+        return;
+    }
     let args = parse_args();
 
     if args.search_only || args.update_bench || args.consolidate {
@@ -339,6 +440,17 @@ fn main() {
         "index open (incl. tokenizer load): {}",
         fmt_dur(t.elapsed())
     );
+
+    if args.workers > 0 {
+        run_with_workers(&args, &index, &candidates);
+        bench_search(&index);
+        if !args.keep_index {
+            let _ = std::fs::remove_dir_all(&args.index_dir);
+        } else {
+            println!("\nindex kept at {}", args.index_dir.display());
+        }
+        return;
+    }
 
     let t = Instant::now();
     let pdfium = bind_pdfium(None).expect("bind pdfium (set PDFIUM_LIB_DIR)");
@@ -410,7 +522,7 @@ fn main() {
             extract,
             index: index_time,
         });
-        if (i + 1) % 10 == 0 {
+        if (i + 1).is_multiple_of(10) {
             eprintln!(
                 "  …{}/{} extracted={} indexed={}",
                 i + 1,

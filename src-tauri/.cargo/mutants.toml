@@ -62,7 +62,15 @@ exclude_re = [
   '\bfulltext_built\b',
   '\bfulltext_index\b',
   '\bgather_books_for_index\b',
-  '\bbuild_docs_for_book\b',
+  '\bindex_books_with_pool\b', # spawns worker processes + global index
+  # fulltext_pool process plumbing (child spawn, pipe IO); the protocol
+  # serde types are unit-tested.
+  '\bworker_main\b',
+  '\brun_extraction\b',
+  '\bspawn_worker\b',
+  '\broundtrip\b',
+  '\bfail_all\b',
+  '\bdefault_worker_count\b',
   '\brun_fulltext_build\b',
   '\bfulltext_build_index\b',
   '\bfulltext_index_status\b',

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-11
+
+### Added
+
+- Cross-library full-text search. A new *Build index* control in Settings scans every book in your library — PDF and EPUB body text, notes, metadata, and tags — into a local search index, after which the sidebar search can find books by their contents, not just their titles. Results jump straight to the matching page or section with the surrounding text shown as a snippet. Japanese text is segmented with a dedicated tokenizer so searches work across vertical (tategaki) books and OCR'd scans. Indexing is strictly opt-in and never starts on its own, and it can be cleared at any time to reclaim the disk space.
+- Online-only cloud files (for example macOS File Provider or Dropbox placeholders) are handled without silently downloading your whole library: their metadata and notes are still indexed, while body text is skipped until the file is local — unless you explicitly enable *download online-only files* when building the index.
+
 ## [0.6.2] - 2026-06-03
 
 ### Added
@@ -418,7 +425,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/zonuexe/riida/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/zonuexe/riida/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/zonuexe/riida/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/zonuexe/riida/compare/v0.5.5...v0.6.0

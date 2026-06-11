@@ -25,3 +25,7 @@ riida.toml
 src-tauri/mutants.out/
 src-tauri/mutants.out.old/
 src-tauri/proptest-regressions/
+
+# Fetched at build time by scripts/fetch-pdfium.mjs (CI), not committed.
+src-tauri/pdfium/*
+!src-tauri/pdfium/.gitkeep

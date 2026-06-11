@@ -436,10 +436,121 @@ The backend currently stores at least:
 - notes
 - viewer preferences
 - reading positions
+- full-text index status (`fulltext_index`: per-file body_modified_at / indexed_at / status)
 
 Schema setup lives in the startup `CREATE TABLE IF NOT EXISTS` block in [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
 
 If schema semantics change, consider migration behavior early.
+
+## Full-Text Search
+
+Cross-library full-text search over book body (PDF/EPUB), notes, metadata,
+and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-search-design.md).
+
+- **Engine:** [tantivy](https://github.com/quickwit-oss/tantivy) `0.25` with a
+  [lindera](https://github.com/lindera/lindera) IPADIC tokenizer (registered as
+  `lang_ja`, `embed-ipadic`). These are pinned to the matched set
+  `lindera-tantivy 2.0.0` requires; newer tantivy/lindera are not usable until
+  lindera-tantivy targets them.
+- **PDF text:** [pdfium-render](https://github.com/ajrcarey/pdfium-render) with
+  runtime dynamic binding (no build-time linking). `bind_pdfium` resolves
+  libpdfium from `PDFIUM_LIB_DIR` (the Nix dev shell sets it to nixpkgs
+  `pdfium-binaries`) or the bundled resource dir, falling back to a system lib.
+- **Code:** [src-tauri/src/fulltext.rs](src-tauri/src/fulltext.rs) (schema,
+  tokenizer, index lifecycle, search + snippets),
+  [src-tauri/src/fulltext_extract.rs](src-tauri/src/fulltext_extract.rs)
+  (PDF/EPUB/metadata/note extraction), and the worker/commands/hooks in
+  [src-tauri/src/lib.rs](src-tauri/src/lib.rs). Frontend:
+  [src/fulltext-ui.ts](src/fulltext-ui.ts) (pure helpers, tested) + DOM wiring in
+  [src/main.ts](src/main.ts).
+- **Opt-in (important):** indexing consumes disk and is **never** started
+  implicitly. The tantivy index lives in the data dir and is created only when
+  the user presses *Build index* in Settings (`fulltext_build_index`). Opt-in is
+  tracked by the `.riida-built` sentinel in the index dir (`fulltext_built()`);
+  search (`search_fulltext`), the incremental hooks, and
+  `fulltext_sync_after_scan` are all no-ops until it exists. *Clear*
+  (`fulltext_clear_index`) empties the index, removes the sentinel, and returns
+  to the not-built state.
+- **Cloud / online-only files (important):** scanning reads only metadata, which
+  does **not** materialize cloud placeholders, but body extraction reads the
+  whole file and would force a download. So online-only files (detected via
+  `is_dataless`: a non-empty file with zero allocated blocks, e.g. macOS File
+  Provider / Dropbox) have their **body skipped** (status `deferred`, metadata/
+  notes still indexed) unless the user enables *download online-only files*
+  (`fulltext_build_index(include_online_only)`). The scan reconciliation indexes
+  a deferred file's body once it becomes local.
+- **Index model:** one doc per content unit, `kind` ∈ {metadata, note, body};
+  body docs are per PDF page / per EPUB spine section. Re-index granularity is
+  per `(file_path, kind)`. Vertical/tategaki PDFs and OCR'd scans need inter-CJK
+  whitespace normalization (`normalize_extracted_text`) before tokenizing.
+- **Commands:** `search_fulltext`, `fulltext_index_status`,
+  `fulltext_build_index`, `fulltext_clear_index`. **Events:**
+  `fulltext-progress`, `fulltext-complete`, `fulltext-error`.
+- **Performance (measured on real library data, see the harness below):**
+  - A tantivy `index_docs` call has a large *fixed* cost (writer setup +
+    segment flush + fsync + reader reload — ~250 ms regardless of doc count),
+    so the bulk paths (`run_fulltext_build`, `run_fulltext_sync`) accumulate
+    extracted docs in a `FulltextChunk` and commit per `FULLTEXT_CHUNK_BOOKS`
+    (32) books / `FULLTEXT_CHUNK_TEXT_BYTES` (16 MB) of text, not per book.
+    On a 100-file real-data sample this cut index time 22.2 s → 1.9 s and
+    halved the on-disk index size (fewer, better-merged segments). Status rows
+    are persisted only after the chunk commits, so a crash never records
+    `indexed` without the documents. Do not regress to per-book commits.
+  - The save hooks (`fulltext_on_note_changed` / `_metadata_changed` /
+    `_book_removed`) run while the caller holds the global `DATABASE` lock, so
+    they only *enqueue* ops; a single background worker (`fulltext_enqueue`)
+    applies them strictly in send order. Never call `index_docs` inline from a
+    hook — a debounced note autosave would otherwise stall every DB command by
+    ~100 ms per keystroke burst.
+  - **Merge-abort trap:** every mutation creates a fresh `IndexWriter`, and
+    dropping a writer aborts its in-flight segment merges, stranding
+    superseded/partial segment files (measured: a few single-doc commits on a
+    ~740 MB index left 5 GB on disk). So small-batch mutations call
+    `wait_merging_threads` before returning (`finish_write`), and the bulk
+    paths — which deliberately skip that wait per chunk so merging overlaps
+    extraction — call `FullTextIndex::consolidate()` once at the end (empty
+    commit + wait, which also garbage-collects stale files). Keep both halves
+    when touching the write path. Quitting mid-build still aborts merges, so
+    `fulltext_consolidate_on_startup` repairs the index in the background on
+    launch (a near-no-op when the index is already compact).
+  - The doc store (stored page text that snippets read) is zstd-compressed
+    (`IndexSettings.docstore_compression`, set at index creation): −14% index
+    size vs the lz4 default with no measurable build or search cost. An index
+    directory created before this change keeps lz4 until it is rebuilt from a
+    fresh directory; both open fine.
+  - Extraction is pdfium-bound (hot frames are pdfium's CFF font interpreter;
+    ~50 MB/s of source PDF per process). `pdfium-render`'s `thread_safe`
+    feature serializes all FFI, so parallel *threads* do not help — the bulk
+    paths instead extract in parallel worker *processes*
+    ([src-tauri/src/fulltext_pool.rs](src-tauri/src/fulltext_pool.rs)): the
+    same executable relaunched with `--fulltext-extract-worker` (dispatched in
+    `main()` before Tauri init), JSON-lines over stdin/stdout, work-stealing
+    queue. Scaling measured on real data: 1.97× with 2 workers, 3.74× with 4
+    (default: `available_parallelism()/2` clamped to 2..=4; 6 workers gained
+    only ~10% more). The parent process no longer loads pdfium at all for bulk
+    indexing, and a pdfium crash on a corrupt PDF now kills only the worker —
+    the file is marked failed and the worker respawns (verified by killing
+    workers mid-build). tantivy indexing happens on the parent thread,
+    naturally overlapped with extraction.
+  - Search latency scales with hit count (~0.6 ms per returned hit, dominated
+    by per-hit snippet generation over the stored page text), not with index
+    size. Snippets are generated on `SNIPPET_THREADS` (4) scoped threads —
+    measured 50-hit latency p50 ~55 ms → ~15 ms; `limit: 50` keeps it
+    interactive.
+- **Profiling harness:**
+  [src-tauri/examples/fulltext_profile.rs](src-tauri/examples/fulltext_profile.rs)
+  drives the same extraction/index/search core against real library files with
+  per-phase timing — modes `per-book` / `chunked:N` / `batched`, plus
+  `--update-bench` (save-hook cost) and `--search-only`. Build with the
+  `profiling` cargo profile (release-grade + debug symbols for `samply`):
+  `cargo build --profile profiling --example fulltext_profile`, then e.g.
+  `target/profiling/examples/fulltext_profile --root ~/Dropbox/EBook
+  --limit 100 --mode chunked:32`. It always skips online-only (dataless)
+  placeholders, so it never triggers cloud downloads.
+- **Release TODO:** bundle the per-platform libpdfium into `bundle.resources`
+  (+ macOS signing of the dylib) so body extraction works in distributed builds;
+  until then a release falls back to metadata/notes-only indexing without a
+  system pdfium.
 
 ## Vendored Frontend Assets
 

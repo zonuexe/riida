@@ -3,7 +3,7 @@ use globset::{Glob, GlobMatcher};
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use quick_xml::events::Event as XmlEvent;
 use quick_xml::reader::Reader as XmlReader;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
@@ -21,6 +21,12 @@ use tauri_plugin_opener::OpenerExt;
 use unicode_normalization::UnicodeNormalization;
 use walkdir::WalkDir;
 use zip::ZipArchive;
+
+// Public so the profiling harness (`examples/fulltext_profile.rs`) can drive
+// the index/extraction core against real library data.
+pub mod fulltext;
+pub mod fulltext_extract;
+pub mod fulltext_pool;
 
 const CONFIG_FILE: &str = "riida.toml";
 const DEFAULT_EXCLUDED_PATTERNS: &[&str] = &["**/backup/**", "*.bak.pdf"];
@@ -45,6 +51,13 @@ const NAVY_BLUE_VIEWER_BACKGROUND_MODE: &str = "navy-blue";
 
 static APP_PATHS: OnceLock<AppPaths> = OnceLock::new();
 static DATABASE: OnceLock<Mutex<Connection>> = OnceLock::new();
+static FULLTEXT: OnceLock<fulltext::FullTextIndex> = OnceLock::new();
+static FULLTEXT_BUILDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static FULLTEXT_SYNCING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+// Directory containing libpdfium, resolved once at startup: `PDFIUM_LIB_DIR`
+// (dev shell) or the bundled Tauri resource dir (release). `None` falls back to
+// a system-installed library inside `bind_pdfium`.
+static PDFIUM_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
 
 fn should_allow_internal_navigation(url: &Url) -> bool {
     match url.scheme() {
@@ -914,6 +927,13 @@ fn open_database() -> Result<Connection, String> {
               sort_order INTEGER NOT NULL DEFAULT 0,
               created_at INTEGER NOT NULL,
               updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS fulltext_index (
+              file_path TEXT PRIMARY KEY,
+              body_modified_at INTEGER,
+              indexed_at INTEGER,
+              status TEXT NOT NULL DEFAULT 'pending',
+              error TEXT
             );
             ",
         )
@@ -2066,9 +2086,15 @@ fn refresh_library_snapshot(config: &AppConfig) -> Result<LibrarySnapshot, Strin
     let books = collect_indexable_books(config, &excluded_patterns)?;
     let scan_token = current_scan_token()?;
 
-    let mut connection = lock_database()?;
-    index_books(&mut connection, &books, scan_token)?;
-    load_snapshot(&connection, config)
+    let snapshot = {
+        let mut connection = lock_database()?;
+        index_books(&mut connection, &books, scan_token)?;
+        load_snapshot(&connection, config)?
+    };
+    // Catch the index up to any added/removed/changed files (no-op unless the
+    // user already opted in by building the index). Runs in the background.
+    fulltext_sync_after_scan();
+    Ok(snapshot)
 }
 
 fn thumbnail_cache_dir(file_path: &str) -> PathBuf {
@@ -2708,6 +2734,8 @@ fn save_note(file_path: String, content: String) -> Result<NoteDocument, String>
         )
         .map_err(|error| error.to_string())?;
 
+    fulltext_on_note_changed(&connection, &file_path, &content);
+
     Ok(NoteDocument {
         file_path,
         format: "markdown".to_string(),
@@ -2741,6 +2769,8 @@ fn save_book_tags(file_path: String, tags: Vec<String>) -> Result<BookTagsPayloa
     }
 
     transaction.commit().map_err(|error| error.to_string())?;
+
+    fulltext_on_metadata_changed(&connection, &file_path);
 
     Ok(BookTagsPayload {
         file_path,
@@ -3124,6 +3154,7 @@ fn save_book_metadata(input: BookMetadataInput) -> Result<BookMetadataPayload, S
     }
 
     payload.updated_at = Some(updated_at);
+    fulltext_on_metadata_changed(&connection, &payload.file_path);
     Ok(payload)
 }
 
@@ -3169,6 +3200,14 @@ fn delete_book_metadata(file_path: String) -> Result<(), String> {
                 params![&file_path],
             )
             .map_err(|error| error.to_string())?;
+    }
+
+    if file_path.starts_with("kindle:") || file_path.starts_with("custom:") {
+        // External book entry removed entirely.
+        fulltext_on_book_removed(&file_path);
+    } else {
+        // Local book stays; only its saved metadata was cleared.
+        fulltext_on_metadata_changed(&connection, &file_path);
     }
 
     Ok(())
@@ -3236,6 +3275,7 @@ fn delete_custom_source(id: String) -> Result<(), String> {
                 params![fp],
             )
             .map_err(|error| error.to_string())?;
+        fulltext_on_book_removed(fp);
     }
     connection
         .execute(
@@ -3604,12 +3644,1005 @@ fn save_pdf_password(file_path: String, password: String) -> Result<(), String> 
     upsert_pdf_password(&connection, &file_path, &password)
 }
 
+// ---------------------------------------------------------------------------
+// Full-text search
+// ---------------------------------------------------------------------------
+
+fn current_unix_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// On-disk location of the tantivy index. Lives in the data dir (not cache) so
+/// the expensive body extraction survives a cache clear.
+fn fulltext_dir() -> Result<PathBuf, String> {
+    Ok(app_paths()?.data_dir.join("fulltext-index"))
+}
+
+/// Sentinel marking that the user has opted in and built the index. Created by
+/// the build worker, removed by `fulltext_clear_index`. Used instead of the
+/// tantivy `meta.json` so a clear can fully disable indexing again.
+fn fulltext_built_marker() -> Result<PathBuf, String> {
+    Ok(fulltext_dir()?.join(".riida-built"))
+}
+
+/// Whether the index has been built at least once (opt-in). Search and all
+/// incremental/reconciliation work are no-ops until this is true.
+fn fulltext_built() -> bool {
+    fulltext_built_marker()
+        .map(|marker| marker.exists())
+        .unwrap_or(false)
+}
+
+fn mark_fulltext_built() {
+    if let Ok(marker) = fulltext_built_marker() {
+        if let Some(parent) = marker.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(&marker, b"");
+    }
+}
+
+/// Directory to load libpdfium from, resolved at startup. None ⇒ rely on a
+/// system library.
+fn pdfium_dir() -> Option<PathBuf> {
+    PDFIUM_DIR.get().cloned().flatten()
+}
+
+/// Lazily open (or create) the process-wide full-text index.
+fn fulltext_index() -> Result<&'static fulltext::FullTextIndex, String> {
+    if let Some(index) = FULLTEXT.get() {
+        return Ok(index);
+    }
+    let dir = fulltext_dir()?;
+    let index = fulltext::FullTextIndex::open_or_create(&dir)?;
+    // A concurrent caller may have won the race; either way return the stored one.
+    let _ = FULLTEXT.set(index);
+    FULLTEXT
+        .get()
+        .ok_or_else(|| "full-text index unavailable".to_string())
+}
+
+/// All data needed to index one book, gathered under the DB lock so the slow
+/// extraction can run lock-free afterwards.
+struct BookIndexInput {
+    file_path: String,
+    source_type: String,
+    modified_at: u64,
+    title: String,
+    authors: Vec<String>,
+    publisher: String,
+    description: String,
+    release_date: String,
+    language: String,
+    asin: String,
+    url: String,
+    tags: Vec<String>,
+    note: Option<String>,
+    password: Option<String>,
+}
+
+impl BookIndexInput {
+    fn is_pdf(&self) -> bool {
+        self.source_type == "pdf"
+    }
+    fn is_epub(&self) -> bool {
+        self.source_type == "epub"
+    }
+}
+
+/// Read every book (local + external) plus its tags, note, and password into
+/// owned structs. Three small full-table maps avoid N+1 queries.
+fn gather_books_for_index(connection: &Connection) -> Result<Vec<BookIndexInput>, String> {
+    let mut tags_by_path: HashMap<String, Vec<String>> = HashMap::new();
+    {
+        let mut stmt = connection
+            .prepare("SELECT file_path, tag FROM book_tags ORDER BY tag")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (path, tag) = row.map_err(|e| e.to_string())?;
+            tags_by_path.entry(path).or_default().push(tag);
+        }
+    }
+
+    let mut note_by_path: HashMap<String, String> = HashMap::new();
+    {
+        let mut stmt = connection
+            .prepare("SELECT file_path, content FROM notes")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (path, content) = row.map_err(|e| e.to_string())?;
+            note_by_path.insert(path, content);
+        }
+    }
+
+    let mut password_by_path: HashMap<String, String> = HashMap::new();
+    {
+        let mut stmt = connection
+            .prepare("SELECT file_path, password FROM pdf_passwords")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (path, password) = row.map_err(|e| e.to_string())?;
+            password_by_path.insert(path, password);
+        }
+    }
+
+    let mut books = Vec::new();
+
+    // Local, file-backed books (PDF/EPUB) with optional metadata override.
+    {
+        let mut stmt = connection
+            .prepare(
+                "SELECT b.file_path, b.file_name, b.source_type, b.modified_at,
+                        COALESCE(m.title, ''), COALESCE(m.authors_json, '[]'),
+                        COALESCE(m.publisher, ''), COALESCE(m.description, ''),
+                        COALESCE(m.release_date, ''), COALESCE(m.language, ''),
+                        COALESCE(m.asin, ''), COALESCE(m.url, '')
+                 FROM books b
+                 LEFT JOIN book_metadata m ON m.file_path = b.file_path",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, String>(9)?,
+                    row.get::<_, String>(10)?,
+                    row.get::<_, String>(11)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (
+                file_path,
+                file_name,
+                source_type,
+                modified_at,
+                title,
+                authors_json,
+                publisher,
+                description,
+                release_date,
+                language,
+                asin,
+                url,
+            ) = row.map_err(|e| e.to_string())?;
+            let title = if title.trim().is_empty() {
+                file_name
+            } else {
+                title
+            };
+            let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
+            books.push(BookIndexInput {
+                tags: tags_by_path.get(&file_path).cloned().unwrap_or_default(),
+                note: note_by_path.get(&file_path).cloned(),
+                password: password_by_path.get(&file_path).cloned(),
+                file_path,
+                source_type,
+                modified_at: modified_at.max(0) as u64,
+                title,
+                authors,
+                publisher,
+                description,
+                release_date,
+                language,
+                asin,
+                url,
+            });
+        }
+    }
+
+    // External books (Kindle, custom sources): metadata-only, no body.
+    {
+        let mut stmt = connection
+            .prepare(
+                "SELECT file_path, source_type, title, authors_json, description,
+                        publisher, release_date, language, url, asin
+                 FROM external_books",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, String>(9)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (
+                file_path,
+                source_type,
+                title,
+                authors_json,
+                description,
+                publisher,
+                release_date,
+                language,
+                url,
+                asin,
+            ) = row.map_err(|e| e.to_string())?;
+            let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
+            books.push(BookIndexInput {
+                tags: tags_by_path.get(&file_path).cloned().unwrap_or_default(),
+                note: note_by_path.get(&file_path).cloned(),
+                password: None,
+                file_path,
+                source_type,
+                modified_at: 0,
+                title,
+                authors,
+                publisher,
+                description,
+                release_date,
+                language,
+                asin,
+                url,
+            });
+        }
+    }
+
+    Ok(books)
+}
+
+/// Whether a file is a cloud "online-only" (dataless) placeholder, judged from
+/// its size and allocated blocks: a non-empty file with zero allocated blocks
+/// has no local content (macOS File Provider / Dropbox etc.). Reading it would
+/// force a download, so the indexer skips its body unless asked otherwise.
+#[cfg(unix)]
+fn is_dataless_blocks(len: u64, blocks: u64) -> bool {
+    len > 0 && blocks == 0
+}
+
+#[cfg(unix)]
+fn is_dataless(path: &str) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match fs::metadata(path) {
+        Ok(meta) => is_dataless_blocks(meta.len(), meta.blocks()),
+        // If we cannot stat it, treat it as present and let extraction fail
+        // gracefully rather than silently skipping.
+        Err(_) => false,
+    }
+}
+
+// Windows has no sparse-file / cloud-placeholder block count via std; always
+// treat files as locally present.
+#[cfg(not(unix))]
+fn is_dataless(_path: &str) -> bool {
+    false
+}
+
+/// Build the `ContentDoc`s for one book. Metadata and note docs are always built
+/// (they read only SQLite); the body is extracted only when `include_body` is
+/// set (the caller skips it for online-only cloud files to avoid downloads).
+fn base_docs_for_book(book: &BookIndexInput) -> Vec<fulltext::ContentDoc> {
+    let mut docs = vec![fulltext_extract::build_metadata_doc(
+        &book.file_path,
+        &book.title,
+        &book.authors,
+        &book.publisher,
+        &book.description,
+        &book.release_date,
+        &book.language,
+        &book.asin,
+        &book.url,
+        &book.tags,
+    )];
+
+    if let Some(note) = &book.note {
+        let note_doc = fulltext_extract::build_note_doc(&book.file_path, &book.title, note);
+        if !note_doc.text.trim().is_empty() {
+            docs.push(note_doc);
+        }
+    }
+
+    docs
+}
+
+/// The worker-pool request for a book's body.
+fn extract_request_for_book(book: &BookIndexInput) -> fulltext_pool::ExtractRequest {
+    fulltext_pool::ExtractRequest {
+        file_path: book.file_path.clone(),
+        title: book.title.clone(),
+        is_pdf: book.is_pdf(),
+        password: book.password.clone(),
+    }
+}
+
+/// Index a set of books, extracting bodies in parallel worker processes while
+/// this thread builds the cheap metadata/note docs and chunk-commits results
+/// as they stream in. `plan` pairs each book with (extract body?, status);
+/// `on_book_done` fires once per book, in completion order.
+fn index_books_with_pool(
+    index: &'static fulltext::FullTextIndex,
+    plan: Vec<(&BookIndexInput, bool, &'static str)>,
+    mut on_book_done: impl FnMut(&BookIndexInput),
+) {
+    let mut chunk = FulltextChunk::new();
+
+    // Books without body extraction (external books, deferred online-only
+    // placeholders) are indexed inline.
+    let mut requests = Vec::new();
+    let mut body_books: HashMap<&str, (&BookIndexInput, &'static str)> = HashMap::new();
+    for (book, include_body, status) in &plan {
+        if *include_body {
+            requests.push(extract_request_for_book(book));
+            body_books.insert(book.file_path.as_str(), (book, status));
+        } else {
+            chunk.add(book, status, base_docs_for_book(book));
+            if chunk.should_flush() {
+                flush_fulltext_chunk(&mut chunk, index);
+            }
+            on_book_done(book);
+        }
+    }
+
+    if !requests.is_empty() {
+        let workers = fulltext_pool::default_worker_count().min(requests.len());
+        let (tx, rx) = std::sync::mpsc::channel();
+        let pdfium = pdfium_dir();
+        let producer = std::thread::spawn(move || {
+            fulltext_pool::run_extraction(requests, workers, pdfium, tx)
+        });
+        for resp in rx {
+            let Some((book, status)) = body_books.get(resp.file_path.as_str()).copied() else {
+                continue;
+            };
+            if let Some(e) = &resp.error {
+                // Match the previous inline behavior: an extraction failure
+                // still indexes the metadata/note docs and the book counts as
+                // indexed (its body is simply absent).
+                eprintln!("body extraction failed for {}: {e}", resp.file_path);
+            }
+            let mut docs = base_docs_for_book(book);
+            docs.extend(resp.docs);
+            chunk.add(book, status, docs);
+            if chunk.should_flush() {
+                flush_fulltext_chunk(&mut chunk, index);
+            }
+            on_book_done(book);
+        }
+        let _ = producer.join();
+    }
+
+    flush_fulltext_chunk(&mut chunk, index);
+    if let Err(e) = index.consolidate() {
+        eprintln!("fulltext consolidate after bulk indexing failed: {e}");
+    }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct FullTextProgress {
+    done: usize,
+    total: usize,
+    file_path: String,
+}
+
+/// Decide whether to extract a book's body now. Online-only cloud placeholders
+/// are deferred (body skipped) unless the user opted to download them.
+fn should_index_body(book: &BookIndexInput, include_online_only: bool) -> (bool, &'static str) {
+    if !(book.is_pdf() || book.is_epub()) {
+        return (false, "indexed"); // external/metadata-only book; nothing deferred
+    }
+    if !include_online_only && is_dataless(&book.file_path) {
+        return (false, "deferred");
+    }
+    (true, "indexed")
+}
+
+/// Persist a book's index status row.
+fn record_fulltext_status(file_path: &str, modified_at: i64, status: &str) {
+    if let Ok(connection) = lock_database() {
+        let _ = connection.execute(
+            "INSERT INTO fulltext_index (file_path, body_modified_at, indexed_at, status, error)
+             VALUES (?1, ?2, ?3, ?4, NULL)
+             ON CONFLICT(file_path) DO UPDATE SET
+               body_modified_at = ?2, indexed_at = ?3, status = ?4, error = NULL",
+            params![
+                file_path,
+                modified_at,
+                current_unix_seconds() as i64,
+                status
+            ],
+        );
+    }
+}
+
+/// Books per index commit during bulk indexing. A per-book `index_docs` call
+/// pays a large fixed cost (writer setup + segment flush + fsync + reader
+/// reload — ~250 ms measured on real data, regardless of book size), so bulk
+/// paths accumulate extracted docs and commit per chunk instead. The write
+/// lock is held only while a chunk commits, so the note/metadata save hooks
+/// stay responsive during a long build.
+const FULLTEXT_CHUNK_BOOKS: usize = 32;
+/// Flush a chunk early once this much extracted text is pending, bounding
+/// memory when a chunk happens to contain several very large books.
+const FULLTEXT_CHUNK_TEXT_BYTES: usize = 16_000_000;
+
+/// Accumulates extracted docs for several books and commits them in one
+/// `index_docs` call. Status rows are reported by `flush` only after the
+/// commit succeeded, so a crash mid-build never leaves a book marked
+/// `indexed` without its documents.
+struct FulltextChunk {
+    docs: Vec<fulltext::ContentDoc>,
+    /// (file_path, modified_at, status) for each pending book.
+    books: Vec<(String, i64, &'static str)>,
+    text_bytes: usize,
+}
+
+impl FulltextChunk {
+    fn new() -> Self {
+        Self {
+            docs: Vec::new(),
+            books: Vec::new(),
+            text_bytes: 0,
+        }
+    }
+
+    fn add(
+        &mut self,
+        book: &BookIndexInput,
+        status: &'static str,
+        docs: Vec<fulltext::ContentDoc>,
+    ) {
+        self.text_bytes += docs.iter().map(|d| d.text.len()).sum::<usize>();
+        self.docs.extend(docs);
+        self.books
+            .push((book.file_path.clone(), book.modified_at as i64, status));
+    }
+
+    fn should_flush(&self) -> bool {
+        self.books.len() >= FULLTEXT_CHUNK_BOOKS || self.text_bytes >= FULLTEXT_CHUNK_TEXT_BYTES
+    }
+
+    /// Commit pending docs and return the status rows to persist. If the
+    /// commit fails, every book in the chunk is reported `failed`.
+    fn flush(&mut self, index: &fulltext::FullTextIndex) -> Vec<(String, i64, &'static str)> {
+        if self.books.is_empty() {
+            return Vec::new();
+        }
+        let failed = if let Err(e) = index.index_docs(&self.docs) {
+            eprintln!("index chunk failed ({} books): {e}", self.books.len());
+            true
+        } else {
+            false
+        };
+        self.docs.clear();
+        self.text_bytes = 0;
+        let mut rows: Vec<(String, i64, &'static str)> = self.books.drain(..).collect();
+        if failed {
+            for row in &mut rows {
+                row.2 = "failed";
+            }
+        }
+        rows
+    }
+}
+
+/// Flush a chunk and persist the resulting status rows.
+fn flush_fulltext_chunk(chunk: &mut FulltextChunk, index: &fulltext::FullTextIndex) {
+    for (path, modified_at, status) in chunk.flush(index) {
+        record_fulltext_status(&path, modified_at, status);
+    }
+}
+
+/// Run a full index (re)build. Gathers inputs under the lock, then extracts
+/// bodies in parallel worker processes and indexes lock-free, emitting
+/// progress events in completion order. Runs on a worker thread.
+/// `include_online_only` forces downloading + indexing the body of cloud
+/// placeholder files; otherwise their body is deferred until they are local.
+fn run_fulltext_build(app: &AppHandle, include_online_only: bool) -> Result<(), String> {
+    let books = {
+        let connection = lock_database()?;
+        gather_books_for_index(&connection)?
+    };
+    let total = books.len();
+
+    let index = fulltext_index()?;
+    mark_fulltext_built();
+
+    let plan: Vec<(&BookIndexInput, bool, &'static str)> = books
+        .iter()
+        .map(|book| {
+            let (include_body, status) = should_index_body(book, include_online_only);
+            (book, include_body, status)
+        })
+        .collect();
+
+    let mut done = 0usize;
+    index_books_with_pool(index, plan, |book| {
+        done += 1;
+        let _ = app.emit(
+            "fulltext-progress",
+            FullTextProgress {
+                done,
+                total,
+                file_path: book.file_path.clone(),
+            },
+        );
+    });
+
+    let _ = app.emit("fulltext-complete", total);
+    Ok(())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FullTextStatus {
+    total: i64,
+    indexed: i64,
+    /// File-backed books whose body was skipped because they are online-only.
+    deferred: i64,
+    failed: i64,
+    building: bool,
+    built: bool,
+    /// Disk used by the tantivy index, in bytes.
+    index_size_bytes: u64,
+}
+
+/// Total size of the on-disk index directory.
+fn fulltext_index_size_bytes() -> u64 {
+    let Ok(dir) = fulltext_dir() else {
+        return 0;
+    };
+    WalkDir::new(dir)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+        .filter_map(|e| e.metadata().ok())
+        .map(|m| m.len())
+        .sum()
+}
+
+#[tauri::command]
+fn fulltext_index_status() -> Result<FullTextStatus, String> {
+    let connection = lock_database()?;
+    let total: i64 = connection
+        .query_row(
+            "SELECT (SELECT COUNT(*) FROM books) + (SELECT COUNT(*) FROM external_books)",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    let count_status = |status: &str| -> Result<i64, String> {
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM fulltext_index WHERE status = ?1",
+                params![status],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.to_string())
+    };
+    Ok(FullTextStatus {
+        total,
+        indexed: count_status("indexed")?,
+        deferred: count_status("deferred")?,
+        failed: count_status("failed")?,
+        building: FULLTEXT_BUILDING.load(std::sync::atomic::Ordering::SeqCst),
+        built: fulltext_built(),
+        index_size_bytes: fulltext_index_size_bytes(),
+    })
+}
+
+/// Opt-in trigger: (re)build the whole index in the background. Returns
+/// immediately; progress arrives via `fulltext-progress` / `fulltext-complete`.
+/// `include_online_only` downloads + indexes the body of cloud placeholder
+/// files instead of deferring them.
+#[tauri::command]
+fn fulltext_build_index(app: AppHandle, include_online_only: Option<bool>) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    if FULLTEXT_BUILDING.swap(true, Ordering::SeqCst) {
+        return Err("full-text index build already in progress".to_string());
+    }
+    let include_online_only = include_online_only.unwrap_or(false);
+    std::thread::spawn(move || {
+        if let Err(e) = run_fulltext_build(&app, include_online_only) {
+            eprintln!("full-text index build failed: {e}");
+            let _ = app.emit("fulltext-error", e);
+        }
+        FULLTEXT_BUILDING.store(false, Ordering::SeqCst);
+    });
+    Ok(())
+}
+
+/// Empty the index and disable it again (frees disk; returns to the opt-in
+/// "not built" state). A no-op if a build is in progress.
+#[tauri::command]
+fn fulltext_clear_index() -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    if FULLTEXT_BUILDING.load(Ordering::SeqCst) {
+        return Err("cannot clear while the index is building".to_string());
+    }
+    if let Ok(index) = fulltext_index() {
+        index.delete_all()?;
+    }
+    if let Ok(connection) = lock_database() {
+        let _ = connection.execute("DELETE FROM fulltext_index", []);
+    }
+    if let Ok(marker) = fulltext_built_marker() {
+        let _ = fs::remove_file(marker);
+    }
+    Ok(())
+}
+
+/// After a library scan, reconcile the index with added/removed/changed files —
+/// but only if the user already opted in by building the index. Runs in the
+/// background so the scan/snapshot path is never blocked, and is a no-op when a
+/// full build or another sync is already running.
+fn fulltext_sync_after_scan() {
+    use std::sync::atomic::Ordering;
+    if !fulltext_built() || FULLTEXT_BUILDING.load(Ordering::SeqCst) {
+        return;
+    }
+    if FULLTEXT_SYNCING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    std::thread::spawn(move || {
+        if let Err(e) = run_fulltext_sync() {
+            eprintln!("full-text incremental sync failed: {e}");
+        }
+        FULLTEXT_SYNCING.store(false, Ordering::SeqCst);
+    });
+}
+
+/// Decide whether a scan-time reconciliation needs to (re)index a book.
+/// `dataless` is the file's current online-only state. Returns false when the
+/// index is already up to date for that book.
+fn sync_needs_reindex(book: &BookIndexInput, prev: Option<&(i64, String)>, dataless: bool) -> bool {
+    match prev {
+        None => true, // never indexed
+        Some((ts, status)) => {
+            book.modified_at as i64 > *ts            // file changed
+                || (status == "deferred" && !dataless) // online-only file became local
+        }
+    }
+}
+
+fn run_fulltext_sync() -> Result<(), String> {
+    // Snapshot the current library and the index's per-file record under the lock.
+    let (books, indexed) = {
+        let connection = lock_database()?;
+        let books = gather_books_for_index(&connection)?;
+        let mut stmt = connection
+            .prepare("SELECT file_path, COALESCE(body_modified_at, 0), status FROM fulltext_index")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    (row.get::<_, i64>(1)?, row.get::<_, String>(2)?),
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        let mut indexed: HashMap<String, (i64, String)> = HashMap::new();
+        for row in rows {
+            let (path, value) = row.map_err(|e| e.to_string())?;
+            indexed.insert(path, value);
+        }
+        (books, indexed)
+    };
+
+    let current: HashSet<&str> = books.iter().map(|b| b.file_path.as_str()).collect();
+    let index = fulltext_index()?;
+
+    // Removed: recorded in the index but no longer present in the library.
+    for path in indexed.keys().filter(|p| !current.contains(p.as_str())) {
+        let _ = index.delete_book(path);
+        if let Ok(connection) = lock_database() {
+            let _ = connection.execute(
+                "DELETE FROM fulltext_index WHERE file_path = ?1",
+                params![path],
+            );
+        }
+    }
+
+    // File-backed books that are new, changed, or were deferred and are now local.
+    // Online-only files are never downloaded here (incremental sync stays cheap);
+    // their body waits until they are local.
+    let to_index: Vec<(&BookIndexInput, bool)> = books
+        .iter()
+        .filter(|b| b.is_pdf() || b.is_epub())
+        .filter_map(|b| {
+            let dataless = is_dataless(&b.file_path);
+            if sync_needs_reindex(b, indexed.get(&b.file_path), dataless) {
+                Some((b, dataless))
+            } else {
+                None
+            }
+        })
+        .collect();
+    if to_index.is_empty() {
+        return Ok(());
+    }
+
+    // Sync never force-downloads: a still-online-only file is body-deferred.
+    // (Only PDF/EPUB reach here, so body is wanted iff the file is local.)
+    let plan: Vec<(&BookIndexInput, bool, &'static str)> = to_index
+        .into_iter()
+        .map(|(book, dataless)| {
+            let include_body = !dataless;
+            let status = if include_body { "indexed" } else { "deferred" };
+            (book, include_body, status)
+        })
+        .collect();
+    index_books_with_pool(index, plan, |_| {});
+    Ok(())
+}
+
+#[tauri::command]
+fn search_fulltext(
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<fulltext::FullTextHit>, String> {
+    if !fulltext_built() {
+        return Ok(Vec::new());
+    }
+    let index = fulltext_index()?;
+    index.search(&query, limit.unwrap_or(50) as usize)
+}
+
+// --- incremental updates (run while the caller still holds the DB lock, so
+// these take &Connection and must never re-lock) --------------------------
+
+fn fulltext_tags(connection: &Connection, file_path: &str) -> Vec<String> {
+    let Ok(mut stmt) =
+        connection.prepare("SELECT tag FROM book_tags WHERE file_path = ?1 ORDER BY tag")
+    else {
+        return Vec::new();
+    };
+    let Ok(rows) = stmt.query_map(params![file_path], |row| row.get::<_, String>(0)) else {
+        return Vec::new();
+    };
+    rows.flatten().collect()
+}
+
+/// Build the metadata `ContentDoc` for one book (local or external), or None if
+/// the book no longer exists.
+fn fulltext_metadata_doc(connection: &Connection, file_path: &str) -> Option<fulltext::ContentDoc> {
+    let tags = fulltext_tags(connection, file_path);
+
+    let local = connection
+        .query_row(
+            "SELECT b.file_name, COALESCE(m.title, ''), COALESCE(m.authors_json, '[]'),
+                    COALESCE(m.publisher, ''), COALESCE(m.description, ''),
+                    COALESCE(m.release_date, ''), COALESCE(m.language, ''),
+                    COALESCE(m.asin, ''), COALESCE(m.url, '')
+             FROM books b LEFT JOIN book_metadata m ON m.file_path = b.file_path
+             WHERE b.file_path = ?1",
+            params![file_path],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                ))
+            },
+        )
+        .optional()
+        .ok()
+        .flatten();
+    if let Some((
+        file_name,
+        title,
+        authors_json,
+        publisher,
+        description,
+        release,
+        lang,
+        asin,
+        url,
+    )) = local
+    {
+        let title = if title.trim().is_empty() {
+            file_name
+        } else {
+            title
+        };
+        let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
+        return Some(fulltext_extract::build_metadata_doc(
+            file_path,
+            &title,
+            &authors,
+            &publisher,
+            &description,
+            &release,
+            &lang,
+            &asin,
+            &url,
+            &tags,
+        ));
+    }
+
+    let external = connection
+        .query_row(
+            "SELECT title, authors_json, description, publisher, release_date, language, url, asin
+             FROM external_books WHERE file_path = ?1",
+            params![file_path],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                ))
+            },
+        )
+        .optional()
+        .ok()
+        .flatten();
+    if let Some((title, authors_json, description, publisher, release, lang, url, asin)) = external
+    {
+        let authors = serde_json::from_str::<Vec<String>>(&authors_json).unwrap_or_default();
+        return Some(fulltext_extract::build_metadata_doc(
+            file_path,
+            &title,
+            &authors,
+            &publisher,
+            &description,
+            &release,
+            &lang,
+            &asin,
+            &url,
+            &tags,
+        ));
+    }
+
+    None
+}
+
+/// Repair the index in the background at startup. Quitting (or crashing)
+/// mid-build drops per-chunk writers whose in-flight merges abort, stranding
+/// superseded segment files — and the incremental sync never touches a book
+/// that is already up to date, so nothing else would ever reclaim that space.
+/// `consolidate` is a near-no-op on an already-compact index, so this is cheap
+/// in the common case. Skipped entirely until the user opts in to indexing.
+fn fulltext_consolidate_on_startup() {
+    if !fulltext_built() {
+        return;
+    }
+    std::thread::spawn(|| {
+        let Ok(index) = fulltext_index() else {
+            return;
+        };
+        if let Err(e) = index.consolidate() {
+            eprintln!("fulltext startup consolidate failed: {e}");
+        }
+    });
+}
+
+/// An index mutation queued by a save hook.
+enum FulltextHookOp {
+    Index(Vec<fulltext::ContentDoc>),
+    DeleteKind(String, fulltext::ContentKind),
+    DeleteBook(String),
+}
+
+static FULLTEXT_HOOK_TX: OnceLock<std::sync::mpsc::Sender<FulltextHookOp>> = OnceLock::new();
+
+/// Queue an index mutation for the single background worker. The hooks run
+/// while their caller holds the global database lock, and a tantivy commit
+/// costs ~100 ms (segment flush + fsync + reader reload) — far too slow to run
+/// inline on every debounced note autosave. One worker applies ops strictly in
+/// send order, so a stale save can never overwrite a newer one.
+fn fulltext_enqueue(op: FulltextHookOp) {
+    let tx = FULLTEXT_HOOK_TX.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<FulltextHookOp>();
+        std::thread::spawn(move || {
+            for op in rx {
+                let Ok(index) = fulltext_index() else {
+                    continue;
+                };
+                let result = match &op {
+                    FulltextHookOp::Index(docs) => index.index_docs(docs),
+                    FulltextHookOp::DeleteKind(path, kind) => index.delete_kind(path, *kind),
+                    FulltextHookOp::DeleteBook(path) => index.delete_book(path),
+                };
+                if let Err(e) = result {
+                    eprintln!("fulltext hook update failed: {e}");
+                }
+            }
+        });
+        tx
+    });
+    let _ = tx.send(op);
+}
+
+/// Re-index a book's metadata doc after a metadata/tag edit (no body re-extract).
+fn fulltext_on_metadata_changed(connection: &Connection, file_path: &str) {
+    if !fulltext_built() {
+        return;
+    }
+    let Some(doc) = fulltext_metadata_doc(connection, file_path) else {
+        return;
+    };
+    fulltext_enqueue(FulltextHookOp::Index(vec![doc]));
+}
+
+/// Re-index (or clear) a book's note doc after a note edit.
+fn fulltext_on_note_changed(connection: &Connection, file_path: &str, content: &str) {
+    if !fulltext_built() {
+        return;
+    }
+    if content.trim().is_empty() {
+        fulltext_enqueue(FulltextHookOp::DeleteKind(
+            file_path.to_owned(),
+            fulltext::ContentKind::Note,
+        ));
+        return;
+    }
+    let title = fulltext_metadata_doc(connection, file_path)
+        .map(|doc| doc.title)
+        .unwrap_or_else(|| file_path.to_owned());
+    let note_doc = fulltext_extract::build_note_doc(file_path, &title, content);
+    fulltext_enqueue(FulltextHookOp::Index(vec![note_doc]));
+}
+
+/// Remove a book entirely from the index (book deleted from the library).
+fn fulltext_on_book_removed(file_path: &str) {
+    if !fulltext_built() {
+        return;
+    }
+    fulltext_enqueue(FulltextHookOp::DeleteBook(file_path.to_owned()));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let paths = resolve_app_paths()?;
             let _ = APP_PATHS.set(paths.clone());
+            // Resolve libpdfium's location once: the dev shell sets
+            // PDFIUM_LIB_DIR; a release build finds it in the bundled resource
+            // dir. `bind_pdfium` falls back to a system library if neither has it.
+            let pdfium_dir = std::env::var("PDFIUM_LIB_DIR")
+                .ok()
+                .map(PathBuf::from)
+                .or_else(|| app.path().resource_dir().ok().map(|dir| dir.join("pdfium")));
+            let _ = PDFIUM_DIR.set(pdfium_dir);
             prepare_storage(&paths)?;
             initialize_database()?;
             migrate_legacy_config_if_needed(&paths.config_file)?;
@@ -3619,6 +4652,7 @@ pub fn run() {
                 config: Mutex::new(config),
             });
             app.manage(start_thumbnail_worker(app.handle().clone()));
+            fulltext_consolidate_on_startup();
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
@@ -3673,7 +4707,11 @@ pub fn run() {
             clear_file_viewer_preferences,
             get_pdf_password,
             save_pdf_password,
-            open_viewer_window
+            open_viewer_window,
+            search_fulltext,
+            fulltext_index_status,
+            fulltext_build_index,
+            fulltext_clear_index
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -3687,6 +4725,192 @@ mod tests {
     use proptest::prelude::*;
     use rusqlite::Connection;
     use std::{fs, path::PathBuf};
+
+    fn fulltext_book(file_path: &str, source_type: &str, modified_at: u64) -> BookIndexInput {
+        BookIndexInput {
+            file_path: file_path.into(),
+            source_type: source_type.into(),
+            modified_at,
+            title: "T".into(),
+            authors: vec![],
+            publisher: String::new(),
+            description: String::new(),
+            release_date: String::new(),
+            language: String::new(),
+            asin: String::new(),
+            url: String::new(),
+            tags: vec![],
+            note: None,
+            password: None,
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn is_dataless_blocks_detects_online_only_files() {
+        // Non-empty file with no allocated blocks = online-only placeholder.
+        assert!(is_dataless_blocks(5_000_000, 0));
+        // Materialized file has allocated blocks.
+        assert!(!is_dataless_blocks(5_000_000, 9766));
+        // A genuinely empty file is not "online-only".
+        assert!(!is_dataless_blocks(0, 0));
+    }
+
+    #[test]
+    fn should_index_body_defers_only_dataless_file_backed_books() {
+        // External (metadata-only) book: never has a body, never deferred.
+        let ext = fulltext_book("kindle:abc", "kindle", 0);
+        assert_eq!(should_index_body(&ext, false), (false, "indexed"));
+    }
+
+    #[test]
+    fn sync_needs_reindex_logic() {
+        let book = fulltext_book("a.pdf", "pdf", 100);
+        // Never indexed → yes.
+        assert!(sync_needs_reindex(&book, None, false));
+        // Up to date, local → no.
+        assert!(!sync_needs_reindex(
+            &book,
+            Some(&(100, "indexed".into())),
+            false
+        ));
+        // File changed (newer modified_at than recorded) → yes.
+        assert!(sync_needs_reindex(
+            &book,
+            Some(&(50, "indexed".into())),
+            false
+        ));
+        // Deferred and still online-only → no (do not download).
+        assert!(!sync_needs_reindex(
+            &book,
+            Some(&(100, "deferred".into())),
+            true
+        ));
+        // Deferred and now local → yes (pick up the body).
+        assert!(sync_needs_reindex(
+            &book,
+            Some(&(100, "deferred".into())),
+            false
+        ));
+    }
+
+    fn chunk_doc(path: &str, text: &str) -> fulltext::ContentDoc {
+        fulltext::ContentDoc {
+            file_path: path.into(),
+            kind: fulltext::ContentKind::Metadata,
+            title: "T".into(),
+            authors: String::new(),
+            tags: String::new(),
+            text: text.into(),
+            loc_page: None,
+            loc_anchor: None,
+        }
+    }
+
+    #[test]
+    fn base_docs_for_book_builds_metadata_and_nonempty_note() {
+        let mut book = fulltext_book("a.pdf", "pdf", 1);
+        let docs = base_docs_for_book(&book);
+        assert_eq!(docs.len(), 1, "metadata only when no note");
+        assert_eq!(docs[0].kind, fulltext::ContentKind::Metadata);
+
+        book.note = Some("メモ本文".into());
+        let docs = base_docs_for_book(&book);
+        assert_eq!(docs.len(), 2);
+        assert_eq!(docs[1].kind, fulltext::ContentKind::Note);
+        assert_eq!(docs[1].text, "メモ本文");
+
+        book.note = Some("   ".into());
+        let docs = base_docs_for_book(&book);
+        assert_eq!(docs.len(), 1, "blank note is not indexed");
+    }
+
+    #[test]
+    fn extract_request_carries_book_identity() {
+        let mut book = fulltext_book("a.epub", "epub", 1);
+        book.title = "本のタイトル".into();
+        book.password = Some("pw".into());
+        let req = extract_request_for_book(&book);
+        assert_eq!(req.file_path, "a.epub");
+        assert_eq!(req.title, "本のタイトル");
+        assert!(!req.is_pdf);
+        assert_eq!(req.password.as_deref(), Some("pw"));
+    }
+
+    #[test]
+    fn fulltext_chunk_flushes_on_book_count() {
+        let book = fulltext_book("a.pdf", "pdf", 1);
+        let mut chunk = FulltextChunk::new();
+        assert!(!chunk.should_flush());
+        for _ in 0..FULLTEXT_CHUNK_BOOKS - 1 {
+            chunk.add(&book, "indexed", vec![]);
+        }
+        assert!(!chunk.should_flush(), "one below the book threshold");
+        chunk.add(&book, "indexed", vec![]);
+        assert!(chunk.should_flush(), "at the book threshold");
+    }
+
+    #[test]
+    fn fulltext_chunk_flushes_on_accumulated_text_bytes() {
+        let book = fulltext_book("a.pdf", "pdf", 1);
+        let half = "x".repeat(FULLTEXT_CHUNK_TEXT_BYTES / 2);
+        let mut chunk = FulltextChunk::new();
+        chunk.add(&book, "indexed", vec![chunk_doc("a.pdf", &half)]);
+        assert!(!chunk.should_flush(), "half the text budget");
+        chunk.add(&book, "indexed", vec![chunk_doc("a.pdf", &half)]);
+        assert!(chunk.should_flush(), "text bytes accumulate across adds");
+    }
+
+    #[test]
+    fn fulltext_chunk_flush_commits_docs_and_reports_statuses() {
+        let index = fulltext::FullTextIndex::in_ram().unwrap();
+        let mut chunk = FulltextChunk::new();
+        chunk.add(
+            &fulltext_book("a.pdf", "pdf", 7),
+            "indexed",
+            vec![chunk_doc("a.pdf", "チャンク収集テスト")],
+        );
+        chunk.add(&fulltext_book("b.pdf", "pdf", 8), "deferred", vec![]);
+        let rows = chunk.flush(&index);
+        assert_eq!(
+            rows,
+            vec![
+                ("a.pdf".to_string(), 7, "indexed"),
+                ("b.pdf".to_string(), 8, "deferred"),
+            ]
+        );
+        assert_eq!(index.search("チャンク", 10).unwrap().len(), 1);
+        // Flushing emptied the chunk: nothing left to flush or re-index.
+        assert!(chunk.flush(&index).is_empty());
+        assert!(!chunk.should_flush());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn fulltext_chunk_flush_marks_all_books_failed_when_commit_fails() {
+        use std::os::unix::fs::PermissionsExt;
+        // A read-only index directory makes the commit (writer lock) fail.
+        let dir = unique_temp_dir("fulltext-chunk-fail");
+        let index = fulltext::FullTextIndex::open_or_create(&dir).unwrap();
+        let mut perms = fs::metadata(&dir).unwrap().permissions();
+        perms.set_mode(0o555);
+        fs::set_permissions(&dir, perms).unwrap();
+
+        let mut chunk = FulltextChunk::new();
+        chunk.add(
+            &fulltext_book("a.pdf", "pdf", 1),
+            "indexed",
+            vec![chunk_doc("a.pdf", "本文")],
+        );
+        let rows = chunk.flush(&index);
+
+        let mut perms = fs::metadata(&dir).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&dir, perms).unwrap();
+        let _ = fs::remove_dir_all(&dir);
+
+        assert_eq!(rows, vec![("a.pdf".to_string(), 1, "failed")]);
+    }
 
     fn test_connection() -> Connection {
         let connection = Connection::open_in_memory().expect("in-memory db should open");

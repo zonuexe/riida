@@ -850,6 +850,18 @@ h1 {
   color: rgb(var(--danger-rgb));
 }
 
+.app-settings-hint {
+  margin: 6px 0 0;
+  color: rgb(var(--ink-rgb) / 0.7);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.app-settings-hint--muted {
+  color: rgb(var(--ink-rgb) / 0.5);
+  font-size: 0.84rem;
+}
+
 .app-settings-status[data-tone="success"] {
   color: rgb(var(--success-rgb));
 }
@@ -2182,6 +2194,116 @@ h1 {
 
 .empty-state p {
   margin: 0;
+}
+
+.fulltext-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* In-content ("本の中身") full-text search results, shown above the book list. */
+.fulltext-results {
+  margin: 0 0 14px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgb(var(--panel-rgb) / 0.55);
+  backdrop-filter: blur(10px);
+  display: grid;
+  gap: 12px;
+}
+
+.fulltext-results-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.fulltext-results-title {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.fulltext-results-count {
+  font-size: 0.82rem;
+  color: rgb(var(--ink-rgb) / 0.55);
+}
+
+.fulltext-results-list {
+  display: grid;
+  gap: 10px;
+}
+
+.fulltext-hit {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgb(var(--border-rgb) / 0.12);
+}
+
+.fulltext-hit:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.fulltext-hit-title {
+  justify-self: start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgb(var(--ink-rgb));
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fulltext-hit-title:hover,
+.fulltext-hit-title:focus-visible {
+  color: var(--accent);
+}
+
+.fulltext-hit-locations {
+  display: grid;
+  gap: 4px;
+}
+
+.fulltext-hit-snippet {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 10px;
+  background: rgb(var(--surface-rgb) / 0.4);
+  color: rgb(var(--ink-rgb) / 0.82);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.fulltext-hit-snippet:hover,
+.fulltext-hit-snippet:focus-visible {
+  background: rgb(var(--accent-soft-rgb) / 0.16);
+}
+
+.fulltext-hit-loc-label {
+  font-size: 0.74rem;
+  color: rgb(var(--ink-rgb) / 0.5);
+  white-space: nowrap;
+}
+
+.fulltext-hit-snippet-text {
+  overflow: hidden;
+  line-height: 1.5;
+}
+
+.fulltext-hit-snippet-text b {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .empty-state-detail {

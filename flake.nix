@@ -45,11 +45,17 @@
 
           buildInputs = with pkgs; [
             openssl
+            pdfium-binaries
           ];
 
           env = {
             RUST_BACKTRACE = "1";
             CARGO_TERM_COLOR = "always";
+            # Full-text search extracts PDF text via pdfium-render with runtime
+            # dynamic binding (no build-time linking). Point the backend at the
+            # prebuilt libpdfium shipped by nixpkgs `pdfium-binaries`. The bundled
+            # release build ships its own libpdfium as a Tauri resource instead.
+            PDFIUM_LIB_DIR = "${pkgs.pdfium-binaries}/lib";
             # cargo-llvm-cov needs llvm-cov/llvm-profdata matching rustc's LLVM
             # version (this toolchain reports LLVM 21.1.8). The rustc wrapper
             # does not ship the llvm-tools-preview component, so point the tools

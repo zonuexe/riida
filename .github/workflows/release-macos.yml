@@ -48,6 +48,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Fetch libpdfium
+        run: node scripts/fetch-pdfium.mjs ${{ matrix.target }}
+
       - name: Run release verification checks
         run: npm run check:release
 

@@ -32,6 +32,15 @@ import {
 } from "./book-metadata-utils";
 import { shouldSyncControlValue, type StatusTone, statusToneAttribute } from "./dom-form-utils";
 import {
+  canStartBuild,
+  formatIndexStatusLabel,
+  type FullTextHit,
+  type FullTextIndexStatus,
+  groupHitsByBook,
+  jumpTargetForHit,
+  locationLabel,
+} from "./fulltext-ui";
+import {
   clampEpubPageNumber,
   epubLocationIndexFromPageNumber,
   epubPageNumberFromLocation,
@@ -495,6 +504,12 @@ let navigationHistoryIndex = 0;
 let navigationHistoryMax = 0;
 let navigationEntries: NavigationState[] = [];
 let activeReadingPosition: ReadingPosition | null = null;
+// One-shot jump target consumed by openBook when a full-text hit opens a book
+// at a specific location instead of its saved reading position.
+let pendingViewerJump: { filePath: string; page?: number; cfi?: string } | null = null;
+// Monotonic token so stale async full-text results from a superseded query are
+// ignored when they resolve out of order.
+let fulltextQueryToken = 0;
 let pdfZoomScale = 1;
 let lastAppConfig: AppConfigPayload | null = null;
 let cachedHomeDir: string | null = null;
@@ -957,6 +972,7 @@ async function primeHomeDirCache() {
 }
 
 const EPUB_PREVIEW_NOTICE_STORAGE_KEY = "riida.epub.previewNoticeShown";
+const FULLTEXT_INCLUDE_ONLINE_KEY = "riida.fulltext.includeOnlineOnly";
 
 async function maybeShowEpubPreviewNotice(): Promise<void> {
   try {
@@ -5691,9 +5707,38 @@ async function openBook(
   }
 
   await loadReadingPositionForCurrentBook();
+  applyPendingViewerJump(book);
   await loadViewerSettingsForCurrentBook();
   renderApp();
   await loadNoteForCurrentBook();
+}
+
+// When a full-text hit opens a book, override the just-restored reading position
+// so the viewer lands on the matched page (PDF) or section (EPUB) instead.
+function applyPendingViewerJump(book: BookSummary) {
+  if (!pendingViewerJump || pendingViewerJump.filePath !== book.filePath) {
+    return;
+  }
+  const jump = pendingViewerJump;
+  pendingViewerJump = null;
+  if (book.sourceType === "epub" && jump.cfi) {
+    activeReadingPosition = {
+      filePath: book.filePath,
+      pageNumber: 1,
+      pageOffsetRatio: 0,
+      cfi: jump.cfi,
+      updatedAt: null,
+    };
+  } else if (typeof jump.page === "number") {
+    activeReadingPosition = {
+      filePath: book.filePath,
+      pageNumber: jump.page,
+      pageOffsetRatio: 0,
+      cfi: null,
+      updatedAt: null,
+    };
+  }
+  syncViewerPageJumpUi();
 }
 
 function renderSidebar(snapshot: LibrarySnapshot) {
@@ -6707,6 +6752,155 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
   container.appendChild(listEl);
 }
 
+// Whether the full-text index has been built (opt-in). Kept in sync from the
+// status command at startup, on build completion, and when settings open. Used
+// to skip backend search calls entirely until the user has built the index.
+let fulltextBuilt = false;
+
+/** Open a book from a full-text hit, jumping to the matched location. */
+function openFulltextHit(
+  filePath: string,
+  location: { kind: "metadata" | "note" | "body"; page: number | null; anchor: string | null },
+) {
+  const target = jumpTargetForHit(location);
+  pendingViewerJump = target ? { filePath, page: target.page, cfi: target.cfi } : null;
+  void navigateToState(
+    {
+      bookFilePath: filePath,
+      pdfPage: target?.page ?? null,
+      epubCfi: target?.cfi ?? null,
+      activeDirectory: viewerState.activeDirectory,
+      activeTag: viewerState.activeTag,
+      activeExternalSource: viewerState.activeExternalSource,
+      activeShelf: viewerState.activeShelf,
+      activeTagDirectOnly: viewerState.activeTagDirectOnly,
+      searchQuery: viewerState.searchQuery,
+    },
+    "push",
+  );
+}
+
+/** Fetch and render in-content search hits for the current query. */
+async function renderFulltextResults(query: string) {
+  const containerEl = document.querySelector<HTMLElement>("#fulltext-results");
+  const listEl = document.querySelector<HTMLElement>("#fulltext-results-list");
+  const countEl = document.querySelector<HTMLElement>("#fulltext-results-count");
+  if (!containerEl || !listEl) {
+    return;
+  }
+
+  const token = ++fulltextQueryToken;
+  const trimmed = query.trim();
+  if (!fulltextBuilt || trimmed.length === 0) {
+    containerEl.hidden = true;
+    listEl.replaceChildren();
+    return;
+  }
+
+  let hits: FullTextHit[];
+  try {
+    hits = await invoke<FullTextHit[]>("search_fulltext", { query: trimmed, limit: 50 });
+  } catch (error) {
+    console.error("search_fulltext failed:", error);
+    return;
+  }
+  if (token !== fulltextQueryToken) {
+    return; // A newer query superseded this one.
+  }
+  if (!Array.isArray(hits)) {
+    return;
+  }
+
+  const groups = groupHitsByBook(hits);
+  if (groups.length === 0) {
+    containerEl.hidden = true;
+    listEl.replaceChildren();
+    return;
+  }
+
+  listEl.replaceChildren();
+  for (const group of groups) {
+    const itemEl = document.createElement("article");
+    itemEl.className = "fulltext-hit";
+
+    const titleEl = document.createElement("button");
+    titleEl.type = "button";
+    titleEl.className = "fulltext-hit-title";
+    titleEl.textContent = group.title || group.filePath;
+    const primary = group.locations[0];
+    titleEl.addEventListener("click", () => {
+      if (primary) {
+        openFulltextHit(group.filePath, primary);
+      }
+    });
+    itemEl.appendChild(titleEl);
+
+    const locsEl = document.createElement("div");
+    locsEl.className = "fulltext-hit-locations";
+    for (const loc of group.locations) {
+      const locEl = document.createElement("button");
+      locEl.type = "button";
+      locEl.className = "fulltext-hit-snippet";
+
+      const labelEl = document.createElement("span");
+      labelEl.className = "fulltext-hit-loc-label";
+      labelEl.textContent = locationLabel(loc);
+
+      const snippetEl = document.createElement("span");
+      snippetEl.className = "fulltext-hit-snippet-text";
+      // tantivy's snippet HTML escapes the source text and only wraps matched
+      // terms in <b>, so assigning it is safe (no raw user/content markup).
+      snippetEl.innerHTML = loc.snippetHtml;
+
+      locEl.append(labelEl, snippetEl);
+      locEl.addEventListener("click", () => openFulltextHit(group.filePath, loc));
+      locsEl.appendChild(locEl);
+    }
+    itemEl.appendChild(locsEl);
+    listEl.appendChild(itemEl);
+  }
+
+  if (countEl) {
+    countEl.textContent = `${groups.length} 冊`;
+  }
+  containerEl.hidden = false;
+}
+
+/** Refresh the settings panel's full-text status line and controls. */
+async function refreshFulltextStatus() {
+  const statusEl = document.querySelector<HTMLElement>("#fulltext-status");
+  const buildEl = document.querySelector<HTMLButtonElement>("#fulltext-build");
+  const clearEl = document.querySelector<HTMLButtonElement>("#fulltext-clear");
+  const includeOnlineEl = document.querySelector<HTMLInputElement>("#fulltext-include-online-only");
+  if (includeOnlineEl) {
+    includeOnlineEl.checked = localStorage.getItem(FULLTEXT_INCLUDE_ONLINE_KEY) === "1";
+  }
+  let status: FullTextIndexStatus | null;
+  try {
+    status = await invoke<FullTextIndexStatus | null>("fulltext_index_status");
+  } catch (error) {
+    console.error("fulltext_index_status failed:", error);
+    return;
+  }
+  if (!status) {
+    return;
+  }
+  fulltextBuilt = status.built;
+  if (statusEl) {
+    statusEl.textContent = formatIndexStatusLabel(status);
+  }
+  if (buildEl) {
+    buildEl.disabled = !canStartBuild(status);
+    buildEl.innerHTML = status.built
+      ? '<i class="fa-solid fa-rotate" aria-hidden="true"></i> Rebuild index'
+      : '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Build index';
+  }
+  if (clearEl) {
+    clearEl.hidden = !status.built;
+    clearEl.disabled = status.building;
+  }
+}
+
 function renderMain(snapshot: LibrarySnapshot) {
   const appShellEl = document.querySelector<HTMLElement>(".two-pane");
   const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
@@ -6834,6 +7028,7 @@ function renderMain(snapshot: LibrarySnapshot) {
     if (shelfEl) {
       renderBookList(books, shelfEl);
     }
+    void renderFulltextResults(viewerState.searchQuery);
     syncBulkActionBar();
   }
 }
@@ -7370,11 +7565,52 @@ window.addEventListener("DOMContentLoaded", async () => {
     viewerState.isAppSettingsOpen = true;
     setAppSettingsStatus("");
     syncAppSettingsUi();
+    void refreshFulltextStatus();
     try {
       await loadAppConfig();
     } catch (error) {
       setAppSettingsStatus(`Failed to load settings: ${String(error)}`, "error");
     }
+  });
+
+  const fulltextBuildEl = document.querySelector<HTMLButtonElement>("#fulltext-build");
+  const fulltextIncludeOnlineEl = document.querySelector<HTMLInputElement>(
+    "#fulltext-include-online-only",
+  );
+  fulltextIncludeOnlineEl?.addEventListener("change", () => {
+    localStorage.setItem(FULLTEXT_INCLUDE_ONLINE_KEY, fulltextIncludeOnlineEl.checked ? "1" : "0");
+  });
+  fulltextBuildEl?.addEventListener("click", async () => {
+    fulltextBuildEl.disabled = true;
+    try {
+      await invoke("fulltext_build_index", {
+        includeOnlineOnly: fulltextIncludeOnlineEl?.checked ?? false,
+      });
+    } catch (error) {
+      console.error("fulltext_build_index failed:", error);
+    }
+    await refreshFulltextStatus();
+  });
+
+  const fulltextClearEl = document.querySelector<HTMLButtonElement>("#fulltext-clear");
+  fulltextClearEl?.addEventListener("click", async () => {
+    const confirmed = await confirm(
+      "全文検索の索引を削除します。ディスクは解放されますが、再度検索するには作り直しが必要です。",
+      { title: "索引をクリア", kind: "warning" },
+    );
+    if (!confirmed) {
+      return;
+    }
+    fulltextClearEl.disabled = true;
+    try {
+      await invoke("fulltext_clear_index");
+      fulltextBuilt = false;
+      void renderFulltextResults(viewerState.searchQuery);
+    } catch (error) {
+      console.error("fulltext_clear_index failed:", error);
+    }
+    fulltextClearEl.disabled = false;
+    await refreshFulltextStatus();
   });
 
   appSettingsCloseEl?.addEventListener("click", closeAppSettings);
@@ -8134,6 +8370,30 @@ window.addEventListener("DOMContentLoaded", async () => {
   await listen<{ filePath: string; thumbnailPath: string }>("thumbnail-ready", (event) => {
     applyThumbnail(event.payload.filePath, event.payload.thumbnailPath);
   });
+
+  await listen<{ done: number; total: number; filePath: string }>("fulltext-progress", (event) => {
+    const statusEl = document.querySelector<HTMLElement>("#fulltext-status");
+    if (statusEl) {
+      const { done, total } = event.payload;
+      statusEl.textContent = `索引を構築中… ${done.toLocaleString()} / ${total.toLocaleString()} 冊`;
+    }
+  });
+
+  await listen<number>("fulltext-complete", () => {
+    fulltextBuilt = true;
+    void refreshFulltextStatus();
+    // Surface in-content results now that the index exists.
+    void renderFulltextResults(viewerState.searchQuery);
+  });
+
+  await listen<string>("fulltext-error", (event) => {
+    console.error("fulltext build error:", event.payload);
+    void refreshFulltextStatus();
+  });
+
+  // Learn whether a prior session already built the index (so search calls and
+  // the results group are enabled) without triggering any indexing.
+  void refreshFulltextStatus();
 
   window.addEventListener("popstate", (event) => {
     const state = event.state as NavigationState | null;

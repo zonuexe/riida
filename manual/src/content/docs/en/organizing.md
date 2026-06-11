@@ -69,4 +69,20 @@ Create a shelf from the sidebar using **Add Shelf**, then configure its matching
 
 ## Search
 
-Use the search bar at the top of the sidebar to search by title or author across your entire library.
+Use the search bar at the top of the sidebar to search your library by title or author.
+
+### Full-text Search (Searching Inside Books)
+
+Once you build an index, the search bar also matches the **contents** of your books — PDF/EPUB body text, notes, metadata, and tags. Results jump straight to the matching page or section, with the surrounding text shown as a snippet. Japanese text is segmented with a dedicated tokenizer, so search works across vertical (tategaki) books and OCR'd scans.
+
+#### Building the Index
+
+1. Open **Settings**
+2. Under **Full-text search**, press **Build index**
+3. Once the library scan finishes, sidebar search results include hits from inside your books
+
+Indexing is opt-in. Because it consumes disk space, the index is created only when you build it here — it never starts on its own. Use **Clear** to discard the index and reclaim the space at any time.
+
+#### Online-only Cloud Files
+
+Files that exist only in the cloud — "online-only" placeholders such as macOS File Provider or Dropbox — have their body text skipped by default so building the index never silently downloads your whole library (their metadata and notes are still indexed). To index their body text too, tick **download online-only files** before building. Skipped files are indexed automatically once you open them and a local copy exists.

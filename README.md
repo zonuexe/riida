@@ -11,7 +11,8 @@ The name comes from "Reader."
 ## What you can do
 
 - Index PDFs and EPUBs from one or more folders you choose, and keep them in sync as files change
-- Browse your library by directory, tag, or full-text search across titles and authors
+- Browse your library by directory or tag, and find books instantly by title or author
+- Build an opt-in full-text index to search inside your books — PDF/EPUB body text, notes, metadata, and tags — and jump straight to the matching page or section
 - Read PDFs and EPUBs in the built-in viewer, with viewer settings remembered per file
 - Take notes on any book, autosaved to your machine
 - Edit metadata (title, authors, publisher, release date, language, cover, etc.)
@@ -47,6 +48,12 @@ This is intended for personal use on your own machine.
 4. Click any book to start reading
 
 The library refreshes automatically when you add or remove files in those folders.
+
+### Full-text search (optional)
+
+By default the sidebar search matches titles and authors. To also search **inside** your books, open **Settings** and press **Build index**. riida then extracts the body text of every PDF and EPUB — along with notes, metadata, and tags — into a local search index, after which the sidebar search finds books by their contents and jumps to the matching page or section.
+
+Indexing is strictly opt-in (it consumes disk space and is never started on its own) and can be cleared at any time. Online-only cloud files are skipped for body text unless you enable **download online-only files** before building, so the index never silently downloads your whole library.
 
 ## Power-user tools
 

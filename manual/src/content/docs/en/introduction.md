@@ -26,10 +26,11 @@ It was built for readers who own hundreds or thousands of ebooks and want a sing
 - Real-time tracking of file additions, changes, and deletions
 - Multiple library root folders supported
 - Exclude patterns (glob format) to filter what gets scanned
+- Library-wide full-text search (opt-in): search inside PDF/EPUB body text, notes, metadata, and tags
 
 ### Reading
 
-- Built-in PDF viewer with text selection, links, and full-text search
+- Built-in PDF viewer with text selection, links, and in-document search
 - Reading position saved and restored per file automatically
 - Binding direction auto-detection (works with Japanese vertical-text PDFs)
 - EPUB viewer (in development)

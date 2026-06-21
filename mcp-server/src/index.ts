@@ -558,7 +558,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
   const pdftotext = options.pdftotext ?? defaultPdftotext;
 
   const server = new Server(
-    { name: "riida-mcp", version: "0.1.0" },
+    { name: "riida-mcp", version: "0.2.1" },
     { capabilities: { tools: {} } },
   );
 

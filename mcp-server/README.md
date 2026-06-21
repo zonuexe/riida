@@ -4,7 +4,7 @@ MCP server for [riida](https://github.com/zonuexe/riida) — infer and update bo
 
 ## Requirements
 
-- Node.js 18 or later
+- Node.js 20 or later
 - [riida](https://github.com/zonuexe/riida) installed and run at least once (creates the database)
 - *(optional)* poppler's `pdftotext` on `PATH` — improves `read_pdf_colophon` ISBN coverage for PDFs whose colophon fonts pdf.js cannot read (`brew install poppler` / `apt install poppler-utils`)
 
@@ -204,7 +204,7 @@ Add both servers to your Claude Code project config (`.mcp.json`):
     "techbook-mcp": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "techbook-mcp"]
+      "args": ["-y", "@zonuexe/techbook-mcp"]
     }
   }
 }

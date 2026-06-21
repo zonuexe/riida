@@ -1,6 +1,8 @@
 ---
 name: riida-release-prep
 description: Prepare a riida release by bumping the app version, updating the changelog, regenerating bundled third-party license notices, and running release verification commands. Use when the user asks to prepare the next version, cut a release, refresh release metadata, or make sure versioned files are consistent before tagging.
+metadata:
+  internal: true
 ---
 
 # Riida Release Prep

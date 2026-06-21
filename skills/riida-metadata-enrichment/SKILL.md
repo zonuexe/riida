@@ -14,13 +14,31 @@ description: >-
 Bridge **riida** (extract + write) and **techbook-mcp** (resolve).
 
 ## Prerequisites
-The **riida** and **techbook-mcp** MCP servers must both be connected. If techbook-mcp
-is unavailable, fall back to colophon-only extraction; if riida is unavailable, stop.
+This skill drives two MCP servers; both must be connected:
 
-| Server | Key tools |
-|--------|-----------|
-| riida | `read_pdf_colophon`, `get_book_metadata`, `search_books`, `update_books_metadata` |
-| techbook-mcp | `resolve_book`/`resolve_books`, `get_book_by_isbn`, `get_book_detail` |
+| Server | Add to your agent's MCP config | Key tools |
+|--------|--------------------------------|-----------|
+| riida | `npx -y riida-mcp@latest` | `read_pdf_colophon`, `get_book_metadata`, `search_books`, `update_books_metadata` |
+| techbook-mcp | `npx -y @zonuexe/techbook-mcp@latest` | `resolve_book`/`resolve_books`, `get_book_by_isbn`, `get_book_detail` |
+
+The **riida** server reads the riida desktop app's library database, so the app must be
+installed and have scanned at least one library root — that is what creates the DB the
+server queries (it is located by OS app-data path, not the working directory).
+**techbook-mcp** resolves bibliographic records online.
+
+Example `.mcp.json` (or your agent's equivalent):
+
+```json
+{
+  "mcpServers": {
+    "riida":        { "command": "npx", "args": ["-y", "riida-mcp@latest"] },
+    "techbook-mcp": { "command": "npx", "args": ["-y", "@zonuexe/techbook-mcp@latest"] }
+  }
+}
+```
+
+If techbook-mcp is unavailable, fall back to colophon-only extraction; if riida is
+unavailable, stop.
 
 ## Workflow
 1. **Scope** — `search_books({directory, missing_metadata:true})` or

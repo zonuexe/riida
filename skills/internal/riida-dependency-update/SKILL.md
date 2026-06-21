@@ -1,6 +1,8 @@
 ---
 name: riida-dependency-update
 description: Update riida's third-party dependencies — npm/JavaScript and Cargo/Rust — keeping the lock files, bundled license notices, and license allowlists consistent, then running release verification. Use when the user asks to update or refresh dependencies, bump locked versions, pick up upstream patches, or upgrade a specific library.
+metadata:
+  internal: true
 ---
 
 # Riida Dependency Update

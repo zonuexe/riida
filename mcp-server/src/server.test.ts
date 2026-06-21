@@ -59,7 +59,7 @@ function createTestDb(dbPath: string): Database.Database {
 
 async function makeClient(
   dbPath: string,
-  options: Pick<CreateServerOptions, "pdfParser" | "pdftotext"> = {},
+  options: Pick<CreateServerOptions, "pdfExtractor" | "pdftotext"> = {},
 ): Promise<{ client: Client; cleanup: () => Promise<void> }> {
   const server = createServer({ dbPath, ...options });
   const client = new Client({ name: "test-client", version: "1.0.0" }, { capabilities: {} });
@@ -520,8 +520,8 @@ describe("read_pdf_pages", () => {
   });
 
   it("extracts text via pdfParser and caps max_pages at 10", async () => {
-    const mockParser = vi.fn().mockResolvedValue({ text: "テスト本文", numpages: 100 });
-    ({ client, cleanup } = await makeClient(dbPath, { pdfParser: mockParser }));
+    const mockParser = vi.fn().mockResolvedValue({ text: "テスト本文", total: 100, pages: [] });
+    ({ client, cleanup } = await makeClient(dbPath, { pdfExtractor: mockParser }));
 
     // Create a temporary dummy file so existsSync passes
     const tmpPdf = path.join(os.tmpdir(), "dummy-test.pdf");
@@ -535,21 +535,21 @@ describe("read_pdf_pages", () => {
       expect(result.pages_extracted).toBe(10);
       expect(result.total_pages).toBe(100);
       expect(result.text).toBe("テスト本文");
-      expect(mockParser).toHaveBeenCalledWith(expect.any(Buffer), { max: 10 });
+      expect(mockParser).toHaveBeenCalledWith(expect.any(Buffer), { first: 10 });
     } finally {
       fs.unlinkSync(tmpPdf);
     }
   });
 
   it("defaults max_pages to 3", async () => {
-    const mockParser = vi.fn().mockResolvedValue({ text: "本文", numpages: 50 });
-    ({ client, cleanup } = await makeClient(dbPath, { pdfParser: mockParser }));
+    const mockParser = vi.fn().mockResolvedValue({ text: "本文", total: 50, pages: [] });
+    ({ client, cleanup } = await makeClient(dbPath, { pdfExtractor: mockParser }));
 
     const tmpPdf = path.join(os.tmpdir(), "dummy-default.pdf");
     fs.writeFileSync(tmpPdf, "dummy");
     try {
       await callTool(client, "read_pdf_pages", { file_path: tmpPdf });
-      expect(mockParser).toHaveBeenCalledWith(expect.any(Buffer), { max: 3 });
+      expect(mockParser).toHaveBeenCalledWith(expect.any(Buffer), { first: 3 });
     } finally {
       fs.unlinkSync(tmpPdf);
     }
@@ -557,8 +557,8 @@ describe("read_pdf_pages", () => {
 
   it("truncates extracted text to 8000 characters", async () => {
     const longText = "あ".repeat(10000);
-    const mockParser = vi.fn().mockResolvedValue({ text: longText, numpages: 5 });
-    ({ client, cleanup } = await makeClient(dbPath, { pdfParser: mockParser }));
+    const mockParser = vi.fn().mockResolvedValue({ text: longText, total: 5, pages: [] });
+    ({ client, cleanup } = await makeClient(dbPath, { pdfExtractor: mockParser }));
 
     const tmpPdf = path.join(os.tmpdir(), "dummy-long.pdf");
     fs.writeFileSync(tmpPdf, "dummy");
@@ -944,8 +944,8 @@ describe("read_pdf_colophon", () => {
       "ISBN978-4-274-06866-9",
       "Printed in Japan",
     ].join("\n");
-    const mockParser = vi.fn().mockResolvedValue({ text: colophonText, numpages: 440 });
-    ({ client, cleanup } = await makeClient(dbPath, { pdfParser: mockParser }));
+    const mockParser = vi.fn().mockResolvedValue({ text: colophonText, total: 440, pages: [] });
+    ({ client, cleanup } = await makeClient(dbPath, { pdfExtractor: mockParser }));
 
     const tmpPdf = path.join(os.tmpdir(), "dummy-colophon.pdf");
     fs.writeFileSync(tmpPdf, "dummy");
@@ -958,16 +958,13 @@ describe("read_pdf_colophon", () => {
         colophon: { isbn_normalized: string; isbn_valid: boolean; isbn_confidence: string };
       };
       expect(result.total_pages).toBe(440);
-      // The mock parser never invokes pagerender, so the handler falls back to
-      // the full text and cannot report a tail page count.
+      // The stub returns no per-page text, so the handler falls back to the
+      // full text and cannot report a tail page count.
       expect(result.tail_pages_read).toBeNull();
       expect(result.colophon.isbn_normalized).toBe("9784274068669");
       expect(result.colophon.isbn_valid).toBe(true);
-      // The parser is driven via the pagerender hook, not the `max` option.
-      expect(mockParser).toHaveBeenCalledWith(
-        expect.any(Buffer),
-        expect.objectContaining({ pagerender: expect.any(Function) }),
-      );
+      // The colophon is read from the trailing pages via the `last` option.
+      expect(mockParser).toHaveBeenCalledWith(expect.any(Buffer), { last: 8 });
     } finally {
       fs.unlinkSync(tmpPdf);
     }
@@ -995,11 +992,11 @@ describe("read_pdf_colophon — pdftotext fallback", () => {
   it("falls back to pdftotext when pdf.js yields no ISBN", async () => {
     // pdf.js extracts the page but the ISBN's font has no ToUnicode CMap, so no
     // ISBN surfaces; poppler reads the same page cleanly.
-    const pdfParser = vi.fn().mockResolvedValue({ text: "奥付\n発行 翔泳社", numpages: 240 });
+    const pdfExtractor = vi.fn().mockResolvedValue({ text: "奥付\n発行 翔泳社", total: 240, pages: [] });
     const pdftotext = vi
       .fn()
       .mockReturnValue("発行所\n株式会社 翔泳社\nISBN978-4-7981-5767-2\nPrinted in Japan");
-    ({ client, cleanup } = await makeClient(dbPath, { pdfParser, pdftotext }));
+    ({ client, cleanup } = await makeClient(dbPath, { pdfExtractor, pdftotext }));
 
     const result = parseText(
       await callTool(client, "read_pdf_colophon", { file_path: tmpPdf }),
@@ -1014,17 +1011,18 @@ describe("read_pdf_colophon — pdftotext fallback", () => {
   it("does not invoke pdftotext when pdf.js read a complete colophon", async () => {
     // pdf.js found the ISBN, the date, and the publisher, so there is nothing
     // left for poppler to fill — the redundant second read is skipped.
-    const pdfParser = vi.fn().mockResolvedValue({
+    const pdfExtractor = vi.fn().mockResolvedValue({
       text: [
         "発行所 株式会社 翔泳社",
         "2021 年 6 月 14 日 初版第 1 刷発行",
         "ISBN978-4-7981-6849-4 C3055",
         "Printed in Japan",
       ].join("\n"),
-      numpages: 300,
+      total: 300,
+      pages: [],
     });
     const pdftotext = vi.fn().mockReturnValue("should not be used");
-    ({ client, cleanup } = await makeClient(dbPath, { pdfParser, pdftotext }));
+    ({ client, cleanup } = await makeClient(dbPath, { pdfExtractor, pdftotext }));
 
     const result = parseText(
       await callTool(client, "read_pdf_colophon", { file_path: tmpPdf }),
@@ -1045,9 +1043,10 @@ describe("read_pdf_colophon — pdftotext fallback", () => {
     // confidence, with an empty date and publisher. Poppler reads the whole
     // colophon, so the date and publisher are filled while the pdf.js ISBN
     // (still high confidence) is kept.
-    const pdfParser = vi.fn().mockResolvedValue({
+    const pdfExtractor = vi.fn().mockResolvedValue({
       text: "索引\nPrinted in Japan（ISBN978-4-87311-903-8）",
-      numpages: 497,
+      total: 497,
+      pages: [],
     });
     const pdftotext = vi.fn().mockReturnValue(
       [
@@ -1058,7 +1057,7 @@ describe("read_pdf_colophon — pdftotext fallback", () => {
         "Printed in Japan",
       ].join("\n"),
     );
-    ({ client, cleanup } = await makeClient(dbPath, { pdfParser, pdftotext }));
+    ({ client, cleanup } = await makeClient(dbPath, { pdfExtractor, pdftotext }));
 
     const result = parseText(
       await callTool(client, "read_pdf_colophon", { file_path: tmpPdf }),
@@ -1076,9 +1075,9 @@ describe("read_pdf_colophon — pdftotext fallback", () => {
   });
 
   it("reports no ISBN when neither pdf.js nor pdftotext can read it", async () => {
-    const pdfParser = vi.fn().mockResolvedValue({ text: "奥付は画像のみ", numpages: 100 });
+    const pdfExtractor = vi.fn().mockResolvedValue({ text: "奥付は画像のみ", total: 100, pages: [] });
     const pdftotext = vi.fn().mockReturnValue(null); // poppler unavailable / empty
-    ({ client, cleanup } = await makeClient(dbPath, { pdfParser, pdftotext }));
+    ({ client, cleanup } = await makeClient(dbPath, { pdfExtractor, pdftotext }));
 
     const result = parseText(
       await callTool(client, "read_pdf_colophon", { file_path: tmpPdf }),

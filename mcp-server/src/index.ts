@@ -10,37 +10,38 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-
-const require = createRequire(import.meta.url);
-// pdf-parse is CJS; import via createRequire to avoid its test-file side-effect
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const defaultPdfParse = require("pdf-parse/lib/pdf-parse.js") as PdfParser;
+import { PDFParse } from "pdf-parse";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/** Minimal shape of the pdf.js page object pdf-parse hands to `pagerender`. */
-interface PdfPageData {
-  pageNumber: number;
-  getTextContent: (
-    options?: unknown,
-  ) => Promise<{ items: Array<{ str: string; transform: number[] }> }>;
+/** Per-page extracted text (page number is 1-based). */
+interface PdfPageText {
+  num: number;
+  text: string;
 }
 
-interface PdfParseOptions {
-  /** Stop after this many leading pages. `pdf-parse` default (0) reads all. */
-  max?: number;
-  /** Per-page render hook; lets us capture text page-by-page (for the tail). */
-  pagerender?: (pageData: PdfPageData) => string | Promise<string>;
+/**
+ * Result of extracting text from a PDF: the concatenated text, the document's
+ * total page count, and the per-page text for the pages that were parsed.
+ */
+interface PdfTextResult {
+  text: string;
+  total: number;
+  pages: PdfPageText[];
 }
 
-type PdfParser = (
+/**
+ * Extracts text from a PDF buffer. `first` / `last` limit parsing to the leading
+ * or trailing N pages (we use one at a time); omitting both parses the whole
+ * document. Injectable so tests can supply a stub instead of running pdf.js.
+ */
+type PdfTextExtractor = (
   data: Buffer,
-  options?: PdfParseOptions,
-) => Promise<{ text: string; numpages: number }>;
+  opts: { first?: number; last?: number },
+) => Promise<PdfTextResult>;
 
 /**
  * Extracts text from a page range of a PDF using an external engine, or returns
@@ -85,8 +86,8 @@ interface MetadataRow {
 export interface CreateServerOptions {
   /** Override the database path (useful for testing). */
   dbPath?: string;
-  /** Override the PDF parser (useful for testing). */
-  pdfParser?: PdfParser;
+  /** Override the PDF text extractor (useful for testing). */
+  pdfExtractor?: PdfTextExtractor;
   /** Override the pdftotext fallback (useful for testing). */
   pdftotext?: PdftotextExtractor;
 }
@@ -524,33 +525,28 @@ export function parseColophon(text: string): ParsedColophon {
 }
 
 /**
- * pdf-parse `pagerender` hook that captures each page's text into `sink` keyed
- * by 1-based page number. Mirrors pdf-parse's default line-break logic (a new
- * line whenever the text item's Y coordinate changes). Returns "" so pdf-parse
- * does not also build a giant concatenated `data.text` we would discard.
+ * Default PDF text extractor, backed by pdf-parse v2 (pdf.js under the hood).
+ * `lineEnforce` (on by default) turns vertical spacing into line breaks, which
+ * the colophon parser depends on; `pageJoiner: ""` keeps page-boundary markers
+ * out of the returned text so the parser sees clean page content.
  */
-async function renderColophonPage(
-  pageData: PdfPageData,
-  sink: Map<number, string>,
-): Promise<string> {
-  const content = await pageData.getTextContent({
-    normalizeWhitespace: false,
-    disableCombineTextItems: false,
-  });
-  let lastY: number | undefined;
-  let text = "";
-  for (const item of content.items) {
-    const y = item.transform[5];
-    if (lastY === undefined || lastY === y) {
-      text += item.str;
-    } else {
-      text += `\n${item.str}`;
-    }
-    lastY = y;
+const defaultPdfExtractor: PdfTextExtractor = async (data, opts) => {
+  const parser = new PDFParse({ data });
+  try {
+    const result = await parser.getText({
+      first: opts.first,
+      last: opts.last,
+      pageJoiner: "",
+    });
+    return {
+      text: result.text,
+      total: result.total,
+      pages: result.pages.map((p) => ({ num: p.num, text: p.text })),
+    };
+  } finally {
+    await parser.destroy();
   }
-  sink.set(pageData.pageNumber, text);
-  return "";
-}
+};
 
 // ---------------------------------------------------------------------------
 // Server factory
@@ -558,7 +554,7 @@ async function renderColophonPage(
 
 export function createServer(options: CreateServerOptions = {}): Server {
   const dbPath = options.dbPath ?? getDbPath();
-  const pdfParse = options.pdfParser ?? defaultPdfParse;
+  const pdfExtract = options.pdfExtractor ?? defaultPdfExtractor;
   const pdftotext = options.pdftotext ?? defaultPdftotext;
 
   const server = new Server(
@@ -850,7 +846,7 @@ export function createServer(options: CreateServerOptions = {}): Server {
       }
 
       const buffer = fs.readFileSync(filePath);
-      const data = await pdfParse(buffer, { max: maxPages });
+      const data = await pdfExtract(buffer, { first: maxPages });
 
       return {
         content: [
@@ -859,8 +855,8 @@ export function createServer(options: CreateServerOptions = {}): Server {
             text: JSON.stringify(
               {
                 file_path: filePath,
-                total_pages: data.numpages,
-                pages_extracted: maxPages,
+                total_pages: data.total,
+                pages_extracted: Math.min(maxPages, data.total),
                 // Truncate to avoid flooding the context window
                 text: data.text.slice(0, 8000),
               },
@@ -889,28 +885,18 @@ export function createServer(options: CreateServerOptions = {}): Server {
       }
 
       const buffer = fs.readFileSync(filePath);
-      const pageTexts = new Map<number, string>();
-      // No `max`: pdf-parse has no start-page, so the whole document is parsed
-      // and pages are captured page-by-page; we then keep only the tail.
-      const data = await pdfParse(buffer, {
-        pagerender: (pageData) => renderColophonPage(pageData, pageTexts),
-      });
+      // `last` parses only the trailing pages, where the colophon lives.
+      const data = await pdfExtract(buffer, { last: tailPages });
 
-      const totalPages = data.numpages;
+      const totalPages = data.total;
       let tailText: string;
       let tailPagesRead: number | null;
-      if (pageTexts.size > 0) {
-        const from = Math.max(1, totalPages - tailPages + 1);
-        const parts: string[] = [];
-        for (let p = from; p <= totalPages; p++) {
-          const t = pageTexts.get(p);
-          if (t) parts.push(t);
-        }
-        tailText = parts.join("\n\n");
+      if (data.pages.length > 0) {
+        tailText = data.pages.map((p) => p.text).join("\n\n");
         tailPagesRead = Math.min(tailPages, totalPages);
       } else {
-        // pagerender was not invoked (e.g. an injected mock parser): fall back
-        // to whatever full text the parser returned.
+        // A stub extractor may return no per-page breakdown: fall back to
+        // whatever full text it produced.
         tailText = data.text ?? "";
         tailPagesRead = null;
       }

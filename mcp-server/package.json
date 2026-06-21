@@ -36,12 +36,11 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^12.11.1",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^2.4.5"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^26.0.0",
-    "@types/pdf-parse": "^1.1.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }

@@ -20,6 +20,7 @@ lerna-debug.log*
 data/*.db
 data/*.db-*
 data/thumbnails/
+data/fulltext-index/
 cache/
 riida.toml
 src-tauri/mutants.out/

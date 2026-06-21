@@ -4,7 +4,7 @@ description: >-
   Fill missing or thin book metadata in the riida library by resolving each book
   against techbook-mcp, writing back only confident results.
   USE FOR: enriching, completing, or fixing a riida book's title, authors, publisher,
-  release date, or description; ISBN/colophon lookup; batch updates.
+  release date, or description; ISBN/colophon lookup; batch updates across a directory.
   DO NOT USE FOR: files not indexed by riida; reading book content; web lookups.
   INVOKES: riida extract/write, techbook-mcp resolve.
 ---
@@ -19,22 +19,40 @@ is unavailable, fall back to colophon-only extraction; if riida is unavailable, 
 
 | Server | Key tools |
 |--------|-----------|
-| riida | `read_pdf_colophon`, `get_book_metadata`, `update_books_metadata` |
-| techbook-mcp | `resolve_book`, `get_book_by_isbn`, `get_book_detail` |
+| riida | `read_pdf_colophon`, `get_book_metadata`, `search_books`, `update_books_metadata` |
+| techbook-mcp | `resolve_book`/`resolve_books`, `get_book_by_isbn`, `get_book_detail` |
 
 ## Workflow
-1. **Find** — `search_books({directory, missing_metadata:true})` or `list_books_needing_metadata`.
-2. **Extract** — PDF: `read_pdf_colophon` (ISBN is the best key); EPUB: OPF;
-   `get_book_metadata` for current values.
-3. **Resolve** — by ISBN (`resolve_book`/`get_book_by_isbn`, openBD covers all JP
-   ISBNs); else by title; `get_book_detail(url)` for descriptions.
+1. **Scope** — `search_books({directory, missing_metadata:true})` or
+   `list_books_needing_metadata`. On a large directory, confirm scope first and exclude
+   PDFs that have no single resolvable record: magazine back-issues and per-article
+   総集編 splits, `backup/` duplicates, `index.pdf` catalogs. A broad `search_books` can
+   exceed the tool-output token limit — narrow it, or run the listing in a subagent.
+2. **Extract** — PDF: `read_pdf_colophon` (the colophon ISBN is the best lookup key);
+   EPUB: OPF; `get_book_metadata` for current values.
+3. **Resolve** — by ISBN (`resolve_book(s)` with isbn **and** title; openBD covers all
+   JP ISBNs), else by title. `get_book_detail(url)` for descriptions.
 4. **Gate** — apply only at `matched` + `confidence=high` + `isbnTitleAgree=true`,
-   filling empty fields. Ask first to overwrite, or for low/ambiguous /
+   filling empty fields. **Verify the returned `book.isbn` equals the ISBN you asked
+   for** — a `source:search` fallback can silently return a different edition. Ask first
+   before overwriting any non-empty field, and for low/ambiguous /
    `isbnTitleAgree=false` / `not_found`. Skip if nothing found.
-5. **Write** — one batched `update_books_metadata`; epub+pdf pairs identical.
+5. **Write** — one batched `update_books_metadata` (writable fields: `title`, `authors`,
+   `publisher`, `release_date`, `language`, `description` — no url/asin/cover). An
+   epub+pdf pair of the same book gets identical metadata.
+
+## Scale: delegate the text-extraction sweep
+`read_pdf_colophon` returns the parsed colophon **plus a multi-KB raw-text field**, so a
+dozen calls dumped into your context bury the actual decisions under book back-matter.
+Split the job by who needs to think: hand the **mechanical extraction** (colophon reads,
+broad listings) to a **subagent** that returns only a compact record per book
+(`{file_path, isbn, confidence, release_date, publisher}`), and keep **resolution, the
+decision gate, and the write** yourself — that is where judgement lives. Never delegate
+the `update_books_metadata` write. See rules.md ("Working at scale") for a ready prompt.
 
 ## Example
 `isbnTitleAgree=false` may be a wrong ISBN (different book → skip) OR a same-book
 edition variant (→ re-resolve by title). See rules.md.
 
-See [references/rules.md](references/rules.md) for field hygiene, the full gate, and troubleshooting.
+See [references/rules.md](references/rules.md) for field hygiene, the full gate, working
+at scale, and troubleshooting.

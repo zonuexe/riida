@@ -18,6 +18,9 @@ should_trigger_prompts:
   - prompt: "奥付から発行日と出版社を取得して riida に入れて"
     reason: "Colophon-based publisher/release-date lookup"
     confidence: high
+  - prompt: "~/Dropbox/EBook/Gihyo の PDF にメタデータを設定したい。総集編の記事 PDF は対象外で"
+    reason: "Batch metadata over a specific library directory, with scope exclusions"
+    confidence: high
 
 # Prompts that should NOT trigger this skill
 should_not_trigger_prompts:
@@ -26,4 +29,7 @@ should_not_trigger_prompts:
     confidence: high
   - prompt: "この技術書の本文を検索して、該当するページを教えて"
     reason: "Reading/searching book content, not metadata enrichment"
+    confidence: high
+  - prompt: "Software Design 総集編の記事 PDF を月号ごとに 1 冊へ結合してまとめて"
+    reason: "PDF merging/manipulation, not metadata enrichment (near-miss: mentions 総集編/PDF)"
     confidence: high

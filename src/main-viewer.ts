@@ -22,6 +22,7 @@ import {
 } from "./book-metadata-utils";
 import { createDebouncedSaver } from "./debounce-utils";
 import { loadEpubJs } from "./epub-runtime";
+import { convertPdfRectToViewport } from "./pdf-rect-utils";
 import type { NoteEditorHandle } from "./note-editor";
 import {
   clampNoteWindowPosition,
@@ -198,7 +199,7 @@ async function renderPdfPageCanvas(
 type PdfLinkViewport = {
   width: number;
   height: number;
-  convertToViewportRectangle: (rect: number[]) => number[];
+  transform: number[];
 };
 
 // Build the clickable overlay layer for a PDF page's in-document links. Only
@@ -232,7 +233,7 @@ async function buildPdfLinkLayer(
       continue;
     }
 
-    const rect = viewport.convertToViewportRectangle(annotation.rect as number[]);
+    const rect = convertPdfRectToViewport(annotation.rect as number[], viewport.transform);
     const x1 = rect[0] ?? 0;
     const y1 = rect[1] ?? 0;
     const x2 = rect[2] ?? 0;

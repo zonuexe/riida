@@ -57,6 +57,12 @@ exclude_re = [
   '\bextract_epub_body\b',
   '\bzip_bytes\b',
   '\bopf_rootfile\b',
+  # Image-sequence fixed-layout EPUB: zip IO + the Tauri command. The pure
+  # parsers (parse_opf_layout, page_dimensions_from_xhtml, single_image_href,
+  # jpeg_dimensions, percent_decode, content_type_for) are unit-tested.
+  '\bepub_image_layout\b',
+  '\bread_zip_entry\b',
+  '\bserve_epub_image\b',
   '\bcurrent_unix_seconds\b',
   '\bfulltext_dir\b',
   '\bfulltext_built\b',

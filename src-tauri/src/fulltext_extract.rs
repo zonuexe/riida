@@ -130,7 +130,7 @@ pub fn extract_epub_body(file_path: &str, title: &str) -> Result<Vec<ContentDoc>
     Ok(docs)
 }
 
-fn zip_bytes(archive: &mut ZipArchive<fs::File>, name: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn zip_bytes(archive: &mut ZipArchive<fs::File>, name: &str) -> Result<Vec<u8>, String> {
     use std::io::Read;
     let mut entry = archive
         .by_name(name)
@@ -143,7 +143,7 @@ fn zip_bytes(archive: &mut ZipArchive<fs::File>, name: &str) -> Result<Vec<u8>, 
 }
 
 /// Read META-INF/container.xml and return the OPF rootfile path.
-fn opf_rootfile(archive: &mut ZipArchive<fs::File>) -> Result<String, String> {
+pub(crate) fn opf_rootfile(archive: &mut ZipArchive<fs::File>) -> Result<String, String> {
     let bytes = zip_bytes(archive, "META-INF/container.xml")?;
     let mut reader = XmlReader::from_reader(bytes.as_slice());
     let mut buf = Vec::new();
@@ -274,7 +274,7 @@ fn is_skipped_element(name: &[u8]) -> bool {
 }
 
 /// Directory portion of an archive path (`"OEBPS/content.opf"` → `"OEBPS"`).
-fn parent_dir(path: &str) -> String {
+pub(crate) fn parent_dir(path: &str) -> String {
     match path.rfind('/') {
         Some(idx) => path[..idx].to_owned(),
         None => String::new(),
@@ -283,7 +283,7 @@ fn parent_dir(path: &str) -> String {
 
 /// Join an OPF-relative href onto the OPF's base dir, resolving `.`/`..` and
 /// dropping any fragment. Always produces a forward-slash zip path.
-fn join_zip_path(base: &str, href: &str) -> String {
+pub(crate) fn join_zip_path(base: &str, href: &str) -> String {
     let href = href.split('#').next().unwrap_or(href);
     let mut segments: Vec<&str> = Vec::new();
     if !base.is_empty() {

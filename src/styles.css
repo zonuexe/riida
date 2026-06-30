@@ -1881,6 +1881,39 @@ h1 {
   border: none;
 }
 
+/* Image-sequence fixed-layout EPUB viewer: a single spread centered on the
+   reading stage. Page boxes are sized in JS (computeImageFit) so a two-page
+   spread shares height and the whole spread is contained in the stage. */
+.epub-image-viewer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  user-select: none;
+}
+
+.epub-image-spread {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--epub-image-gap, 0px);
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.epub-image-page {
+  display: block;
+  object-fit: contain;
+  /* Fallback before JS fit runs / when intrinsic size is unknown. */
+  max-width: 100%;
+  max-height: 100%;
+  /* Match the PDF page surface: white page with the same soft page shadow. */
+  background: white;
+  box-shadow: var(--pdf-page-shadow);
+}
+
 .epub-viewer .epub-cover-overlay {
   position: absolute;
   inset: 0;

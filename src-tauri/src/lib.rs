@@ -24,6 +24,7 @@ use zip::ZipArchive;
 
 // Public so the profiling harness (`examples/fulltext_profile.rs`) can drive
 // the index/extraction core against real library data.
+pub mod epub_image;
 pub mod fulltext;
 pub mod fulltext_extract;
 pub mod fulltext_pool;
@@ -4629,6 +4630,58 @@ fn fulltext_on_book_removed(file_path: &str) {
     fulltext_enqueue(FulltextHookOp::DeleteBook(file_path.to_owned()));
 }
 
+/// Build the HTTP response for a `riida-epub` image request. `query` is the raw
+/// URL query (`file=<enc abs path>&entry=<enc zip entry>`); `home`, when set,
+/// confines reads to that directory (mirrors the asset-protocol `$HOME/**` scope).
+fn serve_epub_image(query: &str, home: Option<&Path>) -> tauri::http::Response<Vec<u8>> {
+    use tauri::http::{header, Response, StatusCode};
+
+    let empty = |status: StatusCode| {
+        Response::builder()
+            .status(status)
+            .body(Vec::new())
+            .expect("static response builds")
+    };
+
+    let mut file = None;
+    let mut entry = None;
+    for pair in query.split('&') {
+        let mut kv = pair.splitn(2, '=');
+        let key = kv.next().unwrap_or("");
+        let val = kv.next().unwrap_or("");
+        match key {
+            "file" => file = Some(epub_image::percent_decode(val)),
+            "entry" => entry = Some(epub_image::percent_decode(val)),
+            _ => {}
+        }
+    }
+    let (Some(file), Some(entry)) = (file, entry) else {
+        return empty(StatusCode::BAD_REQUEST);
+    };
+
+    // Confine reads to the user's home directory so the scheme cannot be abused
+    // as an arbitrary-file-read endpoint.
+    if let Some(home) = home {
+        let inside = std::fs::canonicalize(&file)
+            .map(|p| p.starts_with(home))
+            .unwrap_or(false);
+        if !inside {
+            return empty(StatusCode::FORBIDDEN);
+        }
+    }
+
+    match epub_image::read_zip_entry(&file, &entry) {
+        Ok(bytes) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, epub_image::content_type_for(&entry))
+            .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+            .header(header::CACHE_CONTROL, "no-cache")
+            .body(bytes)
+            .expect("image response builds"),
+        Err(_) => empty(StatusCode::NOT_FOUND),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -4677,6 +4730,21 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
+        // Serve individual page images out of an image-sequence fixed-layout
+        // EPUB zip without unzipping the whole archive in JS. The frontend image
+        // viewer points <img src> at riida-epub://localhost/img?file=..&entry=..
+        .register_asynchronous_uri_scheme_protocol("riida-epub", |ctx, request, responder| {
+            let home = ctx
+                .app_handle()
+                .path()
+                .home_dir()
+                .ok()
+                .map(|h| std::fs::canonicalize(&h).unwrap_or(h));
+            let query = request.uri().query().unwrap_or("").to_owned();
+            std::thread::spawn(move || {
+                responder.respond(serve_epub_image(&query, home.as_deref()))
+            });
+        })
         .invoke_handler(tauri::generate_handler![
             library_snapshot,
             load_library_snapshot,
@@ -4689,6 +4757,7 @@ pub fn run() {
             rename_tag_globally,
             delete_tag_globally,
             extract_epub_metadata,
+            epub_image::epub_image_layout,
             load_book_metadata,
             save_book_metadata,
             delete_book_metadata,
@@ -4723,6 +4792,67 @@ mod tests {
     use notify::event::{CreateKind, ModifyKind, RemoveKind};
     use notify::{event::DataChange, EventKind};
     use proptest::prelude::*;
+
+    // Mirror encodeURIComponent for the riida-epub query test below.
+    fn percent_encode_component(s: &str) -> String {
+        s.bytes()
+            .map(|b| {
+                if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
+                    (b as char).to_string()
+                } else {
+                    format!("%{b:02X}")
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn serve_epub_image_serves_zip_entry_and_enforces_scope() {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+
+        let dir =
+            std::env::temp_dir().join(format!("riida-epub-image-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let zip_path = dir.join("book.epub");
+        {
+            let file = std::fs::File::create(&zip_path).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            zip.start_file("item/image/a.jpg", SimpleFileOptions::default())
+                .unwrap();
+            zip.write_all(&[0xFF, 0xD8, 0xFF, 0xD9]).unwrap();
+            zip.finish().unwrap();
+        }
+        // canonicalize so the scope check (which canonicalizes the file) matches
+        // on platforms where temp_dir is a symlink (macOS /var -> /private/var).
+        let home = std::fs::canonicalize(&dir).unwrap();
+        let query = format!(
+            "file={}&entry={}",
+            percent_encode_component(&zip_path.to_string_lossy()),
+            percent_encode_component("item/image/a.jpg"),
+        );
+
+        let ok = serve_epub_image(&query, Some(&home));
+        assert_eq!(ok.status(), 200);
+        assert_eq!(ok.headers().get("content-type").unwrap(), "image/jpeg");
+        assert_eq!(ok.body(), &vec![0xFF, 0xD8, 0xFF, 0xD9]);
+
+        // A file outside the allowed home directory is rejected.
+        let elsewhere = home.join("nope");
+        let forbidden = serve_epub_image(&query, Some(&elsewhere));
+        assert_eq!(forbidden.status(), 403);
+
+        // Missing parameters are a bad request; a missing entry is a 404.
+        assert_eq!(serve_epub_image("file=x", None).status(), 400);
+        let missing = format!(
+            "file={}&entry={}",
+            percent_encode_component(&zip_path.to_string_lossy()),
+            percent_encode_component("item/image/missing.jpg"),
+        );
+        assert_eq!(serve_epub_image(&missing, Some(&home)).status(), 404);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
     use rusqlite::Connection;
     use std::{fs, path::PathBuf};
 

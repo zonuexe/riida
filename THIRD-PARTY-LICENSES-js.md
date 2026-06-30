@@ -5500,7 +5500,7 @@ THE SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### pdfjs-dist 6.0.227
+### pdfjs-dist 6.1.200
 
 - License: Apache-2.0
 - Source: git+https://github.com/mozilla/pdf.js.git

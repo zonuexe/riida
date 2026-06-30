@@ -48,6 +48,7 @@ import {
 import { loadCachedEpubLocations, saveCachedEpubLocations } from "./epub-locations-cache";
 import { loadEpubJs } from "./epub-runtime";
 import { resolveEpubLinkAction } from "./epub-link-routing";
+import { convertPdfRectToViewport } from "./pdf-rect-utils";
 import {
   buildImageSpreads,
   computeImageFit,
@@ -1473,7 +1474,7 @@ function navigateViewerToPage(pageNumber: number, options: { pushHistory?: boole
 
 async function renderPdfJsLinks(
   container: HTMLElement,
-  viewport: { convertToViewportRectangle: (rect: number[]) => number[] },
+  viewport: { transform: number[] },
   annotations: PdfAnnotationRecord[],
   session: PdfRenderSession,
   currentPageNumber: number,
@@ -1483,7 +1484,7 @@ async function renderPdfJsLinks(
       continue;
     }
 
-    const rect = viewport.convertToViewportRectangle(annotation.rect);
+    const rect = convertPdfRectToViewport(annotation.rect, viewport.transform);
     const x1 = rect[0] ?? 0;
     const y1 = rect[1] ?? 0;
     const x2 = rect[2] ?? 0;

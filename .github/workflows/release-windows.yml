@@ -4,7 +4,16 @@ on:
   push:
     tags:
       - "v*"
+  # On pull requests this workflow only runs the Windows Rust verification
+  # (the bundle build is gated to tags / manual dispatch below). That check is
+  # only meaningful when the Rust build inputs change, so skip it for
+  # frontend-only PRs. Tag pushes and workflow_dispatch are unaffected by this
+  # filter and always build the bundle.
   pull_request:
+    paths:
+      - "src-tauri/**"
+      - "scripts/fetch-pdfium.mjs"
+      - ".github/workflows/release-windows.yml"
   workflow_dispatch:
 
 jobs:

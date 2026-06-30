@@ -242,6 +242,52 @@ top-level listener.
 
 The remaining known issue is **link handling** — see below.
 
+### Image-Sequence Fixed-Layout EPUBs (native viewer)
+
+Pre-paginated EPUBs whose every spine page is a single full-page image
+(comics / scans: an XHTML wrapping one SVG `<image>`, e.g. many Japanese
+tech books) bypass epub.js entirely and render through a dedicated native
+image viewer. This is far lighter than epub.js for such books: epub.js
+unzips the whole archive in JS and draws nested iframes, while this path
+streams one image at a time straight out of the zip.
+
+- **Detection + layout (Rust):** [src-tauri/src/epub_image.rs](src-tauri/src/epub_image.rs).
+  The `epub_image_layout` command parses the OPF (reusing the zip/OPF
+  helpers in `fulltext_extract.rs`) and returns `is_image_epub`, the
+  `page-progression-direction`, and per-page `{ image_entry (resolved zip
+  path), spread_side, width, height }`. `is_image_epub` requires
+  `rendition:layout = pre-paginated` **and** ≥90% of spine pages resolving
+  to a single image; reflowable books short-circuit before the per-page
+  scan so detection stays cheap. Page dimensions come from the page SVG
+  `viewBox` / viewport meta, falling back to a JPEG SOF-marker parse (no
+  `image` crate).
+- **Image serving (Rust):** a process-wide custom async URI scheme
+  `riida-epub://localhost/img?file=<enc abs path>&entry=<enc zip entry>`
+  registered on the builder in `lib.rs` (`serve_epub_image`). It reads one
+  zip entry per request and is confined to `$HOME/**` (mirrors the asset
+  protocol scope) so it is not an arbitrary-file-read endpoint. CSP
+  `img-src` allows `riida-epub:` / `http://riida-epub.localhost`.
+- **Layout (frontend, pure + tested):**
+  [src/epub-image-layout-utils.ts](src/epub-image-layout-utils.ts) pairs
+  pages into spreads honoring `page-spread-left/right/center` and
+  progression (cover/center stands alone; the first side opens a spread and
+  pairs with the following second side; lone recto when unpaired; missing
+  sides alternate; no metadata → first-as-cover sequential). `computeImageFit`
+  contain-fits a spread to the stage with a shared height.
+- **Wiring (frontend):** `renderImageEpub` / `goToImageSpread` /
+  `goToImagePage` in [src/main.ts](src/main.ts), rendering into
+  `#epub-image-viewer`. Page count is the image-page count (no epub.js
+  `locations.generate`), reading position persists by page number via
+  `save_reading_position` (no CFI; stale CFI-only positions clamp to page 1),
+  and back/forward reuse the nav state's `pdfPage` field. Arrow-key mapping
+  honors progression via `activeEpubIsRtl`. The "EPUB in development" notice
+  is **not** shown for this path.
+- **Not yet wired:** the standalone viewer window
+  ([src/main-viewer.ts](src/main-viewer.ts)) still opens these via epub.js;
+  the command and URI scheme are process-wide, so porting it is UI plumbing
+  only (planned fast-follow). Out of scope for now: explicit zoom/pan,
+  adjacent-page prefetch, and viewer-settings-panel additions.
+
 ### Known Link-Handling Issue
 
 Link clicks inside the EPUB iframe do not behave correctly in Tauri v2

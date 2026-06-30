@@ -33,7 +33,7 @@
         "style-src-elem": "'self' 'unsafe-inline'",
         "font-src": "'self' asset: http://asset.localhost blob: data:",
         "connect-src": "'self' tauri://localhost ipc: http://ipc.localhost asset: http://asset.localhost",
-        "img-src": "'self' asset: http://asset.localhost blob: data: https://*.media-amazon.com",
+        "img-src": "'self' asset: http://asset.localhost blob: data: https://*.media-amazon.com riida-epub: http://riida-epub.localhost",
         "worker-src": "'self' blob:"
       }
     }

@@ -49,6 +49,17 @@ import { loadCachedEpubLocations, saveCachedEpubLocations } from "./epub-locatio
 import { loadEpubJs } from "./epub-runtime";
 import { resolveEpubLinkAction } from "./epub-link-routing";
 import {
+  buildImageSpreads,
+  computeImageFit,
+  firstPageNumberOfSpread,
+  type ImagePage,
+  type ImageSpread,
+  normalizeImagePages,
+  type Progression as ImageProgression,
+  spreadIndexForPage,
+  visualSpreadOrder,
+} from "./epub-image-layout-utils";
+import {
   deriveDirectories,
   deriveLanguages,
   derivePublishers,
@@ -480,6 +491,33 @@ let activeEpubTotalPages: number | null = null;
 // DPFJ guide §ページ進行方向の遵守: page direction is governed by OPF spine, not writing-mode.
 // In rtl books, ArrowLeft advances the reading order (next page) while ArrowRight goes back.
 let activeEpubIsRtl = false;
+// Raw payload from the `epub_image_layout` Rust command.
+type EpubImageLayoutPayload = {
+  is_image_epub: boolean;
+  progression: string;
+  pages: Array<{
+    index: number;
+    image_entry: string | null;
+    spread_side: string;
+    width: number;
+    height: number;
+  }>;
+};
+// Active image-sequence fixed-layout EPUB session (rendered natively, not via
+// epub.js). Null for reflowable / non-image EPUBs and all other source types.
+type ImageEpubSession = {
+  filePath: string;
+  pages: ImagePage[];
+  spreads: ImageSpread[];
+  progression: ImageProgression;
+  spreadIndex: number;
+  /** Rendered <img> elements of the current spread, in on-screen order. */
+  imgEls: HTMLImageElement[];
+};
+let activeImageEpub: ImageEpubSession | null = null;
+// Per-file cache of the parsed layout so detection does not re-parse the zip on
+// every renderCurrentPage (settings changes, re-renders).
+const imageEpubLayoutCache = new Map<string, EpubImageLayoutPayload>();
 let tocPanelOpen = false;
 let activePdfOutline: PdfOutlineNode[] | null = null;
 let viewerSettingsLoadToken = 0;
@@ -1349,6 +1387,11 @@ function navigateViewerToPage(pageNumber: number, options: { pushHistory?: boole
   const { pushHistory = true } = options;
 
   if (currentBook.sourceType === "epub") {
+    if (activeImageEpub) {
+      goToImagePage(pageNumber, { pushHistory });
+      void flushReadingPositionSave();
+      return;
+    }
     if (!activeEpubBook || !activeEpubRendition || !activeEpubTotalPages) {
       return;
     }
@@ -4133,7 +4176,8 @@ function currentNavigationState(): NavigationState {
     historyIndex: navigationHistoryIndex,
     bookFilePath: currentBook?.filePath ?? null,
     epubCfi: activeReadingPosition?.cfi ?? null,
-    pdfPage: isPdf ? (activeReadingPosition?.pageNumber ?? null) : null,
+    // pdfPage carries the page number for any paged viewer (PDF or image EPUB).
+    pdfPage: isPdf || activeImageEpub ? (activeReadingPosition?.pageNumber ?? null) : null,
     activeDirectory: viewerState.activeDirectory,
     activeTag: viewerState.activeTag,
     activeExternalSource: viewerState.activeExternalSource,
@@ -4276,6 +4320,17 @@ async function applyNavigationState(state: NavigationState) {
       activePdfRenderSession
     ) {
       navigateViewerToPage(state.pdfPage, { pushHistory: false });
+      return;
+    }
+
+    // Fast path: same image EPUB already rendered — jump directly to the page.
+    if (
+      state.pdfPage &&
+      nextBook.filePath === viewerState.currentBook?.filePath &&
+      nextBook.sourceType === "epub" &&
+      activeImageEpub
+    ) {
+      goToImagePage(state.pdfPage, { pushHistory: false });
       return;
     }
 
@@ -4774,7 +4829,14 @@ async function flushReadingPositionSave() {
   const sourceType = viewerState.currentBook?.sourceType;
 
   try {
-    if (sourceType === "epub" && activeReadingPosition.cfi) {
+    if (sourceType === "epub" && activeImageEpub) {
+      // Image EPUBs have no CFI; persist the page number like a PDF.
+      activeReadingPosition = await invoke<ReadingPosition>("save_reading_position", {
+        filePath: activeReadingPosition.filePath,
+        pageNumber: activeReadingPosition.pageNumber,
+        pageOffsetRatio: activeReadingPosition.pageOffsetRatio,
+      });
+    } else if (sourceType === "epub" && activeReadingPosition.cfi) {
       await invoke("save_epub_position", {
         filePath: activeReadingPosition.filePath,
         cfi: activeReadingPosition.cfi,
@@ -4954,6 +5016,233 @@ function destroyEpubBook() {
   }
 }
 
+// --- image-sequence fixed-layout EPUB viewer -------------------------------
+
+// Facing pages of a spread touch, matching the PDF viewer's `.pdfjs-spread`
+// (gap: 0); each page carries its own shadow so a gutter still reads.
+const EPUB_IMAGE_SPREAD_GAP = 0;
+// Margin (px per side) kept clear around the spread so the page shadow is not
+// clipped by the viewer's overflow:hidden.
+const EPUB_IMAGE_STAGE_INSET = 24;
+
+function imageEpubViewerElement(): HTMLElement | null {
+  return document.querySelector<HTMLElement>("#epub-image-viewer");
+}
+
+/** riida-epub URL for one zip image entry (served by the Rust URI scheme). */
+function imageEntryUrl(filePath: string, entry: string): string {
+  return `riida-epub://localhost/img?file=${encodeURIComponent(filePath)}&entry=${encodeURIComponent(entry)}`;
+}
+
+function destroyImageEpub() {
+  activeImageEpub = null;
+  const el = imageEpubViewerElement();
+  if (el) {
+    el.innerHTML = "";
+    el.hidden = true;
+    el.dataset.filePath = "";
+  }
+}
+
+/** Size the current spread's <img> elements so the whole spread is contained
+    in the stage and (for a two-page spread) both pages share height. */
+function fitImageEpubSpread() {
+  const session = activeImageEpub;
+  const el = imageEpubViewerElement();
+  if (!session || !el || session.imgEls.length === 0) {
+    return;
+  }
+  const spread = session.spreads[session.spreadIndex];
+  if (!spread) return;
+  const pages = visualSpreadOrder(spread, session.progression);
+
+  const dims = pages.map((page, i) => {
+    if (page.width > 0 && page.height > 0) {
+      return { width: page.width, height: page.height };
+    }
+    const img = session.imgEls[i];
+    if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+      return { width: img.naturalWidth, height: img.naturalHeight };
+    }
+    return { width: 0, height: 0 };
+  });
+
+  // Inset the fit area so the page shadow renders into the margin instead of
+  // being clipped by the viewer's overflow:hidden (the PDF viewer reserves
+  // padding for the same reason).
+  const inset = 2 * EPUB_IMAGE_STAGE_INSET;
+  const boxes = computeImageFit(
+    { width: el.clientWidth - inset, height: el.clientHeight - inset },
+    dims,
+    EPUB_IMAGE_SPREAD_GAP,
+  );
+  session.imgEls.forEach((img, i) => {
+    const box = boxes[i];
+    if (box && box.widthPx > 0 && box.heightPx > 0) {
+      img.style.width = `${box.widthPx}px`;
+      img.style.height = `${box.heightPx}px`;
+    } else {
+      // Unknown dimensions: fall back to CSS contain (see styles.css).
+      img.style.removeProperty("width");
+      img.style.removeProperty("height");
+    }
+  });
+}
+
+/** Render the DOM for the session's current spread. */
+function renderImageSpreadDom(session: ImageEpubSession) {
+  const el = imageEpubViewerElement();
+  if (!el) return;
+  const spread = session.spreads[session.spreadIndex];
+  if (!spread) return;
+  const pages = visualSpreadOrder(spread, session.progression);
+
+  const container = document.createElement("div");
+  container.className = "epub-image-spread";
+  container.style.setProperty("--epub-image-gap", `${EPUB_IMAGE_SPREAD_GAP}px`);
+
+  session.imgEls = pages.map((page) => {
+    const img = document.createElement("img");
+    img.className = "epub-image-page";
+    img.decoding = "async";
+    img.draggable = false;
+    if (page.imageEntry) {
+      img.src = imageEntryUrl(session.filePath, page.imageEntry);
+    }
+    // Re-fit once natural dimensions are known (covers pages with no OPF dims).
+    img.addEventListener("load", () => {
+      if (activeImageEpub === session) {
+        fitImageEpubSpread();
+      }
+    });
+    container.appendChild(img);
+    return img;
+  });
+
+  el.replaceChildren(container);
+  fitImageEpubSpread();
+}
+
+/** Switch the active image EPUB to the spread at `index`. */
+function showImageSpread(
+  session: ImageEpubSession,
+  index: number,
+  options: { pushHistory?: boolean; save?: boolean } = {},
+) {
+  const { pushHistory = false, save = true } = options;
+  if (session.spreads.length === 0) return;
+  const clamped = Math.min(Math.max(index, 0), session.spreads.length - 1);
+  session.spreadIndex = clamped;
+  renderImageSpreadDom(session);
+
+  const pageNumber = firstPageNumberOfSpread(session.spreads[clamped]!);
+
+  if (pushHistory) {
+    syncNavigationHistory("replace");
+  }
+  activeReadingPosition = {
+    filePath: session.filePath,
+    pageNumber,
+    pageOffsetRatio: 0,
+    cfi: null,
+    updatedAt: activeReadingPosition?.updatedAt ?? null,
+  };
+  cacheReadingPosition(activeReadingPosition);
+  if (pushHistory) {
+    syncNavigationHistory("push");
+  }
+
+  syncViewerPageJumpUi();
+  if (save) {
+    scheduleEpubPositionSave();
+  }
+}
+
+/** Rebuild the active image EPUB's spreads for the current page-mode and
+    re-apply the viewer background, keeping the reader on the current page.
+    Called when viewer settings change. No-op unless an image EPUB is active. */
+function rebuildImageEpub() {
+  const session = activeImageEpub;
+  if (!session) return;
+  const el = imageEpubViewerElement();
+  if (el) {
+    const palette = viewerColorPaletteForMode(viewerSettings.backgroundMode, currentAppTheme());
+    el.style.backgroundColor = palette.background;
+  }
+  const currentPage = activeReadingPosition?.pageNumber ?? 1;
+  session.spreads = buildImageSpreads(session.pages, session.progression, viewerSettings.pageMode);
+  goToImagePage(currentPage, { pushHistory: false });
+}
+
+/** Advance the active image EPUB by `delta` spreads (reading order). */
+function goToImageSpread(delta: number) {
+  const session = activeImageEpub;
+  if (!session) return;
+  showImageSpread(session, session.spreadIndex + delta);
+}
+
+/** Jump the active image EPUB to the spread containing a 1-based page number. */
+function goToImagePage(pageNumber: number, options: { pushHistory?: boolean } = {}) {
+  const session = activeImageEpub;
+  if (!session) return;
+  const pageIndex = clampEpubPageNumber(pageNumber, session.pages.length) - 1;
+  const index = spreadIndexForPage(session.spreads, pageIndex);
+  showImageSpread(session, index, { pushHistory: options.pushHistory });
+}
+
+/** Set up and render an image-sequence fixed-layout EPUB from the layout payload. */
+function renderImageEpub(payload: EpubImageLayoutPayload) {
+  const currentBook = viewerState.currentBook;
+  const el = imageEpubViewerElement();
+  if (!currentBook || !el) return;
+
+  // Tear down any epub.js / PDF viewer state and switch containers.
+  destroyEpubBook();
+  activePdfRenderSession = null;
+  activePdfOutline = null;
+  const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
+  if (frame) {
+    frame.hidden = true;
+    frame.src = "about:blank";
+    frame.dataset.filePath = "";
+  }
+  const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
+  if (pdfjsViewerEl) {
+    pdfjsViewerEl.hidden = true;
+    pdfjsViewerEl.innerHTML = "";
+    pdfjsViewerEl.dataset.filePath = "";
+  }
+
+  const progression: ImageProgression = payload.progression === "rtl" ? "rtl" : "ltr";
+  const pages = normalizeImagePages(payload.pages);
+  const spreads = buildImageSpreads(pages, progression, viewerSettings.pageMode);
+
+  activeEpubTotalPages = Math.max(pages.length, 1);
+  activeEpubIsRtl = progression === "rtl";
+
+  const session: ImageEpubSession = {
+    filePath: currentBook.filePath,
+    pages,
+    spreads,
+    progression,
+    spreadIndex: 0,
+    imgEls: [],
+  };
+  activeImageEpub = session;
+
+  el.hidden = false;
+  el.dataset.filePath = currentBook.filePath;
+  const palette = viewerColorPaletteForMode(viewerSettings.backgroundMode, currentAppTheme());
+  el.style.backgroundColor = palette.background;
+
+  // Restore to the saved page (or page 1). Stale CFI-only positions saved by the
+  // old epub.js path have page_number 0, so clamp up to 1.
+  const restorePage = Math.max(activeReadingPosition?.pageNumber ?? 1, 1);
+  goToImagePage(restorePage, { pushHistory: false });
+  // Persist the normalized page-based position for this opening.
+  scheduleEpubPositionSave();
+}
+
 type EpubLinkMessage = {
   type: "riida:epub-link";
   href: string;
@@ -5120,6 +5409,29 @@ async function renderCurrentPage() {
   const sourceUrl = convertFileSrc(viewerState.currentBook.filePath);
 
   if (viewerState.currentBook.sourceType === "epub") {
+    // Image-sequence fixed-layout EPUBs (comics / scans: every page a single
+    // image) get the lightweight native image viewer instead of epub.js.
+    const epubFilePath = viewerState.currentBook.filePath;
+    let imageLayout = imageEpubLayoutCache.get(epubFilePath);
+    if (!imageLayout) {
+      try {
+        imageLayout = await invoke<EpubImageLayoutPayload>("epub_image_layout", {
+          filePath: epubFilePath,
+        });
+        imageEpubLayoutCache.set(epubFilePath, imageLayout);
+      } catch (error) {
+        console.warn("[riida] epub_image_layout failed:", error);
+      }
+    }
+    if (viewerState.currentBook?.filePath !== epubFilePath) {
+      return;
+    }
+    if (imageLayout?.is_image_epub) {
+      renderImageEpub(imageLayout);
+      return;
+    }
+    destroyImageEpub();
+
     applyEpubViewerColors(viewerSettings.backgroundMode);
     await maybeShowEpubPreviewNotice();
     destroyEpubBook();
@@ -5392,6 +5704,7 @@ async function renderCurrentPage() {
   }
 
   destroyEpubBook();
+  destroyImageEpub();
 
   if (snapshot.pdfRenderer === "pdfjs") {
     applyEpubViewerColors("inherit-theme");
@@ -7024,6 +7337,7 @@ function renderMain(snapshot: LibrarySnapshot) {
       pdfjsViewerEl.hidden = true;
     }
     destroyEpubBook();
+    destroyImageEpub();
     syncNoteUi();
     if (shelfEl) {
       renderBookList(books, shelfEl);
@@ -7916,6 +8230,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (rerenderPdf) {
           rerenderPdfJs();
         }
+        rebuildImageEpub();
       });
   };
 
@@ -8195,8 +8510,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       const isEpubBook = viewerState.currentBook.sourceType === "epub";
       const pdfActive = isPdfBook && lastSnapshot?.pdfRenderer === "pdfjs";
       const epubActive = isEpubBook && Boolean(activeEpubRendition);
+      const imgEpubActive = isEpubBook && activeImageEpub !== null;
 
-      if (pdfActive || epubActive) {
+      if (pdfActive || epubActive || imgEpubActive) {
         if (isViewerZoomResetShortcut(shortcutInput)) {
           event.preventDefault();
           if (pdfActive) {
@@ -8244,7 +8560,9 @@ window.addEventListener("DOMContentLoaded", async () => {
 
         if (isViewerNextPageShortcut(shortcutInput)) {
           event.preventDefault();
-          if (epubActive && activeEpubRendition) {
+          if (imgEpubActive) {
+            goToImageSpread(1);
+          } else if (epubActive && activeEpubRendition) {
             void activeEpubRendition.next();
           } else if (pdfActive) {
             advancePdfPagedSpread(1);
@@ -8254,7 +8572,9 @@ window.addEventListener("DOMContentLoaded", async () => {
 
         if (isViewerPrevPageShortcut(shortcutInput)) {
           event.preventDefault();
-          if (epubActive && activeEpubRendition) {
+          if (imgEpubActive) {
+            goToImageSpread(-1);
+          } else if (epubActive && activeEpubRendition) {
             void activeEpubRendition.prev();
           } else if (pdfActive) {
             advancePdfPagedSpread(-1);
@@ -8268,16 +8588,27 @@ window.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    if (viewerState.currentBook?.sourceType === "epub" && activeEpubRendition) {
+    if (
+      viewerState.currentBook?.sourceType === "epub" &&
+      (activeEpubRendition || activeImageEpub)
+    ) {
       // DPFJ guide §ページ進行方向の遵守: in rtl books ArrowLeft advances reading order.
       const wantsNext = activeEpubIsRtl ? isEpubPrevPageKey(event) : isEpubNextPageKey(event);
       const wantsPrev = activeEpubIsRtl ? isEpubNextPageKey(event) : isEpubPrevPageKey(event);
       if (wantsNext) {
         event.preventDefault();
-        void activeEpubRendition.next();
+        if (activeImageEpub) {
+          goToImageSpread(1);
+        } else {
+          void activeEpubRendition?.next();
+        }
       } else if (wantsPrev) {
         event.preventDefault();
-        void activeEpubRendition.prev();
+        if (activeImageEpub) {
+          goToImageSpread(-1);
+        } else {
+          void activeEpubRendition?.prev();
+        }
       }
     }
   });
@@ -8328,6 +8659,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     resizeEpubRendition();
+    fitImageEpubSpread();
   });
 
   // When the sidebar opens or closes the CSS grid transition changes the
@@ -8336,6 +8668,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.querySelector(".two-pane")?.addEventListener("transitionend", (e) => {
     if ((e as TransitionEvent).propertyName === "grid-template-columns") {
       resizeEpubRendition();
+      fitImageEpubSpread();
     }
   });
 

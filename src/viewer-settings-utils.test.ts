@@ -20,6 +20,7 @@ const defaultSettings: ViewerSettings = {
   backgroundMode: "inherit-theme",
   scrollMode: "continuous",
   epubFontSize: 100,
+  deskewMode: "off",
 };
 
 describe("applyViewerSettingsPayloadToState", () => {

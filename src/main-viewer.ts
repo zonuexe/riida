@@ -32,6 +32,12 @@ import {
 import { parseRequestedPageNumber } from "./page-jump-utils";
 import { detectPdfBindingDirection } from "./pdf-binding-detect";
 import {
+  PdfDeskewMeasurer,
+  applyPdfPageDeskewStyle,
+  deskewCanvasTransform,
+  type DeskewSampleSurface,
+} from "./pdf-deskew";
+import {
   resolvePdfLinkTarget,
   type PdfAnnotationRecord,
   type PdfLinkResolver,
@@ -148,14 +154,28 @@ type PdfPage = Awaited<ReturnType<PdfDocumentLike["getPage"]>>;
 // display size.
 const CANVAS_RENDER_SCALE = 2.0;
 
+// Skew measurement for scanned pages (viewer setting "deskewMode"); mirrors
+// the in-app viewer's measurer in src/main.ts.
+const pdfDeskew = new PdfDeskewMeasurer((): DeskewSampleSurface | null => {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  return context ? { canvas, context } : null;
+});
+
 async function renderPdfPageCanvas(
   page: PdfPage,
   pageNumber: number,
   devicePixelRatio: number,
   pdfDocument: PdfDocumentLike,
   onInternalLink: (pageNumber: number) => void,
+  deskewFilePath: string | null,
 ): Promise<HTMLElement> {
   const viewport = page.getViewport({ scale: CANVAS_RENDER_SCALE });
+  // With deskew on, measure the scan's tilt first so the canvas is drawn level
+  // from its first paint (see src/pdf-deskew.ts).
+  const deskewAngle = deskewFilePath
+    ? await pdfDeskew.angleFor(page, deskewFilePath, pageNumber)
+    : null;
 
   const pageEl = document.createElement("div");
   pageEl.className = "pdfjs-page";
@@ -164,6 +184,7 @@ async function renderPdfPageCanvas(
   // and height are left for CSS to compute so the page resizes with the
   // window without re-rendering the canvas.
   pageEl.style.aspectRatio = `${viewport.width} / ${viewport.height}`;
+  applyPdfPageDeskewStyle(pageEl, deskewAngle, viewport.width, viewport.height);
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.floor(viewport.width * devicePixelRatio);
@@ -179,7 +200,11 @@ async function renderPdfPageCanvas(
       canvasContext: ctx,
       viewport,
       transform:
-        devicePixelRatio === 1 ? undefined : [devicePixelRatio, 0, 0, devicePixelRatio, 0, 0],
+        deskewAngle !== null
+          ? deskewCanvasTransform(deskewAngle, viewport.width, viewport.height, devicePixelRatio)
+          : devicePixelRatio === 1
+            ? undefined
+            : [devicePixelRatio, 0, 0, devicePixelRatio, 0, 0],
     }).promise;
   }
 
@@ -557,6 +582,7 @@ async function installViewerSettingsPanel(
   const verticalGapModeEl = document.querySelector<HTMLSelectElement>("#viewer-vertical-gap-mode");
   const scrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
   const coverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
+  const deskewModeEl = document.querySelector<HTMLInputElement>("#viewer-deskew-mode");
   const epubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
   const epubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
     "#viewer-epub-font-size-output",
@@ -586,6 +612,7 @@ async function installViewerSettingsPanel(
     !verticalGapModeEl ||
     !scrollModeEl ||
     !coverModeEl ||
+    !deskewModeEl ||
     !epubFontSizeEl ||
     !epubFontSizeOutputEl ||
     !backgroundInheritEl
@@ -634,6 +661,7 @@ async function installViewerSettingsPanel(
     verticalGapModeEl.value = settings.verticalGapMode;
     scrollModeEl.value = settings.scrollMode;
     coverModeEl.checked = settings.treatFirstPageAsCover;
+    deskewModeEl.checked = settings.deskewMode === "auto";
     epubFontSizeEl.value = String(settings.epubFontSize);
     epubFontSizeOutputEl.value = `${settings.epubFontSize}%`;
 
@@ -669,11 +697,12 @@ async function installViewerSettingsPanel(
         : ((selectedBackground?.value as ViewerSettings["backgroundMode"]) ?? "inherit-theme"),
       scrollMode: scrollModeEl.value as ViewerSettings["scrollMode"],
       epubFontSize: Number.parseInt(epubFontSizeEl.value, 10) || 100,
+      deskewMode: deskewModeEl.checked ? "auto" : "off",
     };
   };
 
   // Persist the current control values. Layout preferences (page mode, binding
-  // direction, cover) need the PDF re-laid-out, so those reload the window;
+  // direction, cover, deskew) need the PDF re-rendered, so those reload the window;
   // every other change — background, scroll mode, EPUB font size — is applied
   // in place to avoid a reload flicker.
   const persistChange = async (): Promise<void> => {
@@ -702,7 +731,8 @@ async function installViewerSettingsPanel(
       sourceType === "pdf" &&
       (renderedEffective.pageMode !== updated.effective.pageMode ||
         renderedEffective.bindingDirection !== updated.effective.bindingDirection ||
-        renderedEffective.treatFirstPageAsCover !== updated.effective.treatFirstPageAsCover);
+        renderedEffective.treatFirstPageAsCover !== updated.effective.treatFirstPageAsCover ||
+        renderedEffective.deskewMode !== updated.effective.deskewMode);
     if (layoutChanged) {
       // boot re-reads the saved preferences and re-renders; keep the panel open.
       writeSettingsPanelSession({ open: true, scope });
@@ -740,6 +770,7 @@ async function installViewerSettingsPanel(
     verticalGapModeEl,
     scrollModeEl,
     coverModeEl,
+    deskewModeEl,
     epubFontSizeEl,
   ]) {
     control.addEventListener("change", () => void persistChange());
@@ -1576,6 +1607,7 @@ async function renderPdfDocument(
         devicePixelRatio,
         pdfDocument,
         navigation.jumpToPage,
+        preferences.deskewMode === "auto" ? filePath : null,
       );
       entry.spreadEl.appendChild(pageEl);
     }

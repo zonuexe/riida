@@ -12,6 +12,8 @@ export type ViewerSettings = {
   backgroundMode: "inherit-theme" | "default" | "snow-white" | "night-city" | "navy-blue";
   scrollMode: "continuous" | "paged";
   epubFontSize: number;
+  /** Straighten scanned pages whose printed lines run slightly off-level. */
+  deskewMode: "off" | "auto";
 };
 
 export type ViewerBackgroundMode = ViewerSettings["backgroundMode"];
@@ -29,6 +31,7 @@ export const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
   backgroundMode: "inherit-theme",
   scrollMode: "paged",
   epubFontSize: 100,
+  deskewMode: "off",
 };
 
 export type ViewerColorPalette = {
@@ -150,6 +153,7 @@ export function switchViewerSettingsScopeInState(
         backgroundMode: state.backgroundMode,
         scrollMode: state.scrollMode,
         epubFontSize: state.epubFontSize,
+        deskewMode: state.deskewMode,
       },
     };
   }

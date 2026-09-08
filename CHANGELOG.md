@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Scanned PDFs can now be shown with each page straightened. A new viewer setting, "スキャンの傾きを補正する", measures how far the printed lines on a page run off-level and counter-rotates the page as it is drawn, so book scans whose sheets came through the scanner slightly askew read level. It works per page (recto and verso usually tilt in opposite directions), handles vertical Japanese text, leaves pictures and blank pages alone, and can be turned on for all PDFs or for a single book.
+
 ### Fixed
 
 - Per-book viewer settings no longer quietly reset the settings you did not touch to the app defaults. Saving a per-book override used to store the untouched fields as the built-in defaults instead of leaving them to follow the global setting, so a global choice such as left-aligned pages or wide vertical gaps stopped applying to that book.

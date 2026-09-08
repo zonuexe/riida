@@ -44,6 +44,8 @@ const DEFAULT_VIEWER_VERTICAL_GAP_MODE: &str = "compact";
 const DEFAULT_VIEWER_TREAT_FIRST_PAGE_AS_COVER: bool = true;
 const DEFAULT_VIEWER_BACKGROUND_MODE: &str = "inherit-theme";
 const DEFAULT_VIEWER_SCROLL_MODE: &str = "paged";
+const DEFAULT_VIEWER_DESKEW_MODE: &str = "off";
+const VIEWER_DESKEW_MODE_AUTO: &str = "auto";
 const DEFAULT_VIEWER_EPUB_FONT_SIZE: i64 = 100;
 const DEFAULT_THEME_VIEWER_BACKGROUND_MODE: &str = "default";
 const SNOW_WHITE_VIEWER_BACKGROUND_MODE: &str = "snow-white";
@@ -290,6 +292,11 @@ struct ViewerPreferences {
     background_mode: String,
     scroll_mode: String,
     epub_font_size: i64,
+    /// `"off"` or `"auto"`; blank on a file row means "inherit the global
+    /// value". Defaulted on deserialize so a payload from a build that predates
+    /// the field still parses.
+    #[serde(default)]
+    deskew_mode: String,
 }
 
 #[derive(Serialize)]
@@ -871,6 +878,8 @@ fn open_database() -> Result<Connection, String> {
               treat_first_page_as_cover INTEGER NOT NULL,
               background_mode TEXT NOT NULL DEFAULT 'inherit-theme',
               scroll_mode TEXT NOT NULL DEFAULT 'paged',
+              epub_font_size INTEGER NOT NULL DEFAULT 100,
+              deskew_mode TEXT NOT NULL DEFAULT 'off',
               updated_at INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS reading_positions (
@@ -966,6 +975,10 @@ fn open_database() -> Result<Connection, String> {
     );
     let _ = connection.execute(
         "ALTER TABLE viewer_preferences ADD COLUMN epub_font_size INTEGER NOT NULL DEFAULT 100",
+        [],
+    );
+    let _ = connection.execute(
+        "ALTER TABLE viewer_preferences ADD COLUMN deskew_mode TEXT NOT NULL DEFAULT 'off'",
         [],
     );
 
@@ -1310,6 +1323,7 @@ fn default_viewer_preferences() -> ViewerPreferences {
         background_mode: DEFAULT_VIEWER_BACKGROUND_MODE.to_string(),
         scroll_mode: DEFAULT_VIEWER_SCROLL_MODE.to_string(),
         epub_font_size: DEFAULT_VIEWER_EPUB_FONT_SIZE,
+        deskew_mode: DEFAULT_VIEWER_DESKEW_MODE.to_string(),
     }
 }
 
@@ -1389,6 +1403,13 @@ fn normalize_background_mode(value: &str) -> String {
     }
 }
 
+fn normalize_deskew_mode(value: &str) -> String {
+    match value.trim().to_lowercase().as_str() {
+        VIEWER_DESKEW_MODE_AUTO => VIEWER_DESKEW_MODE_AUTO.to_string(),
+        _ => DEFAULT_VIEWER_DESKEW_MODE.to_string(),
+    }
+}
+
 fn normalize_viewer_preferences(preferences: ViewerPreferences) -> ViewerPreferences {
     ViewerPreferences {
         page_mode: normalize_page_mode(&preferences.page_mode),
@@ -1400,6 +1421,7 @@ fn normalize_viewer_preferences(preferences: ViewerPreferences) -> ViewerPrefere
         background_mode: normalize_background_mode(&preferences.background_mode),
         scroll_mode: normalize_scroll_mode(&preferences.scroll_mode),
         epub_font_size: normalize_epub_font_size(preferences.epub_font_size),
+        deskew_mode: normalize_deskew_mode(&preferences.deskew_mode),
     }
 }
 
@@ -1419,7 +1441,8 @@ fn load_saved_viewer_preferences(
               treat_first_page_as_cover,
               background_mode,
               scroll_mode,
-              epub_font_size
+              epub_font_size,
+              deskew_mode
             FROM viewer_preferences
             WHERE scope_key = ?1
             ",
@@ -1439,6 +1462,9 @@ fn load_saved_viewer_preferences(
             epub_font_size: row
                 .get::<_, i64>(8)
                 .unwrap_or(DEFAULT_VIEWER_EPUB_FONT_SIZE),
+            deskew_mode: row
+                .get::<_, String>(9)
+                .unwrap_or_else(|_| DEFAULT_VIEWER_DESKEW_MODE.to_string()),
         })
     });
 
@@ -1491,6 +1517,11 @@ fn merge_file_viewer_preferences(
         } else {
             normalize_epub_font_size(file.epub_font_size)
         },
+        deskew_mode: if file.deskew_mode.trim().is_empty() {
+            global.deskew_mode.clone()
+        } else {
+            normalize_deskew_mode(&file.deskew_mode)
+        },
     }
 }
 
@@ -1538,6 +1569,11 @@ fn build_file_viewer_preferences_for_storage(
         } else {
             normalized.epub_font_size
         },
+        deskew_mode: if normalized.deskew_mode == global.deskew_mode {
+            String::new()
+        } else {
+            normalized.deskew_mode
+        },
     }
 }
 
@@ -1578,9 +1614,10 @@ fn save_viewer_preferences_record(
               background_mode,
               scroll_mode,
               epub_font_size,
+              deskew_mode,
               updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             ON CONFLICT(scope_key) DO UPDATE SET
               file_path = excluded.file_path,
               source_type = excluded.source_type,
@@ -1593,6 +1630,7 @@ fn save_viewer_preferences_record(
               background_mode = excluded.background_mode,
               scroll_mode = excluded.scroll_mode,
               epub_font_size = excluded.epub_font_size,
+              deskew_mode = excluded.deskew_mode,
               updated_at = excluded.updated_at
             ",
             params![
@@ -1612,6 +1650,7 @@ fn save_viewer_preferences_record(
                 record.background_mode,
                 record.scroll_mode,
                 record.epub_font_size,
+                record.deskew_mode,
                 updated_at
             ],
         )
@@ -5070,6 +5109,7 @@ mod tests {
                   background_mode TEXT NOT NULL DEFAULT 'inherit-theme',
                   scroll_mode TEXT NOT NULL DEFAULT 'paged',
                   epub_font_size INTEGER NOT NULL DEFAULT 100,
+                  deskew_mode TEXT NOT NULL DEFAULT 'off',
                   updated_at INTEGER NOT NULL
                 );
                 ",
@@ -5380,6 +5420,7 @@ mod tests {
             background_mode: background_mode.to_string(),
             scroll_mode: String::new(),
             epub_font_size: 0,
+            deskew_mode: String::new(),
         }
     }
 
@@ -5864,6 +5905,75 @@ mod tests {
     }
 
     #[test]
+    fn normalize_deskew_mode_accepts_auto_and_falls_back_to_off() {
+        assert_eq!(normalize_deskew_mode("auto"), "auto");
+        assert_eq!(normalize_deskew_mode("  AUTO "), "auto");
+        assert_eq!(normalize_deskew_mode("off"), "off");
+        assert_eq!(normalize_deskew_mode(""), "off");
+        assert_eq!(normalize_deskew_mode("sideways"), "off");
+    }
+
+    #[test]
+    fn normalize_viewer_preferences_normalizes_deskew_mode() {
+        let mut preferences = viewer_preferences(
+            "spread",
+            "left",
+            "fit-height",
+            "center",
+            "compact",
+            true,
+            "inherit-theme",
+        );
+        preferences.deskew_mode = "Auto".to_string();
+        assert_eq!(
+            normalize_viewer_preferences(preferences).deskew_mode,
+            "auto"
+        );
+
+        let blank = viewer_preferences("", "", "", "", "", true, "");
+        assert_eq!(normalize_viewer_preferences(blank).deskew_mode, "off");
+    }
+
+    #[test]
+    fn merge_file_viewer_preferences_inherits_deskew_mode_from_global() {
+        let mut global = default_viewer_preferences();
+        global.deskew_mode = "auto".to_string();
+
+        let inherited = viewer_preferences("", "", "", "", "", true, "");
+        assert_eq!(
+            merge_file_viewer_preferences(&global, &inherited).deskew_mode,
+            "auto"
+        );
+
+        let mut explicit_off = viewer_preferences("", "", "", "", "", true, "");
+        explicit_off.deskew_mode = "off".to_string();
+        assert_eq!(
+            merge_file_viewer_preferences(&global, &explicit_off).deskew_mode,
+            "off"
+        );
+
+        let mut garbage = viewer_preferences("", "", "", "", "", true, "");
+        garbage.deskew_mode = "tilted".to_string();
+        assert_eq!(
+            merge_file_viewer_preferences(&global, &garbage).deskew_mode,
+            "off"
+        );
+    }
+
+    #[test]
+    fn file_viewer_preferences_storage_blanks_deskew_mode_matching_global() {
+        let global = default_viewer_preferences();
+
+        let same = build_file_viewer_preferences_for_storage(&global, global.clone());
+        assert_eq!(same.deskew_mode, "");
+
+        let mut auto = global.clone();
+        auto.deskew_mode = "auto".to_string();
+        let stored = build_file_viewer_preferences_for_storage(&global, auto);
+        assert_eq!(stored.deskew_mode, "auto");
+    }
+
+    #[test]
     fn pre_version_migration_promotes_global_left_to_auto() {
         let connection = test_connection();
         save_viewer_preferences_record(
@@ -6134,6 +6244,58 @@ mod tests {
     }
 
     #[test]
+    fn deskew_mode_round_trips_through_sqlite_and_inherits_from_global() {
+        let connection = test_connection();
+
+        let mut global = default_viewer_preferences();
+        global.deskew_mode = "auto".to_string();
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF),
+            None,
+            VIEWER_SOURCE_TYPE_PDF,
+            global,
+        )
+        .expect("global preferences should save");
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_file_scope_key("/tmp/scan.pdf", VIEWER_SOURCE_TYPE_PDF),
+            Some("/tmp/scan.pdf"),
+            VIEWER_SOURCE_TYPE_PDF,
+            viewer_preferences("", "right", "", "", "", true, ""),
+        )
+        .expect("file preferences should save");
+
+        let payload = load_viewer_preferences_payload(
+            &connection,
+            Some("/tmp/scan.pdf"),
+            VIEWER_SOURCE_TYPE_PDF,
+        )
+        .expect("payload should load");
+
+        assert_eq!(payload.global.deskew_mode, "auto");
+        assert_eq!(payload.effective.deskew_mode, "auto");
+
+        let mut file_off = viewer_preferences("", "right", "", "", "", true, "");
+        file_off.deskew_mode = "off".to_string();
+        save_viewer_preferences_record(
+            &connection,
+            &viewer_file_scope_key("/tmp/scan.pdf", VIEWER_SOURCE_TYPE_PDF),
+            Some("/tmp/scan.pdf"),
+            VIEWER_SOURCE_TYPE_PDF,
+            file_off,
+        )
+        .expect("file preferences should save");
+        let payload = load_viewer_preferences_payload(
+            &connection,
+            Some("/tmp/scan.pdf"),
+            VIEWER_SOURCE_TYPE_PDF,
+        )
+        .expect("payload should load");
+        assert_eq!(payload.effective.deskew_mode, "off");
+    }
+
+    #[test]
     fn file_rows_saved_for_storage_keep_inheriting_later_global_changes() {
         let connection = test_connection();
         let global_scope_key = viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF);
@@ -6142,6 +6304,7 @@ mod tests {
         let mut global = default_viewer_preferences();
         global.align_mode = "left".to_string();
         global.vertical_gap_mode = "wide".to_string();
+        global.deskew_mode = "auto".to_string();
         save_viewer_preferences_record(
             &connection,
             &global_scope_key,
@@ -6175,10 +6338,12 @@ mod tests {
         assert_eq!(payload.effective.binding_direction, "right");
         assert_eq!(payload.effective.align_mode, "left");
         assert_eq!(payload.effective.vertical_gap_mode, "wide");
+        assert_eq!(payload.effective.deskew_mode, "auto");
         assert_eq!(payload.effective.epub_font_size, global.epub_font_size);
 
         let mut updated_global = global.clone();
         updated_global.align_mode = "right".to_string();
+        updated_global.deskew_mode = "off".to_string();
         save_viewer_preferences_record(
             &connection,
             &global_scope_key,
@@ -6196,6 +6361,7 @@ mod tests {
         .expect("payload should load");
         assert_eq!(payload.effective.binding_direction, "right");
         assert_eq!(payload.effective.align_mode, "right");
+        assert_eq!(payload.effective.deskew_mode, "off");
     }
 
     #[test]
@@ -6452,6 +6618,7 @@ mod tests {
             background_mode in ".*",
             scroll_mode in ".*",
             epub_font_size in any::<i64>(),
+            deskew_mode in ".*",
         ) -> ViewerPreferences {
             ViewerPreferences {
                 page_mode,
@@ -6463,6 +6630,7 @@ mod tests {
                 background_mode,
                 scroll_mode,
                 epub_font_size,
+                deskew_mode,
             }
         }
     }
@@ -6499,6 +6667,7 @@ mod tests {
                 Just("paged".to_string())
             ],
             epub_font_size in 50i64..=200i64,
+            deskew_mode in prop_oneof![Just("off".to_string()), Just("auto".to_string())],
         ) -> ViewerPreferences {
             ViewerPreferences {
                 page_mode,
@@ -6510,6 +6679,7 @@ mod tests {
                 background_mode,
                 scroll_mode,
                 epub_font_size,
+                deskew_mode,
             }
         }
     }
@@ -6544,6 +6714,7 @@ mod tests {
                 "continuous" | "paged"
             ));
             prop_assert!((50..=200).contains(&normalized.epub_font_size));
+            prop_assert!(matches!(normalized.deskew_mode.as_str(), "off" | "auto"));
         }
 
         #[test]
@@ -6581,6 +6752,7 @@ mod tests {
             prop_assert_eq!(merged.background_mode, effective.background_mode);
             prop_assert_eq!(merged.scroll_mode, effective.scroll_mode);
             prop_assert_eq!(merged.epub_font_size, effective.epub_font_size);
+            prop_assert_eq!(merged.deskew_mode, effective.deskew_mode);
         }
 
         #[test]

@@ -195,6 +195,18 @@ If you touch rendering order or page DOM structure, manually re-check:
 - restore after reopening a file
 - restore after back/forward navigation
 
+### Scan Deskew
+
+`deskewMode` (`"off"` | `"auto"`, default `"off"`) is a viewer preference
+that straightens scanned pages whose printed lines run slightly off-level
+(BOOKSCAN-style book scans tilt each sheet by ~0.5–1°, alternating sign
+between recto and verso). Detection is a pure projection-profile estimator
+in [src/pdf-deskew.ts](src/pdf-deskew.ts); the correction is folded into
+the pdf.js canvas `transform` so the page frame stays square, and the text
+and link overlays get the matching CSS transform. Angles are measured from a
+640 px sample render *before* the real render and memoised per
+`(file, page)`. Details and calibration numbers: [docs/pdf.md](docs/pdf.md).
+
 ### Binding Direction Auto-Detection
 
 `bindingDirection` is a tri-state preference: `"auto"` (default), `"left"`,

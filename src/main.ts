@@ -133,6 +133,12 @@ import {
   preserveNoteWindowBottomRightOffset,
 } from "./note-window-utils";
 import { detectPdfBindingDirection } from "./pdf-binding-detect";
+import {
+  PdfDeskewMeasurer,
+  applyPdfPageDeskewStyle,
+  deskewCanvasTransform,
+  type DeskewSampleSurface,
+} from "./pdf-deskew";
 import { buildPageGroups, getVisualPageOrder } from "./viewer-layout-utils";
 import { buildPdfRenderWindowPlan } from "./pdf-render-window-utils";
 import { planPagedKeyAction } from "./pdf-paged-nav-utils";
@@ -396,7 +402,17 @@ type PdfRenderSession = {
   isUpdating: boolean;
   pendingFocusGroupIndex: number | null;
   resolvedBindingDirection: "left" | "right";
+  filePath: string;
 };
+
+// Skew measurement for scanned pages (viewer setting "deskewMode"). One
+// scratch canvas serves every page; `willReadFrequently` keeps the pixel
+// read-back on the CPU path, and the measurer caches angles per document.
+const pdfDeskew = new PdfDeskewMeasurer((): DeskewSampleSurface | null => {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  return context ? { canvas, context } : null;
+});
 
 const viewerState: ViewerState = {
   books: [],
@@ -1575,9 +1591,20 @@ async function renderPdfRenderPlan(session: PdfRenderSession, plan: PdfRenderPla
 
     const page = await session.pdfDocument.getPage(pageNumber);
     const viewport = page.getViewport({ scale: plan.baseScale });
+    // Measure the scan's tilt before the real render so the canvas is level
+    // from its first paint; the measurer caches per page, so re-renders after
+    // a zoom or resize skip the sampling pass.
+    const deskewAngle =
+      viewerSettings.deskewMode === "auto" && session.filePath
+        ? await pdfDeskew.angleFor(page, session.filePath, pageNumber)
+        : null;
+    if (session.token !== pdfRenderToken) {
+      return;
+    }
     pageEl.style.width = `${viewport.width}px`;
     pageEl.style.height = `${viewport.height}px`;
     pageEl.innerHTML = "";
+    applyPdfPageDeskewStyle(pageEl, deskewAngle, viewport.width, viewport.height);
 
     const canvasWrapperEl = document.createElement("div");
     canvasWrapperEl.className = "canvasWrapper";
@@ -1606,7 +1633,12 @@ async function renderPdfRenderPlan(session: PdfRenderSession, plan: PdfRenderPla
     await page.render({
       canvas,
       canvasContext: context,
-      transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
+      transform:
+        deskewAngle !== null
+          ? deskewCanvasTransform(deskewAngle, viewport.width, viewport.height, outputScale)
+          : outputScale === 1
+            ? undefined
+            : [outputScale, 0, 0, outputScale, 0, 0],
       viewport,
     }).promise;
 
@@ -3720,6 +3752,7 @@ function syncViewerSettingsUi() {
   const verticalGapModeEl = document.querySelector<HTMLSelectElement>("#viewer-vertical-gap-mode");
   const scrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
   const coverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
+  const deskewModeEl = document.querySelector<HTMLInputElement>("#viewer-deskew-mode");
   const epubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
   const epubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
     "#viewer-epub-font-size-output",
@@ -3791,6 +3824,10 @@ function syncViewerSettingsUi() {
     coverModeEl.checked = editingPreferences.treatFirstPageAsCover;
   }
 
+  if (deskewModeEl) {
+    deskewModeEl.checked = editingPreferences.deskewMode === "auto";
+  }
+
   if (epubFontSizeEl) {
     epubFontSizeEl.value = String(editingPreferences.epubFontSize);
   }
@@ -3837,6 +3874,7 @@ function applyViewerPreferences(
   viewerSettings.treatFirstPageAsCover = preferences.treatFirstPageAsCover;
   viewerSettings.backgroundMode = preferences.backgroundMode;
   viewerSettings.scrollMode = preferences.scrollMode;
+  viewerSettings.deskewMode = preferences.deskewMode;
   syncImmediatePdfScrollMode();
   viewerSettings.scope = scope;
   viewerSettings.hasFileOverride = hasFileOverride;
@@ -5909,6 +5947,7 @@ async function renderCurrentPage() {
         isUpdating: false,
         pendingFocusGroupIndex: null,
         resolvedBindingDirection: resolvedBinding,
+        filePath: viewerState.currentBook?.filePath ?? "",
       };
       activePdfRenderSession = session;
       // Restore scroll position immediately using placeholder dimensions so
@@ -7405,6 +7444,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   );
   const viewerScrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
   const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
+  const viewerDeskewModeEl = document.querySelector<HTMLInputElement>("#viewer-deskew-mode");
   const viewerEpubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
   const viewerEpubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
     "#viewer-epub-font-size-output",
@@ -8331,6 +8371,14 @@ window.addEventListener("DOMContentLoaded", async () => {
     updateViewerSettings(() => {
       mutateEditingViewerSettings((preferences) => {
         preferences.treatFirstPageAsCover = viewerCoverModeEl.checked;
+      });
+    });
+  });
+
+  viewerDeskewModeEl?.addEventListener("change", () => {
+    updateViewerSettings(() => {
+      mutateEditingViewerSettings((preferences) => {
+        preferences.deskewMode = viewerDeskewModeEl.checked ? "auto" : "off";
       });
     });
   });

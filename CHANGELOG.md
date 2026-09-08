@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Scanned PDFs can now be shown with each page straightened. A new viewer setting, "スキャンの傾きを補正する", measures how far the printed lines on a page run off-level and counter-rotates the page as it is drawn, so book scans whose sheets came through the scanner slightly askew read level. It works per page (recto and verso usually tilt in opposite directions), handles vertical Japanese text, leaves pictures and blank pages alone, and can be turned on for all PDFs or for a single book.
+- Scanned PDFs can also have their blank margins trimmed away. A new viewer setting, "余白をトリミングする", measures where the print sits on a sample of pages and shows only that area, so the text can be larger for the same window. Facing pages keep one shared height and their own gutter width, a single full-bleed illustration does not defeat the trim, and the measurement is remembered per book so it runs only once.
 
 ### Fixed
 

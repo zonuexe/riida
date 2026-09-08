@@ -14,6 +14,8 @@ export type ViewerSettings = {
   epubFontSize: number;
   /** Straighten scanned pages whose printed lines run slightly off-level. */
   deskewMode: "off" | "auto";
+  /** Trim the blank margins of scanned pages so the printed area fills the page. */
+  trimMode: "off" | "auto";
 };
 
 export type ViewerBackgroundMode = ViewerSettings["backgroundMode"];
@@ -32,6 +34,7 @@ export const DEFAULT_VIEWER_SETTINGS: ViewerSettings = {
   scrollMode: "paged",
   epubFontSize: 100,
   deskewMode: "off",
+  trimMode: "off",
 };
 
 export type ViewerColorPalette = {
@@ -154,6 +157,7 @@ export function switchViewerSettingsScopeInState(
         scrollMode: state.scrollMode,
         epubFontSize: state.epubFontSize,
         deskewMode: state.deskewMode,
+        trimMode: state.trimMode,
       },
     };
   }

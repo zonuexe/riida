@@ -133,12 +133,9 @@ import {
   preserveNoteWindowBottomRightOffset,
 } from "./note-window-utils";
 import { detectPdfBindingDirection } from "./pdf-binding-detect";
-import {
-  PdfDeskewMeasurer,
-  applyPdfPageDeskewStyle,
-  deskewCanvasTransform,
-  type DeskewSampleSurface,
-} from "./pdf-deskew";
+import { PdfPageAnalyzer, resolvePdfTrimBoxes, type PageSampleSurface } from "./pdf-page-sample";
+import { applyPdfPageOverlayTransform, pageContentTransform } from "./pdf-page-transform";
+import { cropRectForPage, trimmedPageSize, type TrimBoxes } from "./pdf-trim";
 import { buildPageGroups, getVisualPageOrder } from "./viewer-layout-utils";
 import { buildPdfRenderWindowPlan } from "./pdf-render-window-utils";
 import { planPagedKeyAction } from "./pdf-paged-nav-utils";
@@ -403,12 +400,15 @@ type PdfRenderSession = {
   pendingFocusGroupIndex: number | null;
   resolvedBindingDirection: "left" | "right";
   filePath: string;
+  /** Crop boxes when margin trimming is on (viewer setting "trimMode"). */
+  trimBoxes: TrimBoxes | null;
 };
 
-// Skew measurement for scanned pages (viewer setting "deskewMode"). One
-// scratch canvas serves every page; `willReadFrequently` keeps the pixel
-// read-back on the CPU path, and the measurer caches angles per document.
-const pdfDeskew = new PdfDeskewMeasurer((): DeskewSampleSurface | null => {
+// Scan analysis for deskew and margin trimming (viewer settings "deskewMode"
+// and "trimMode"). One scratch canvas serves every page; `willReadFrequently`
+// keeps the pixel read-back on the CPU path, and the analyzer memoises each
+// page's measurements per document.
+const pdfPageAnalyzer = new PdfPageAnalyzer((): PageSampleSurface | null => {
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d", { willReadFrequently: true });
   return context ? { canvas, context } : null;
@@ -1592,28 +1592,35 @@ async function renderPdfRenderPlan(session: PdfRenderSession, plan: PdfRenderPla
     const page = await session.pdfDocument.getPage(pageNumber);
     const viewport = page.getViewport({ scale: plan.baseScale });
     // Measure the scan's tilt before the real render so the canvas is level
-    // from its first paint; the measurer caches per page, so re-renders after
+    // from its first paint; the analyzer caches per page, so re-renders after
     // a zoom or resize skip the sampling pass.
     const deskewAngle =
       viewerSettings.deskewMode === "auto" && session.filePath
-        ? await pdfDeskew.angleFor(page, session.filePath, pageNumber)
+        ? (await pdfPageAnalyzer.analyze(page, session.filePath, pageNumber)).angleDeg
         : null;
     if (session.token !== pdfRenderToken) {
       return;
     }
-    pageEl.style.width = `${viewport.width}px`;
-    pageEl.style.height = `${viewport.height}px`;
+    const outputScale = Math.max(window.devicePixelRatio || 1, 1);
+    const content = pageContentTransform({
+      width: viewport.width,
+      height: viewport.height,
+      outputScale,
+      angleDeg: deskewAngle,
+      crop: cropRectForPage(session.trimBoxes, pageNumber, viewport),
+    });
+    pageEl.style.width = `${content.contentWidth}px`;
+    pageEl.style.height = `${content.contentHeight}px`;
     pageEl.innerHTML = "";
-    applyPdfPageDeskewStyle(pageEl, deskewAngle, viewport.width, viewport.height);
+    applyPdfPageOverlayTransform(pageEl, content.overlay);
 
     const canvasWrapperEl = document.createElement("div");
     canvasWrapperEl.className = "canvasWrapper";
     const canvas = document.createElement("canvas");
-    const outputScale = Math.max(window.devicePixelRatio || 1, 1);
-    canvas.width = Math.ceil(viewport.width * outputScale);
-    canvas.height = Math.ceil(viewport.height * outputScale);
-    canvas.style.width = `${viewport.width}px`;
-    canvas.style.height = `${viewport.height}px`;
+    canvas.width = Math.ceil(content.contentWidth * outputScale);
+    canvas.height = Math.ceil(content.contentHeight * outputScale);
+    canvas.style.width = `${content.contentWidth}px`;
+    canvas.style.height = `${content.contentHeight}px`;
     canvasWrapperEl.appendChild(canvas);
     pageEl.appendChild(canvasWrapperEl);
 
@@ -1633,12 +1640,7 @@ async function renderPdfRenderPlan(session: PdfRenderSession, plan: PdfRenderPla
     await page.render({
       canvas,
       canvasContext: context,
-      transform:
-        deskewAngle !== null
-          ? deskewCanvasTransform(deskewAngle, viewport.width, viewport.height, outputScale)
-          : outputScale === 1
-            ? undefined
-            : [outputScale, 0, 0, outputScale, 0, 0],
+      transform: content.canvas,
       viewport,
     }).promise;
 
@@ -3753,6 +3755,7 @@ function syncViewerSettingsUi() {
   const scrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
   const coverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
   const deskewModeEl = document.querySelector<HTMLInputElement>("#viewer-deskew-mode");
+  const trimModeEl = document.querySelector<HTMLInputElement>("#viewer-trim-mode");
   const epubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
   const epubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
     "#viewer-epub-font-size-output",
@@ -3828,6 +3831,10 @@ function syncViewerSettingsUi() {
     deskewModeEl.checked = editingPreferences.deskewMode === "auto";
   }
 
+  if (trimModeEl) {
+    trimModeEl.checked = editingPreferences.trimMode === "auto";
+  }
+
   if (epubFontSizeEl) {
     epubFontSizeEl.value = String(editingPreferences.epubFontSize);
   }
@@ -3875,6 +3882,7 @@ function applyViewerPreferences(
   viewerSettings.backgroundMode = preferences.backgroundMode;
   viewerSettings.scrollMode = preferences.scrollMode;
   viewerSettings.deskewMode = preferences.deskewMode;
+  viewerSettings.trimMode = preferences.trimMode;
   syncImmediatePdfScrollMode();
   viewerSettings.scope = scope;
   viewerSettings.hasFileOverride = hasFileOverride;
@@ -5840,6 +5848,28 @@ async function renderCurrentPage() {
         resolvedBinding = viewerSettings.bindingDirection;
       }
 
+      // Margin trimming needs the document's crop boxes before any page size
+      // is known; the pre-pass samples a spread of pages (cached per file).
+      let trimBoxes: TrimBoxes | null = null;
+      if (viewerSettings.trimMode === "auto") {
+        trimBoxes = await resolvePdfTrimBoxes({
+          document: pdfDocument,
+          filePath,
+          deskew: viewerSettings.deskewMode === "auto",
+          analyzer: pdfPageAnalyzer,
+          isCancelled: () => currentToken !== pdfRenderToken,
+          onProgress: (measured, total) => {
+            loadingEl.textContent = `Measuring margins (${measured}/${total})...`;
+          },
+        });
+        if (currentToken !== pdfRenderToken) return;
+      }
+      // Page sizes at scale 1 as laid out: the trimmed extent when trimming.
+      const basePageSize = async (pageNumber: number) => {
+        const viewport = (await pdfDocument.getPage(pageNumber)).getViewport({ scale: 1 });
+        return trimmedPageSize(trimBoxes, pageNumber, viewport);
+      };
+
       pdfjsViewerEl.innerHTML = "";
       const layoutSettings = {
         pageMode: viewerSettings.pageMode,
@@ -5864,9 +5894,9 @@ async function renderCurrentPage() {
           if (group.length === 2 && group[0] !== undefined && group[1] !== undefined) {
             const g0 = group[0];
             const g1 = group[1];
-            const vp0 = (await pdfDocument.getPage(g0)).getViewport({ scale: 1 });
+            const vp0 = await basePageSize(g0);
             if (currentToken !== pdfRenderToken) return;
-            const vp1 = (await pdfDocument.getPage(g1)).getViewport({ scale: 1 });
+            const vp1 = await basePageSize(g1);
             if (currentToken !== pdfRenderToken) return;
             const fitScale = targetHeight / Math.max(vp0.height, 1);
             const combinedWidth = (vp0.width + vp1.width) * fitScale + pageGap;
@@ -5891,9 +5921,8 @@ async function renderCurrentPage() {
         spreadEl.dataset.binding = resolvedBinding;
         spreadEl.dataset.cover = String(group.length === 1);
 
-        const samplePage = await pdfDocument.getPage(group[0]!);
+        const sampleViewport = await basePageSize(group[0]!);
         if (currentToken !== pdfRenderToken) return;
-        const sampleViewport = samplePage.getViewport({ scale: 1 });
         const targetWidth =
           viewerSettings.pageMode === "spread"
             ? Math.max(220, Math.floor(availableWidth / Math.max(visualOrder.length, 1)))
@@ -5911,15 +5940,13 @@ async function renderCurrentPage() {
 
         const pageSlots = new Map<number, HTMLElement>();
         for (const pageNumber of visualOrder) {
-          const estimatedViewport = (await pdfDocument.getPage(pageNumber)).getViewport({
-            scale: baseScale,
-          });
+          const estimatedSize = await basePageSize(pageNumber);
           if (currentToken !== pdfRenderToken) return;
           const pageEl = document.createElement("section");
           pageEl.className = "pdfjs-page page";
           pageEl.dataset.pageNumber = String(pageNumber);
-          pageEl.style.width = `${estimatedViewport.width}px`;
-          pageEl.style.height = `${estimatedViewport.height}px`;
+          pageEl.style.width = `${estimatedSize.width * baseScale}px`;
+          pageEl.style.height = `${estimatedSize.height * baseScale}px`;
           spreadEl.appendChild(pageEl);
           pageSlots.set(pageNumber, pageEl);
         }
@@ -5948,6 +5975,7 @@ async function renderCurrentPage() {
         pendingFocusGroupIndex: null,
         resolvedBindingDirection: resolvedBinding,
         filePath: viewerState.currentBook?.filePath ?? "",
+        trimBoxes,
       };
       activePdfRenderSession = session;
       // Restore scroll position immediately using placeholder dimensions so
@@ -7445,6 +7473,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const viewerScrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
   const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
   const viewerDeskewModeEl = document.querySelector<HTMLInputElement>("#viewer-deskew-mode");
+  const viewerTrimModeEl = document.querySelector<HTMLInputElement>("#viewer-trim-mode");
   const viewerEpubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
   const viewerEpubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
     "#viewer-epub-font-size-output",
@@ -8379,6 +8408,14 @@ window.addEventListener("DOMContentLoaded", async () => {
     updateViewerSettings(() => {
       mutateEditingViewerSettings((preferences) => {
         preferences.deskewMode = viewerDeskewModeEl.checked ? "auto" : "off";
+      });
+    });
+  });
+
+  viewerTrimModeEl?.addEventListener("change", () => {
+    updateViewerSettings(() => {
+      mutateEditingViewerSettings((preferences) => {
+        preferences.trimMode = viewerTrimModeEl.checked ? "auto" : "off";
       });
     });
   });

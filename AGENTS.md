@@ -195,17 +195,30 @@ If you touch rendering order or page DOM structure, manually re-check:
 - restore after reopening a file
 - restore after back/forward navigation
 
-### Scan Deskew
+### Scan Corrections (Deskew, Margin Trimming)
 
-`deskewMode` (`"off"` | `"auto"`, default `"off"`) is a viewer preference
-that straightens scanned pages whose printed lines run slightly off-level
-(BOOKSCAN-style book scans tilt each sheet by ~0.5–1°, alternating sign
-between recto and verso). Detection is a pure projection-profile estimator
-in [src/pdf-deskew.ts](src/pdf-deskew.ts); the correction is folded into
-the pdf.js canvas `transform` so the page frame stays square, and the text
-and link overlays get the matching CSS transform. Angles are measured from a
-640 px sample render *before* the real render and memoised per
-`(file, page)`. Details and calibration numbers: [docs/pdf.md](docs/pdf.md).
+Two viewer preferences correct book scans (BOOKSCAN-style PDFs), both
+`"off"` | `"auto"`, default `"off"`, global or per file:
+
+- `deskewMode` straightens pages whose printed lines run slightly off-level
+  (scans tilt each sheet by ~0.5–1°, alternating sign between recto and
+  verso). Detection is a pure projection-profile estimator in
+  [src/pdf-deskew.ts](src/pdf-deskew.ts).
+- `trimMode` shows only the printed area. The ink extent is measured in
+  [src/pdf-trim.ts](src/pdf-trim.ts) and aggregated into one crop box per
+  page parity (mirrored gutters) with a shared vertical extent, so type size
+  and page frame stay stable across pages; the result is cached per file in
+  `localStorage` (`riida:pdf-trim:<path>`). Trimming does not change the
+  printed area's aspect ratio, so a spread that overflows the window height
+  in fit-width still does; the gain shows in fit-height.
+
+Both measurements come from one 640 px sample render per page
+([src/pdf-page-sample.ts](src/pdf-page-sample.ts), `PdfPageAnalyzer`,
+memoised per `(file, page)`), taken *before* the real render. The
+corrections are folded into the pdf.js canvas `transform`
+([src/pdf-page-transform.ts](src/pdf-page-transform.ts)) so the page frame
+stays square, and the text and link overlays get the matching CSS
+`matrix()`. Details and calibration numbers: [docs/pdf.md](docs/pdf.md).
 
 ### Binding Direction Auto-Detection
 

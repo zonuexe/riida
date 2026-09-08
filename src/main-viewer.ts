@@ -31,12 +31,14 @@ import {
 } from "./note-window-utils";
 import { parseRequestedPageNumber } from "./page-jump-utils";
 import { detectPdfBindingDirection } from "./pdf-binding-detect";
+import { PdfPageAnalyzer, resolvePdfTrimBoxes, type PageSampleSurface } from "./pdf-page-sample";
 import {
-  PdfDeskewMeasurer,
-  applyPdfPageDeskewStyle,
-  deskewCanvasTransform,
-  type DeskewSampleSurface,
-} from "./pdf-deskew";
+  applyPdfPageOverlayTransform,
+  mapRectThroughMatrix,
+  pageContentTransform,
+  type PageContentTransform,
+} from "./pdf-page-transform";
+import { cropRectForPage, type TrimBoxes } from "./pdf-trim";
 import {
   resolvePdfLinkTarget,
   type PdfAnnotationRecord,
@@ -154,9 +156,9 @@ type PdfPage = Awaited<ReturnType<PdfDocumentLike["getPage"]>>;
 // display size.
 const CANVAS_RENDER_SCALE = 2.0;
 
-// Skew measurement for scanned pages (viewer setting "deskewMode"); mirrors
-// the in-app viewer's measurer in src/main.ts.
-const pdfDeskew = new PdfDeskewMeasurer((): DeskewSampleSurface | null => {
+// Scan analysis for deskew and margin trimming (viewer settings "deskewMode"
+// and "trimMode"); mirrors the in-app viewer's analyzer in src/main.ts.
+const pdfPageAnalyzer = new PdfPageAnalyzer((): PageSampleSurface | null => {
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d", { willReadFrequently: true });
   return context ? { canvas, context } : null;
@@ -169,13 +171,21 @@ async function renderPdfPageCanvas(
   pdfDocument: PdfDocumentLike,
   onInternalLink: (pageNumber: number) => void,
   deskewFilePath: string | null,
+  trimBoxes: TrimBoxes | null,
 ): Promise<HTMLElement> {
   const viewport = page.getViewport({ scale: CANVAS_RENDER_SCALE });
   // With deskew on, measure the scan's tilt first so the canvas is drawn level
   // from its first paint (see src/pdf-deskew.ts).
   const deskewAngle = deskewFilePath
-    ? await pdfDeskew.angleFor(page, deskewFilePath, pageNumber)
+    ? (await pdfPageAnalyzer.analyze(page, deskewFilePath, pageNumber)).angleDeg
     : null;
+  const content = pageContentTransform({
+    width: viewport.width,
+    height: viewport.height,
+    outputScale: devicePixelRatio,
+    angleDeg: deskewAngle,
+    crop: cropRectForPage(trimBoxes, pageNumber, viewport),
+  });
 
   const pageEl = document.createElement("div");
   pageEl.className = "pdfjs-page";
@@ -183,12 +193,12 @@ async function renderPdfPageCanvas(
   // Aspect ratio drives the CSS layout in the standalone viewer window. Width
   // and height are left for CSS to compute so the page resizes with the
   // window without re-rendering the canvas.
-  pageEl.style.aspectRatio = `${viewport.width} / ${viewport.height}`;
-  applyPdfPageDeskewStyle(pageEl, deskewAngle, viewport.width, viewport.height);
+  pageEl.style.aspectRatio = `${content.contentWidth} / ${content.contentHeight}`;
+  applyPdfPageOverlayTransform(pageEl, content.overlay);
 
   const canvas = document.createElement("canvas");
-  canvas.width = Math.floor(viewport.width * devicePixelRatio);
-  canvas.height = Math.floor(viewport.height * devicePixelRatio);
+  canvas.width = Math.floor(content.contentWidth * devicePixelRatio);
+  canvas.height = Math.floor(content.contentHeight * devicePixelRatio);
   // Intentionally do not set canvas.style.width / .style.height; CSS in the
   // viewer-window scope sizes the canvas via max-height / max-width.
   pageEl.appendChild(canvas);
@@ -199,12 +209,7 @@ async function renderPdfPageCanvas(
       canvas,
       canvasContext: ctx,
       viewport,
-      transform:
-        deskewAngle !== null
-          ? deskewCanvasTransform(deskewAngle, viewport.width, viewport.height, devicePixelRatio)
-          : devicePixelRatio === 1
-            ? undefined
-            : [devicePixelRatio, 0, 0, devicePixelRatio, 0, 0],
+      transform: content.canvas,
     }).promise;
   }
 
@@ -214,6 +219,7 @@ async function renderPdfPageCanvas(
     pageNumber,
     pdfDocument,
     onInternalLink,
+    content,
   );
   if (linkLayer) {
     pageEl.appendChild(linkLayer);
@@ -238,6 +244,7 @@ async function buildPdfLinkLayer(
   currentPageNumber: number,
   resolver: PdfDocumentLike,
   onInternalLink: (pageNumber: number) => void,
+  content: PageContentTransform,
 ): Promise<HTMLElement | null> {
   const annotations = (await page.getAnnotations()) as PdfAnnotationRecord[];
   const layer = document.createElement("div");
@@ -269,6 +276,20 @@ async function buildPdfLinkLayer(
       continue;
     }
 
+    // Scan corrections (deskew / trimming) move the drawn content; map the link
+    // through the same affine map so it stays over what is actually drawn, and
+    // drop links that were trimmed away entirely.
+    const pageRect = { left: Math.min(x1, x2), top: Math.min(y1, y2), width, height };
+    const drawn = content.overlay ? mapRectThroughMatrix(content.overlay, pageRect) : pageRect;
+    if (
+      drawn.left + drawn.width <= 0 ||
+      drawn.top + drawn.height <= 0 ||
+      drawn.left >= content.contentWidth ||
+      drawn.top >= content.contentHeight
+    ) {
+      continue;
+    }
+
     // Percentage geometry so the link scales with the canvas; the layer itself
     // is sized to the canvas by syncPdfLinkLayers.
     const targetPage = target.pageNumber;
@@ -276,10 +297,10 @@ async function buildPdfLinkLayer(
     linkEl.className = "pdfjs-link";
     linkEl.href = `#page=${targetPage}`;
     linkEl.title = `Go to page ${targetPage}`;
-    linkEl.style.left = `${(Math.min(x1, x2) / viewport.width) * 100}%`;
-    linkEl.style.top = `${(Math.min(y1, y2) / viewport.height) * 100}%`;
-    linkEl.style.width = `${(width / viewport.width) * 100}%`;
-    linkEl.style.height = `${(height / viewport.height) * 100}%`;
+    linkEl.style.left = `${(drawn.left / content.contentWidth) * 100}%`;
+    linkEl.style.top = `${(drawn.top / content.contentHeight) * 100}%`;
+    linkEl.style.width = `${(drawn.width / content.contentWidth) * 100}%`;
+    linkEl.style.height = `${(drawn.height / content.contentHeight) * 100}%`;
     linkEl.addEventListener("click", (event) => {
       event.preventDefault();
       onInternalLink(targetPage);
@@ -583,6 +604,7 @@ async function installViewerSettingsPanel(
   const scrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
   const coverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
   const deskewModeEl = document.querySelector<HTMLInputElement>("#viewer-deskew-mode");
+  const trimModeEl = document.querySelector<HTMLInputElement>("#viewer-trim-mode");
   const epubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
   const epubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
     "#viewer-epub-font-size-output",
@@ -613,6 +635,7 @@ async function installViewerSettingsPanel(
     !scrollModeEl ||
     !coverModeEl ||
     !deskewModeEl ||
+    !trimModeEl ||
     !epubFontSizeEl ||
     !epubFontSizeOutputEl ||
     !backgroundInheritEl
@@ -662,6 +685,7 @@ async function installViewerSettingsPanel(
     scrollModeEl.value = settings.scrollMode;
     coverModeEl.checked = settings.treatFirstPageAsCover;
     deskewModeEl.checked = settings.deskewMode === "auto";
+    trimModeEl.checked = settings.trimMode === "auto";
     epubFontSizeEl.value = String(settings.epubFontSize);
     epubFontSizeOutputEl.value = `${settings.epubFontSize}%`;
 
@@ -698,11 +722,12 @@ async function installViewerSettingsPanel(
       scrollMode: scrollModeEl.value as ViewerSettings["scrollMode"],
       epubFontSize: Number.parseInt(epubFontSizeEl.value, 10) || 100,
       deskewMode: deskewModeEl.checked ? "auto" : "off",
+      trimMode: trimModeEl.checked ? "auto" : "off",
     };
   };
 
   // Persist the current control values. Layout preferences (page mode, binding
-  // direction, cover, deskew) need the PDF re-rendered, so those reload the window;
+  // direction, cover, deskew, trim) need the PDF re-rendered, so those reload the window;
   // every other change — background, scroll mode, EPUB font size — is applied
   // in place to avoid a reload flicker.
   const persistChange = async (): Promise<void> => {
@@ -732,7 +757,8 @@ async function installViewerSettingsPanel(
       (renderedEffective.pageMode !== updated.effective.pageMode ||
         renderedEffective.bindingDirection !== updated.effective.bindingDirection ||
         renderedEffective.treatFirstPageAsCover !== updated.effective.treatFirstPageAsCover ||
-        renderedEffective.deskewMode !== updated.effective.deskewMode);
+        renderedEffective.deskewMode !== updated.effective.deskewMode ||
+        renderedEffective.trimMode !== updated.effective.trimMode);
     if (layoutChanged) {
       // boot re-reads the saved preferences and re-renders; keep the panel open.
       writeSettingsPanelSession({ open: true, scope });
@@ -771,6 +797,7 @@ async function installViewerSettingsPanel(
     scrollModeEl,
     coverModeEl,
     deskewModeEl,
+    trimModeEl,
     epubFontSizeEl,
   ]) {
     control.addEventListener("change", () => void persistChange());
@@ -1537,6 +1564,18 @@ async function renderPdfDocument(
       ? ((await detectPdfBindingDirection(pdfDocument, () => false)) ?? "left")
       : preferences.bindingDirection;
 
+  // Margin trimming: measure the document's crop boxes (cached per file)
+  // before any page is drawn so every page shares the same trimmed frame.
+  const trimBoxes =
+    preferences.trimMode === "auto"
+      ? await resolvePdfTrimBoxes({
+          document: pdfDocument,
+          filePath,
+          deskew: preferences.deskewMode === "auto",
+          analyzer: pdfPageAnalyzer,
+        })
+      : null;
+
   const layoutSettings: ViewerLayoutSettings = {
     pageMode: preferences.pageMode,
     bindingDirection: resolvedBinding,
@@ -1608,6 +1647,7 @@ async function renderPdfDocument(
         pdfDocument,
         navigation.jumpToPage,
         preferences.deskewMode === "auto" ? filePath : null,
+        trimBoxes,
       );
       entry.spreadEl.appendChild(pageEl);
     }

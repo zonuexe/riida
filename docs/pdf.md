@@ -216,34 +216,114 @@ BOOKSCAN などの裁断スキャン PDF は、1 ページごとに 0.5〜1° �
 ### 適用: canvas transform に畳み込む
 
 補正は CSS で回すのではなく、pdf.js `page.render` の `transform` 引数に
-「中心まわりの逆回転 + カバースケール」を `outputScale` と合成して渡す
-(`deskewCanvasTransform`)。回転した内容が枠をはみ出さないよう
+「中心まわりの逆回転 (+ トリミング無しならカバースケール)」を `outputScale`
+と合成して渡す ([src/pdf-page-transform.ts](../src/pdf-page-transform.ts)
+の `pageContentTransform`)。回転した内容が枠をはみ出さないよう
 `scale = cos θ + max(w/h, h/w)·sin θ` だけ拡大し（1° で約 2.5%）、canvas の
 矩形がそのままクリップになる。これによりページ枠・影・白地は真っ直ぐな
 まま、印字だけが水平になる。
 
 pdf.js が viewport 座標でそのまま並べる `.textLayer` と `.annotationLayer`
-（スタンドアロン窓では `.pdfjs-link-layer`）には、`.pdfjs-page[data-deskew]`
-と `--deskew-rotate` / `--deskew-scale` を通じて同じ回転・拡大を CSS で掛け、
-選択範囲やリンクのヒット領域を描画と一致させる (`applyPdfPageDeskewStyle`)。
+には、`.pdfjs-page[data-content-transform]` と `--pdf-overlay-transform`
+（CSS px での同じアフィン行列）を通じて同じ変換を CSS で掛け、選択範囲や
+リンクのヒット領域を描画と一致させる (`applyPdfPageOverlayTransform`)。
+スタンドアロン窓の `.pdfjs-link-layer` はパーセント配置なので、リンク矩形を
+JS 側で同じ行列に通してから配置する (`mapRectThroughMatrix`)。
 
 ### 実行順序とキャッシュ
 
-`renderPdfRenderPlan` は本番描画の **前** に `PdfDeskewMeasurer.angleFor`
-を呼ぶ。これは長辺 640px のサンプル描画（pdf.js は画像デコード結果を
-ページ単位でキャッシュしているので安価）→ `getImageData` → 検出、という
-流れで、結果は `(filePath, pageNumber)` 単位でメモ化する。ズームや
-リサイズによる再描画はキャッシュヒットで済み、別ファイルを開くと破棄
-される。測定に失敗したページは「水平」として記憶し、描画自体は止めない。
+`renderPdfRenderPlan` は本番描画の **前** に
+[src/pdf-page-sample.ts](../src/pdf-page-sample.ts) の
+`PdfPageAnalyzer.analyze` を呼ぶ。これは長辺 640px のサンプル描画（pdf.js は
+画像デコード結果をページ単位でキャッシュしているので安価）→ `getImageData`
+→ 傾き検出とインク矩形計測（後述のトリミング用）、という流れで、結果は
+`(filePath, pageNumber)` 単位でメモ化する。ズームやリサイズによる再描画は
+キャッシュヒットで済み、別ファイルを開くと破棄される。測定に失敗した
+ページは「水平・計測なし」として記憶し、描画自体は止めない。
 
 スタンドアロン窓 ([src/main-viewer.ts](../src/main-viewer.ts)) も同じ
-measurer とスタイル関数を使う。`deskewMode` の変更はレイアウト変更扱いで
+analyzer と変換関数を使う。`deskewMode` の変更はレイアウト変更扱いで
 窓をリロードする。
 
-テストは [src/pdf-deskew.test.ts](../src/pdf-deskew.test.ts)。合成した
+テストは [src/pdf-deskew.test.ts](../src/pdf-deskew.test.ts)（合成した
 「行組み」「縦組み」画像で ±0.12° 以内に収まること、白紙 / ノイズ /
-範囲外傾きで `null` になること、変換行列が canvas の 4 隅を覆うこと、
-fake の page / canvas で measurer のキャッシュが効くことを確認している。
+範囲外傾きで `null` になること）、
+[src/pdf-page-transform.test.ts](../src/pdf-page-transform.test.ts)
+（変換行列が canvas の 4 隅を覆うこと、クロップとの合成）、
+[src/pdf-page-sample.test.ts](../src/pdf-page-sample.test.ts)（fake の
+page / canvas で analyzer のキャッシュが効くこと）。合成ページの生成は
+[src/pdf-page-fixtures.ts](../src/pdf-page-fixtures.ts) に共通化してある。
+
+---
+
+## スキャン PDF の余白トリミング (trim)
+
+### 背景
+
+裁断スキャンは紙面全体を取り込むので、画面上では印字領域の周りに何の
+情報もない余白が付く。見開き表示ではこの余白ぶんだけ本文が小さくなり、
+「幅に合わせる」では縦がウィンドウに収まらず、「高さに合わせる」では
+本文が小さくなる。ビューア設定 `trimMode` (`"off"` | `"auto"`、既定
+`"off"`、設定パネルの「余白をトリミングする」) を `"auto"` にすると、
+印字領域だけを切り出して表示する。
+
+注意: トリミングで小さくなるのは **紙面** であって、印字領域の縦横比は
+変わらない。この本 (A5 相当、柱とノンブルを含む印字領域の縦横比 ≈ 0.94)
+の見開きは幅に合わせると依然として画面高さを超える。トリミングの効果が
+出るのは「高さに合わせる」で、余白ぶんだけ本文が大きくなる
+（この本では約 11%）。
+
+### 計測: インク矩形 (`measureInkBox`)
+
+[src/pdf-trim.ts](../src/pdf-trim.ts)。傾き検出と同じ 640px サンプルから:
+
+1. 外周 2% は無視（スキャナの影を印字扱いしない）
+2. Otsu 二値化した行 / 列ごとのインク画素数を数え、閾値
+   `max(3, 長さ×0.4%)` 以上の行（列）が **2 本連続** する範囲を印字とみなす。
+   ホコリや 1px のスキャン線は矩形を広げず、3 桁のノンブル程度は印字として
+   数える
+3. 結果はページに対する比率 `{left, top, right, bottom}`
+
+傾き補正が有効なら、そのページの角度で矩形の 4 隅を回転させた外接矩形を
+使う (`rotateInkBox`)。補正後の描画位置と一致させるため。
+
+### 集約: 文書ごとに奇数 / 偶数の 2 箱 (`aggregateTrimBoxes`)
+
+ページごとに切ると本文の大きさや枠がページによって跳ぶので、文書ごとに
+1 組の箱を決める。見開きは左右で柱・ノンブル・のど余白が鏡像なので、
+左右の辺は **ページ番号の偶奇ごと** に、上下の辺は **全サンプル共通** に
+集約し、見開きの高さを揃える。
+
+各辺は「サンプルの 1/8 を外れ値として捨てた上で最も外側の値」を採る
+（16 サンプルなら 2 つ、偶奇別 8 サンプルなら 1 つ）。全面図版が 1 ページ
+混ざっても紙端まで箱が広がらず、普通のページの印字は欠けない。最後に
+1.5% のパディングを足して [0,1] にクランプし、幅か高さが 30% 未満なら
+ノイズとみなして全面 (トリミング無し) に戻す。
+
+サンプルページは `trimSamplePageNumbers`: 文書を 8 等分した位置とその
+次ページ (偶奇を必ず両方含める) の最大 16 ページ。32 ページ以下なら全部。
+
+実データ (ファウラー本 24〜29, 200〜201, 400〜401 ページ) での箱: 偶数
+`L0.02–0.06 / R0.89`、奇数 `L0.10 / R0.95–0.98`、上下 `0.065 / 0.94`。
+外側の辺 (偶数の左、奇数の右) には柱 (縦書きの見出し) とノンブルが
+紙端近くまで印字されているので、そこは削れない。
+
+### 適用とキャッシュ
+
+`renderCurrentPage` は綴じ方向の判定後、レイアウト前に
+`resolvePdfTrimBoxes` で箱を決める（進捗は "Measuring margins (n/16)..."）。
+以降のページサイズ計算 (`basePageSize`) はすべてトリミング後のサイズを使い、
+描画時は `cropRectForPage` で得た矩形を `pageContentTransform` の `crop`
+に渡す。crop 付きのときは deskew のカバースケールを掛けない（余白が
+角を隠すので不要）。
+
+計測結果は `localStorage` の `riida:pdf-trim:<filePath>` に
+`{version, pageCount, deskew, odd, even}` として保存し (valibot スキーマで
+検証)、ページ数か deskew 設定が変わると捨てる。初回オープンだけ 16 ページ
+ぶんのサンプル描画コスト (数百 ms〜1 秒程度) がかかる。
+
+テストは [src/pdf-trim.test.ts](../src/pdf-trim.test.ts) と
+[src/pdf-page-sample.test.ts](../src/pdf-page-sample.test.ts)。
 
 ---
 

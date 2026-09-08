@@ -21,6 +21,7 @@ const defaultSettings: ViewerSettings = {
   scrollMode: "continuous",
   epubFontSize: 100,
   deskewMode: "off",
+  trimMode: "off",
 };
 
 describe("applyViewerSettingsPayloadToState", () => {

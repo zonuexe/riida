@@ -2177,14 +2177,14 @@ h1 {
   background: rgb(var(--warn-rgb) / 0.18);
 }
 
-/* Deskewed scan pages (src/pdf-deskew.ts). The canvas is already drawn
-   counter-rotated through the pdf.js render transform, so the page frame,
-   its shadow, and its white ground stay square; only the overlay layers that
-   pdf.js lays out in plain viewport coordinates need the same rotation and
-   cover-scale about the page centre to stay registered with the raster. */
-.pdfjs-page[data-deskew="true"] > :is(.textLayer, .annotationLayer, .pdfjs-link-layer) {
-  transform: rotate(var(--deskew-rotate, 0deg)) scale(var(--deskew-scale, 1));
-  transform-origin: 50% 50%;
+/* Scan-corrected pages (deskew and margin trimming, src/pdf-page-transform.ts).
+   The canvas is already drawn corrected through the pdf.js render transform,
+   so the page frame, its shadow, and its white ground stay square; only the
+   overlay layers that pdf.js lays out in plain viewport coordinates need the
+   same affine map to stay registered with the raster. */
+.pdfjs-page[data-content-transform="true"] > :is(.textLayer, .annotationLayer) {
+  transform: var(--pdf-overlay-transform, none);
+  transform-origin: 0 0;
 }
 
 .pdfjs-loading {

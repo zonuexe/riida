@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-09
+
+This release is for readers of scanned books: two new viewer settings straighten each page and trim away its margins, so BOOKSCAN-style PDFs read level and fill more of the window.
+
 ### Added
 
 - Scanned PDFs can now be shown with each page straightened. A new viewer setting, "スキャンの傾きを補正する", measures how far the printed lines on a page run off-level and counter-rotates the page as it is drawn, so book scans whose sheets came through the scanner slightly askew read level. It works per page (recto and verso usually tilt in opposite directions), handles vertical Japanese text, leaves pictures and blank pages alone, and can be turned on for all PDFs or for a single book.
@@ -469,7 +473,8 @@ Thanks to [@i999rri](https://github.com/i999rri), Windows builds work again star
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/zonuexe/riida/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/zonuexe/riida/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/zonuexe/riida/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/zonuexe/riida/compare/v0.7.0...v0.8.0

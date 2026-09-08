@@ -1541,6 +1541,13 @@ fn build_file_viewer_preferences_for_storage(
     }
 }
 
+/// Write one `viewer_preferences` row exactly as given.
+///
+/// Callers own normalization: the global scope normalizes first, while the
+/// file scope passes the output of `build_file_viewer_preferences_for_storage`,
+/// whose blank string fields and `epub_font_size == 0` mean "inherit the
+/// global value" and must reach the database untouched so
+/// `merge_file_viewer_preferences` can honour them on load.
 fn save_viewer_preferences_record(
     connection: &Connection,
     scope_key: &str,
@@ -1548,7 +1555,7 @@ fn save_viewer_preferences_record(
     source_type: &str,
     preferences: ViewerPreferences,
 ) -> Result<ViewerPreferences, String> {
-    let normalized = normalize_viewer_preferences(preferences);
+    let record = preferences;
     let normalized_source_type = normalize_viewer_source_type(source_type);
     let updated_at = std::time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1592,25 +1599,25 @@ fn save_viewer_preferences_record(
                 scope_key,
                 file_path,
                 normalized_source_type,
-                normalized.page_mode,
-                normalized.binding_direction,
-                normalized.zoom_mode,
-                normalized.align_mode,
-                normalized.vertical_gap_mode,
-                if normalized.treat_first_page_as_cover {
+                record.page_mode,
+                record.binding_direction,
+                record.zoom_mode,
+                record.align_mode,
+                record.vertical_gap_mode,
+                if record.treat_first_page_as_cover {
                     1
                 } else {
                     0
                 },
-                normalized.background_mode,
-                normalized.scroll_mode,
-                normalized.epub_font_size,
+                record.background_mode,
+                record.scroll_mode,
+                record.epub_font_size,
                 updated_at
             ],
         )
         .map_err(|error| error.to_string())?;
 
-    Ok(normalized)
+    Ok(record)
 }
 
 fn load_viewer_preferences_payload(
@@ -3553,7 +3560,7 @@ fn save_default_viewer_preferences(
         &global_scope_key,
         None,
         &normalized_source_type,
-        preferences,
+        normalize_viewer_preferences(preferences),
     )?;
     load_viewer_preferences_payload(
         &connection,
@@ -6124,6 +6131,71 @@ mod tests {
         assert_eq!(payload.effective.binding_direction, "right");
         assert_eq!(payload.effective.zoom_mode, "original");
         assert_eq!(payload.effective.background_mode, "night-city");
+    }
+
+    #[test]
+    fn file_rows_saved_for_storage_keep_inheriting_later_global_changes() {
+        let connection = test_connection();
+        let global_scope_key = viewer_global_scope_key(VIEWER_SOURCE_TYPE_PDF);
+        let file_scope_key = viewer_file_scope_key("/tmp/book.pdf", VIEWER_SOURCE_TYPE_PDF);
+
+        let mut global = default_viewer_preferences();
+        global.align_mode = "left".to_string();
+        global.vertical_gap_mode = "wide".to_string();
+        save_viewer_preferences_record(
+            &connection,
+            &global_scope_key,
+            None,
+            VIEWER_SOURCE_TYPE_PDF,
+            global.clone(),
+        )
+        .expect("global preferences should save");
+
+        // The file draft starts as a copy of the effective settings and only
+        // flips the binding direction; everything else must keep following the
+        // global row rather than freezing at the built-in defaults.
+        let mut draft = global.clone();
+        draft.binding_direction = "right".to_string();
+        let stored = build_file_viewer_preferences_for_storage(&global, draft);
+        save_viewer_preferences_record(
+            &connection,
+            &file_scope_key,
+            Some("/tmp/book.pdf"),
+            VIEWER_SOURCE_TYPE_PDF,
+            stored,
+        )
+        .expect("file preferences should save");
+
+        let payload = load_viewer_preferences_payload(
+            &connection,
+            Some("/tmp/book.pdf"),
+            VIEWER_SOURCE_TYPE_PDF,
+        )
+        .expect("payload should load");
+        assert_eq!(payload.effective.binding_direction, "right");
+        assert_eq!(payload.effective.align_mode, "left");
+        assert_eq!(payload.effective.vertical_gap_mode, "wide");
+        assert_eq!(payload.effective.epub_font_size, global.epub_font_size);
+
+        let mut updated_global = global.clone();
+        updated_global.align_mode = "right".to_string();
+        save_viewer_preferences_record(
+            &connection,
+            &global_scope_key,
+            None,
+            VIEWER_SOURCE_TYPE_PDF,
+            updated_global,
+        )
+        .expect("global preferences should save");
+
+        let payload = load_viewer_preferences_payload(
+            &connection,
+            Some("/tmp/book.pdf"),
+            VIEWER_SOURCE_TYPE_PDF,
+        )
+        .expect("payload should load");
+        assert_eq!(payload.effective.binding_direction, "right");
+        assert_eq!(payload.effective.align_mode, "right");
     }
 
     #[test]

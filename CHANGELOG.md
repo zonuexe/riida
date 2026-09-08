@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Per-book viewer settings no longer quietly reset the settings you did not touch to the app defaults. Saving a per-book override used to store the untouched fields as the built-in defaults instead of leaving them to follow the global setting, so a global choice such as left-aligned pages or wide vertical gaps stopped applying to that book.
+
 ## [0.8.2] - 2026-08-22
 
 Thanks to [@i999rri](https://github.com/i999rri), Windows builds work again starting with this release.

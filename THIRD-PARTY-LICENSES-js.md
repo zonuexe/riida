@@ -169,7 +169,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @codemirror/state 6.7.1
+### @codemirror/state 6.7.4
 
 - License: MIT
 - Authors: Marijn Haverbeke <marijn@haverbeke.berlin> (http://marijnhaverbeke.nl)
@@ -201,7 +201,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @codemirror/view 6.43.9
+### @codemirror/view 6.43.11
 
 - License: MIT
 - Authors: Marijn Haverbeke <marijn@haverbeke.berlin> (http://marijnhaverbeke.nl)
@@ -326,7 +326,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @jridgewell/sourcemap-codec 1.5.5
+### @jridgewell/sourcemap-codec 1.6.0
 
 - License: MIT
 - Authors: Justin Ridgewell <justin@ridgewell.name>
@@ -1197,7 +1197,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @napi-rs/canvas 1.0.7
+### @napi-rs/canvas 1.0.8
 
 - License: MIT
 - Source: git+https://github.com/Brooooooklyn/canvas.git
@@ -1228,7 +1228,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @ocavue/utils 1.7.0
+### @ocavue/utils 1.8.0
 
 - License: MIT
 - Authors: ocavue <ocavue@gmail.com>
@@ -1296,7 +1296,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @tauri-apps/plugin-dialog 2.7.2
+### @tauri-apps/plugin-dialog 2.7.3
 
 - License: MIT OR Apache-2.0
 - Authors: Tauri Programme within The Commons Conservancy
@@ -1327,7 +1327,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/tauri.git
 Creator: Person: Daniel Thompson-Yvetot
 ```
 
-### @tauri-apps/plugin-opener 2.5.4
+### @tauri-apps/plugin-opener 2.5.5
 
 - License: MIT OR Apache-2.0
 - Authors: Tauri Programme within The Commons Conservancy
@@ -1589,7 +1589,7 @@ _No local license or notice file was found in the installed package._
     SOFTWARE
 ```
 
-### @vue/compiler-core 3.5.41
+### @vue/compiler-core 3.5.42
 
 - License: MIT
 - Authors: Evan You
@@ -1621,7 +1621,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/compiler-dom 3.5.41
+### @vue/compiler-dom 3.5.42
 
 - License: MIT
 - Authors: Evan You
@@ -1653,7 +1653,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/compiler-sfc 3.5.41
+### @vue/compiler-sfc 3.5.42
 
 - License: MIT
 - Authors: Evan You
@@ -1685,7 +1685,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/compiler-ssr 3.5.41
+### @vue/compiler-ssr 3.5.42
 
 - License: MIT
 - Authors: Evan You
@@ -1717,7 +1717,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/reactivity 3.5.41
+### @vue/reactivity 3.5.42
 
 - License: MIT
 - Authors: Evan You
@@ -1749,7 +1749,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/runtime-core 3.5.41
+### @vue/runtime-core 3.5.42
 
 - License: MIT
 - Authors: Evan You
@@ -1781,7 +1781,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/runtime-dom 3.5.41
+### @vue/runtime-dom 3.5.42
 
 - License: MIT
 - Authors: Evan You
@@ -1813,7 +1813,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/server-renderer 3.5.41
+### @vue/server-renderer 3.5.42
 
 - License: MIT
 - Authors: Evan You
@@ -1845,7 +1845,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/shared 3.5.41
+### @vue/shared 3.5.42
 
 - License: MIT
 - Authors: Evan You
@@ -2289,7 +2289,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### dompurify 3.4.14
+### dompurify 3.4.15
 
 - License: (MPL-2.0 OR Apache-2.0)
 - Authors: Dr.-Ing. Mario Heiderich, Cure53 <mario@cure53.de> (https://cure53.de/)
@@ -5500,7 +5500,7 @@ THE SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### pdfjs-dist 6.2.108
+### pdfjs-dist 6.3.289
 
 - License: Apache-2.0
 - Source: git+https://github.com/mozilla/pdf.js.git
@@ -5535,7 +5535,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
-### postcss 8.5.26
+### postcss 8.5.28
 
 - License: MIT
 - Authors: Andrey Sitnik <andrey@sitnik.es>
@@ -5978,10 +5978,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### prosemirror-transform 1.12.0
+### prosemirror-transform 1.12.1
 
 - License: MIT
-- Source: git://github.com/prosemirror/prosemirror-transform.git
+- Source: git+https://code.haverbeke.berlin/prosemirror/prosemirror-transform.git
 
 #### LICENSE
 
@@ -6007,7 +6007,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### prosemirror-view 1.42.2
+### prosemirror-view 1.42.3
 
 - License: MIT
 - Source: git+https://code.haverbeke.berlin/prosemirror/prosemirror-view.git
@@ -6474,7 +6474,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### temporal-polyfill-lite 0.4.2
+### temporal-polyfill-lite 0.4.3
 
 - License: MIT
 - Authors: fabon <syobon.hinata.public@gmail.com> (https://www.fabon.info/)
@@ -6858,7 +6858,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### vue 3.5.41
+### vue 3.5.42
 
 - License: MIT
 - Authors: Evan You

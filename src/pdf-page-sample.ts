@@ -71,6 +71,11 @@ export type PdfPageLike = {
     canvasContext?: SampleContextLike | null;
     viewport: PageViewportLike;
   }): { promise: Promise<unknown> };
+  /**
+   * Releases the page's decoded images (pdf.js `PDFPageProxy.cleanup`).
+   * Optional so tests and other callers can pass a bare page-shaped object.
+   */
+  cleanup?: (resetStats?: boolean) => boolean;
 };
 
 export type PdfDocumentLike = {
@@ -211,6 +216,11 @@ export async function resolvePdfTrimBoxes(
     }
     const page = await document.getPage(pageNumber);
     const analysis = await analyzer.analyze(page, filePath, pageNumber);
+    // Sampling a page makes pdf.js decode it in full — ~16MB for a 300dpi book
+    // scan — and it would hold that until the document closes. The samples are
+    // spread across the whole document, so almost none of them are pages about
+    // to be displayed; the analyzer keeps the measurements, not the pixels.
+    page.cleanup?.();
     if (analysis.inkBox) {
       const box =
         deskew && analysis.angleDeg !== null

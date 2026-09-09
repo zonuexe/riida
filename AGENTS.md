@@ -195,7 +195,42 @@ If you touch rendering order or page DOM structure, manually re-check:
 - restore after reopening a file
 - restore after back/forward navigation
 
+### Memory
+
+Book scans are the worst case: one large image per page, ~16MB decoded for a
+300dpi capture, over hundreds of pages. Nothing PDF.js holds is released on
+its own, so four things have to be released explicitly. Full reasoning and
+measurements: [docs/pdf.md](docs/pdf.md#メモリ使用量).
+
+- **The loading task.** `releaseActivePdfDocument()` in
+  [src/main.ts](src/main.ts) clears the session, bumps `pdfRenderToken` and
+  calls `loadingTask.destroy()`; every path that leaves a PDF goes through it.
+  Because `destroy()` rejects the page requests an abandoned render is
+  awaiting, the `catch` in `renderCurrentPage` and in
+  `updatePdfRenderWindow` must stay silent when the token has moved on —
+  without that, a window resize paints the previous render's rejection over
+  the new one.
+- **Decoded page images.** `PDFPageProxy.cleanup()` is the only way to drop
+  `page.objs`. `PdfRenderPlan.renderedPages` keeps the proxies so
+  `releasePdfRenderPlan` can release a spread that leaves the keep window,
+  and the trim pre-pass (`resolvePdfTrimBoxes`) releases each page it samples.
+- **Canvas backing stores.** Set `canvas.width = canvas.height = 0` before
+  detaching; WKWebView holds the ImageBuffer until collection otherwise.
+- **The file bytes.** Tauri's asset protocol answers `Range` requests but
+  does not advertise `Accept-Ranges` up front, so PDF.js concludes ranges are
+  unsupported and reads the whole file.
+  [src/pdf-range-source.ts](src/pdf-range-source.ts) probes for a `206` and,
+  on success, drives PDF.js through `PDFDataRangeTransport`; the probe
+  failing just falls back to the plain URL. Responses are capped at 1,024,000
+  bytes per range by Tauri, so `fetchByteRange` loops until the requested
+  extent is filled — handing PDF.js a short chunk stalls the page for good.
+
+The standalone viewer window ([src/main-viewer.ts](src/main-viewer.ts)) uses
+the same render window as the in-app viewer; it used to paint every spread in
+the document.
+
 ### Scan Corrections (Deskew, Margin Trimming)
+
 
 Two viewer preferences correct book scans (BOOKSCAN-style PDFs), both
 `"off"` | `"auto"`, default `"off"`, global or per file:

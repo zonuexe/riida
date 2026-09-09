@@ -135,6 +135,7 @@ import {
 import { detectPdfBindingDirection } from "./pdf-binding-detect";
 import { PdfPageAnalyzer, resolvePdfTrimBoxes, type PageSampleSurface } from "./pdf-page-sample";
 import { applyPdfPageOverlayTransform, pageContentTransform } from "./pdf-page-transform";
+import { createPdfRangeTransport, probePdfRangeSource } from "./pdf-range-source";
 import { cropRectForPage, trimmedPageSize, type TrimBoxes } from "./pdf-trim";
 import { buildPageGroups, getVisualPageOrder } from "./viewer-layout-utils";
 import { buildPdfRenderWindowPlan } from "./pdf-render-window-utils";
@@ -374,6 +375,18 @@ type PdfRenderPlan = {
   spreadEl: HTMLElement;
   pageSlots: Map<number, HTMLElement>;
   baseScale: number;
+  /**
+   * Page proxies of the pages painted into this group. PDF.js holds a page's
+   * decoded images in `page.objs` until `page.cleanup()` is called — for a
+   * 300dpi book scan that is ~16MB per page, retained for every page the
+   * reader has passed — so the release path needs the proxies back.
+   */
+  renderedPages: Map<number, PdfPageProxyLike>;
+};
+
+/** The part of PDF.js's `PDFPageProxy` the release path needs. */
+type PdfPageProxyLike = {
+  cleanup: (resetStats?: boolean) => boolean;
 };
 
 type PdfOutlineNode = {
@@ -500,6 +513,11 @@ let pdfRenderToken = 0;
 let pdfRenderResizeTimer: number | null = null;
 let pdfRenderInProgress = false;
 let activePdfRenderSession: PdfRenderSession | null = null;
+// The open document's PDF.js loading task. Destroying it is the only way to
+// give back the worker, the file bytes it holds and every decoded page image;
+// without it each book opened in a session stays resident for the session's
+// lifetime, which on scanned books is hundreds of megabytes apiece.
+let activePdfLoadingTask: { destroy: () => Promise<void> } | null = null;
 let epubRenderToken = 0;
 let activeEpubBook: import("epubjs").Book | null = null;
 let activeEpubRendition: import("epubjs").Rendition | null = null;
@@ -1549,15 +1567,56 @@ async function renderPdfJsLinks(
   }
 }
 
-function releasePdfRenderPlan(plan: PdfRenderPlan) {
-  for (const pageEl of plan.pageSlots.values()) {
-    if (pageEl.dataset.rendered !== "true") {
-      continue;
-    }
+/**
+ * Close whatever PDF is open and hand its memory back.
+ *
+ * PDF.js keeps everything a document needs alive until its loading task is
+ * destroyed: the dedicated worker, the document's bytes, the fonts and every
+ * page's decoded images. Leaving that to the garbage collector means a session
+ * that opens several scanned books never gives any of them back.
+ *
+ * Bumping the render token first stops any in-flight render from touching the
+ * document while it is being torn down.
+ */
+function releaseActivePdfDocument() {
+  pdfRenderToken += 1;
+  activePdfRenderSession = null;
+  const task = activePdfLoadingTask;
+  activePdfLoadingTask = null;
+  // destroy() rejects pending page requests; those rejections belong to work
+  // the bumped token has already abandoned.
+  void task?.destroy().catch(() => {});
+}
 
+/**
+ * Drop a spread out of the render window, giving back both halves of its
+ * memory: the canvas backing stores and PDF.js's decoded page images.
+ *
+ * Detaching a canvas from the DOM is not enough — WebKit keeps its ImageBuffer
+ * until the element is collected, which on a scanned book means hundreds of
+ * megabytes waiting on the GC. Resizing to 0x0 frees it at once.
+ */
+function releasePdfRenderPlan(plan: PdfRenderPlan) {
+  // Not gated on `dataset.rendered`: a page whose render threw part-way has a
+  // canvas in the DOM without ever having been marked rendered, and clearing a
+  // slot that holds nothing costs nothing.
+  for (const pageEl of plan.pageSlots.values()) {
+    for (const canvas of pageEl.querySelectorAll("canvas")) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
     pageEl.innerHTML = "";
     pageEl.dataset.rendered = "false";
   }
+
+  for (const page of plan.renderedPages.values()) {
+    // Returns false while a render task is still running on the page; the
+    // window update never releases a group it is painting, so that only
+    // happens if a render was left in flight, and the page then keeps its
+    // images until the document is closed.
+    page.cleanup();
+  }
+  plan.renderedPages.clear();
 }
 
 function currentVisiblePdfGroupIndex(session: PdfRenderSession) {
@@ -1590,6 +1649,10 @@ async function renderPdfRenderPlan(session: PdfRenderSession, plan: PdfRenderPla
     }
 
     const page = await session.pdfDocument.getPage(pageNumber);
+    // Recorded before rendering so a page abandoned part-way through — a
+    // missing 2d context, a render that threw — is still released with the
+    // group rather than keeping its decoded images for the whole session.
+    plan.renderedPages.set(pageNumber, page);
     const viewport = page.getViewport({ scale: plan.baseScale });
     // Measure the scan's tilt before the real render so the canvas is level
     // from its first paint; the analyzer caches per page, so re-renders after
@@ -1709,6 +1772,13 @@ async function updatePdfRenderWindow(session: PdfRenderSession, focusGroupIndex?
       if (session.token !== pdfRenderToken) {
         return;
       }
+    }
+  } catch (error) {
+    // Closing a document destroys its PDF.js loading task, which rejects the
+    // page and render promises this loop is waiting on. For a session the
+    // token has already moved past, that rejection is the teardown working.
+    if (session.token === pdfRenderToken) {
+      console.warn("[riida] PDF render window update failed:", error);
     }
   } finally {
     session.isUpdating = false;
@@ -5246,7 +5316,7 @@ function renderImageEpub(payload: EpubImageLayoutPayload) {
 
   // Tear down any epub.js / PDF viewer state and switch containers.
   destroyEpubBook();
-  activePdfRenderSession = null;
+  releaseActivePdfDocument();
   activePdfOutline = null;
   const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
   if (frame) {
@@ -5483,7 +5553,7 @@ async function renderCurrentPage() {
     applyEpubViewerColors(viewerSettings.backgroundMode);
     await maybeShowEpubPreviewNotice();
     destroyEpubBook();
-    activePdfRenderSession = null;
+    releaseActivePdfDocument();
     activePdfOutline = null;
     frame.hidden = true;
     frame.src = "about:blank";
@@ -5758,7 +5828,7 @@ async function renderCurrentPage() {
     applyEpubViewerColors("inherit-theme");
     applyPdfViewerBackground(viewerSettings.backgroundMode);
     syncImmediatePdfScrollMode();
-    activePdfRenderSession = null;
+    releaseActivePdfDocument();
     activePdfOutline = null;
     frame.hidden = true;
     frame.src = "about:blank";
@@ -5770,7 +5840,6 @@ async function renderCurrentPage() {
     applyViewerVerticalGapMode(viewerSettings.verticalGapMode);
 
     closePdfSearch();
-    pdfRenderToken += 1;
     pdfRenderInProgress = true;
     const currentToken = pdfRenderToken;
     const loadingEl = document.createElement("div");
@@ -5780,12 +5849,22 @@ async function renderCurrentPage() {
 
     let passwordCancelled = false;
     try {
-      const { getDocument } = await loadPdfJsRuntime();
+      const { getDocument, PDFDataRangeTransport } = await loadPdfJsRuntime();
       const filePath = viewerState.currentBook.filePath;
       const savedPassword = await invoke<string | null>("get_pdf_password", { filePath });
       let usedPassword: string | null = savedPassword;
+      // Read the document in byte ranges when the source serves them, so the
+      // worker holds the pages actually read instead of the whole file (see
+      // src/pdf-range-source.ts). Falls back to the plain URL when it cannot.
+      const rangeSource = await probePdfRangeSource(sourceUrl, fetch);
+      if (!rangeSource) {
+        console.info("[riida] PDF source does not serve byte ranges; reading the whole file");
+      }
       const documentTask = getDocument({
-        url: sourceUrl,
+        ...(rangeSource
+          ? { range: createPdfRangeTransport(PDFDataRangeTransport, sourceUrl, rangeSource, fetch) }
+          : { url: sourceUrl }),
+        disableAutoFetch: true,
         cMapUrl: "/pdfjs/cmaps/node_modules/pdfjs-dist/cmaps/",
         cMapPacked: true,
         standardFontDataUrl: "/pdfjs/standard_fonts/node_modules/pdfjs-dist/standard_fonts/",
@@ -5807,6 +5886,17 @@ async function renderCurrentPage() {
         useWorkerFetch: false,
         password: savedPassword ?? undefined,
       });
+
+      // Owned from here on, so switching books or leaving the viewer gives the
+      // document's worker, bytes and decoded pages back. `releaseActivePdfDocument`
+      // may already have run during the awaits above, in which case this task
+      // is stale and goes straight back.
+      if (currentToken !== pdfRenderToken) {
+        void documentTask.destroy().catch(() => {});
+        return;
+      }
+      activePdfLoadingTask = documentTask;
+
       documentTask.onPassword = async (updatePassword: (pw: string) => void, reason: number) => {
         // reason 1 = needs password, reason 2 = wrong password
         const isRetry = reason === 2;
@@ -5953,7 +6043,14 @@ async function renderCurrentPage() {
 
         if (currentToken !== pdfRenderToken) return;
         pdfjsViewerEl.appendChild(spreadEl);
-        renderPlans.push({ groupIndex, visualOrder, spreadEl, pageSlots, baseScale });
+        renderPlans.push({
+          groupIndex,
+          visualOrder,
+          spreadEl,
+          pageSlots,
+          baseScale,
+          renderedPages: new Map(),
+        });
       }
 
       const targetGroupIndex =
@@ -6005,7 +6102,14 @@ async function renderCurrentPage() {
         navigateBack();
         return;
       }
+      // A render the token has moved past fails by design: closing its
+      // document destroys the loading task and rejects whatever it awaited.
+      // The viewer now belongs to a newer render, so leave its DOM alone.
+      if (currentToken !== pdfRenderToken) {
+        return;
+      }
       pdfjsViewerEl.innerHTML = "";
+
       const errorEl = document.createElement("div");
       errorEl.className = "pdfjs-loading";
       const msg = String(error);
@@ -6024,8 +6128,7 @@ async function renderCurrentPage() {
   }
 
   closePdfSearch();
-  pdfRenderToken += 1;
-  activePdfRenderSession = null;
+  releaseActivePdfDocument();
   activePdfOutline = null;
   applyEpubViewerColors("inherit-theme");
   applyPdfViewerBackground("inherit-theme");

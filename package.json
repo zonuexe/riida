@@ -63,7 +63,7 @@
     "@wdio/mocha-framework": "^9.27.2",
     "@wdio/spec-reporter": "^9.27.2",
     "fast-check": "^4.7.0",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.0.1",
     "knip": "^6.8.0",
     "license-checker": "^25.0.1",
     "oxfmt": "^0.57.0",

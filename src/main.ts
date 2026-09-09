@@ -1002,8 +1002,16 @@ const CUSTOM_SOURCE_ICONS: Array<{ cls: string; label: string }> = [
   { cls: "fa-brands fa-pixiv", label: "Pixiv" },
 ];
 
-const PDF_RENDER_RADIUS = 2;
-const PDF_KEEP_RADIUS = 3;
+// How far around the reading position spreads are painted, and how far a
+// painted one stays. Both cost memory — a spread of a 300dpi book scan is
+// about 17MB of canvas plus 32MB of decoded image — so the window is kept
+// narrow. The render radius is one spread of prefetch, which is what paged
+// reading consumes. The keep radius is deliberately the larger of the two:
+// spreads between the two radii stay painted without being maintained, so
+// stepping back through the book is instant rather than a repaint.
+const PDF_RENDER_RADIUS = 1;
+const PDF_KEEP_RADIUS = 2;
+
 let lastViewportSize = {
   width: window.innerWidth,
   height: window.innerHeight,

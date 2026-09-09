@@ -353,6 +353,22 @@ planner を使って同じ半径でウィンドウ描画します。spread の�
 `height: calc(100vh - 56px)` で中身に依存しないので、未描画でもスクロール
 レイアウトは確定しており、位置復元は canvas の有無に影響されません。
 
+### 半径の選び方
+
+`PDF_RENDER_RADIUS = 1` / `PDF_KEEP_RADIUS = 2`。
+
+- **render 半径 1** = 前後 1 spread ぶんの先読み。既定の `scrollMode: "paged"`
+  は 1 spread 単位で送るので、次に来る spread は必ず描画済みになります。
+- **keep 半径 2 > render 半径 1** の非対称性は意図的です。2 つの半径の間に
+  ある spread は「描画済みだが更新対象外」として DOM に残るので、1 つ前に
+  戻ったときに再描画が発生しません。両方を 1 にすると 1 spread 戻るたびに
+  JPEG 再デコードが走ります。
+
+半径は**描画品質には影響しません**。1 ページの解像度は `baseScale`
+（ズーム / フィット設定）× `outputScale`（`devicePixelRatio`）で決まり、
+半径は「どの spread を描くか」しか決めません。半径を変えて変わるのは、
+高速スクロール時に白いページが見える頻度と、戻ったときの再描画コストです。
+
 ---
 
 ## メモリ使用量
@@ -410,6 +426,25 @@ pdf.js はページのデコード済み画像を `PDFPageProxy.objs` に置き�
 ImageBuffer を要素が回収されるまで抱えます。捨てる前に
 `canvas.width = canvas.height = 0` を入れると即座に解放されます。
 
+サイズの決め方も 2 系統で違います。アプリ内ビューアは `baseScale` を
+ビューアの寸法（fit-width / fit-height）から出すので、canvas は元から
+画面基準です。一方、別ウィンドウビューアは `getViewport({ scale: 2.0 })`
+と固定倍率をページの寸法に掛けていたため、**画面上の表示サイズが同じでも
+判型が大きいほど canvas が大きく**なっていました（B4 の画集や 600dpi
+スキャンで文庫の数倍）。
+
+現在は [src/main-viewer.ts](../src/main-viewer.ts) の `pdfCanvasBudget()` が
+「この画面でページが取り得る最大の高さ」（`screen.height × devicePixelRatio`）
+を出し、`canvasRenderScale`
+([src/pdf-page-transform.ts](../src/pdf-page-transform.ts)) がページごとに
+その高さへ合わせる倍率を返します。ウィンドウは描画後に最大化され得るうえ
+表示サイズは CSS が決めるので、現在の寸法ではなく画面基準にしています。
+
+倍率の上限は旧来の固定値 `CANVAS_RENDER_SCALE × devicePixelRatio` に据えて
+あります。これが「純粋な削減」であることを担保する部分で、**どのページも
+以前より高い解像度にはならず**、過剰に描いていた大判ページだけが下がります
+（上限を外すと文庫は逆にシャープになる代わりにメモリが増えます）。
+
 ### 全体ダウンロードを避ける (レンジ読み込み)
 
 Tauri の asset プロトコルは **range ヘッダが付いたリクエストへの応答にしか
@@ -447,7 +482,6 @@ worker 側はストリームを集め直して `LocalPdfManager` に渡すため
 ---
 
 ## 見開き (spread) レイアウトと visualPageOrder
-
 
 [src/viewer-layout-utils.ts](../src/viewer-layout-utils.ts) の
 `buildPageGroups` と `getVisualPageOrder` で見開きグルーピングを決めます。

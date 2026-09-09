@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyPdfPageOverlayTransform,
+  canvasRenderScale,
   deskewTransformForAngle,
   mapRectThroughMatrix,
   matrixToCss,
@@ -23,6 +24,35 @@ const invert = (matrix: Matrix6) => {
     y: (-b * (x - e) + a * (y - f)) / determinant,
   });
 };
+
+describe("canvasRenderScale", () => {
+  it("scales a page to the requested canvas height", () => {
+    expect(586 * canvasRenderScale(586, 2160)).toBeCloseTo(2160, 6);
+  });
+
+  it("costs the same for every paper size, which is the point", () => {
+    // A4-ish and B4-ish pages, both drawn to the same height on screen.
+    const a4 = 842 * canvasRenderScale(842, 2160);
+    const b4 = 1030 * canvasRenderScale(1030, 2160);
+    expect(a4).toBeCloseTo(b4, 6);
+  });
+
+  it("never exceeds the fixed scale it replaces, so no page is drawn larger", () => {
+    // A bunko page would ask for 5.1x; the ceiling is what makes this a saving.
+    expect(canvasRenderScale(420, 2160)).toBe(4);
+    expect(canvasRenderScale(420, 2160, { max: 2 })).toBe(2);
+  });
+
+  it("clamps a page that would be drawn too soft", () => {
+    expect(canvasRenderScale(100000, 2160)).toBe(0.25);
+    expect(canvasRenderScale(100000, 2160, { min: 0.5 })).toBe(0.5);
+  });
+
+  it("tolerates degenerate inputs rather than dividing by zero", () => {
+    expect(canvasRenderScale(0, 0)).toBe(1);
+    expect(Number.isFinite(canvasRenderScale(-10, -10))).toBe(true);
+  });
+});
 
 describe("deskewTransformForAngle", () => {
   it("is the identity for a level page", () => {

@@ -42,6 +42,29 @@ export type PageContentTransform = {
 
 const DEG_TO_RAD = Math.PI / 180;
 
+/**
+ * Render scale for a page whose canvas should come out `targetHeightPx` tall.
+ *
+ * A canvas costs four bytes per pixel, so deriving its size from the page's own
+ * dimensions makes the cost depend on the paper rather than on the screen: a
+ * B4 art book or a 600dpi capture pays several times what a paperback page
+ * pays at the same size on screen. Sizing from the height the canvas will
+ * actually occupy instead makes the cost per page uniform.
+ *
+ * `limits.max` is what keeps this a saving rather than a trade: set to the
+ * fixed scale it replaces, no page is ever drawn at a higher resolution than
+ * before, and only the pages that were being over-rendered come down.
+ * `limits.min` keeps a poster-sized sheet from going blurry.
+ */
+export function canvasRenderScale(
+  pageHeight: number,
+  targetHeightPx: number,
+  limits: { min?: number; max?: number } = {},
+): number {
+  const scale = Math.max(targetHeightPx, 1) / Math.max(pageHeight, 1);
+  return Math.min(Math.max(scale, limits.min ?? 0.25), limits.max ?? 4);
+}
+
 export type DeskewTransform = {
   /** CSS rotation, in degrees, that levels the content. */
   rotateDeg: number;

@@ -34,6 +34,7 @@ import { detectPdfBindingDirection } from "./pdf-binding-detect";
 import { PdfPageAnalyzer, resolvePdfTrimBoxes, type PageSampleSurface } from "./pdf-page-sample";
 import {
   applyPdfPageOverlayTransform,
+  canvasRenderScale,
   mapRectThroughMatrix,
   pageContentTransform,
   type PageContentTransform,
@@ -151,18 +152,47 @@ type PdfDocumentLike = Awaited<
 >;
 type PdfPage = Awaited<ReturnType<PdfDocumentLike["getPage"]>>;
 
-// Pick a backing-buffer resolution that stays crisp when CSS upscales it to
-// fit a large window. The viewer window can be maximized after the canvases
-// are rendered, so we give ourselves headroom and let CSS handle the actual
-// display size.
+// The viewport scale page canvases used to be rendered at, flat for every page.
+// It is now the ceiling rather than the value (see pdfCanvasBudget), so no page
+// is drawn at a higher resolution than it was before.
 const CANVAS_RENDER_SCALE = 2.0;
+
+type PdfCanvasBudget = {
+  /** Height, in device pixels, a page canvas is rendered to. */
+  heightPx: number;
+  /** Ceiling on the render scale, so a small page is never enlarged. */
+  maxScale: number;
+};
+
+/**
+ * How much raster a page canvas may have in this window.
+ *
+ * CSS — not the canvas size — decides how large a page is drawn here
+ * (`height: calc(100vh - 56px)` on the spread, see styles.css), and the window
+ * can be maximized after a page is painted, so the height comes from the
+ * tallest a page can become on this screen rather than from its current size.
+ * Sizing every canvas to that height makes the cost per page uniform; the old
+ * flat `CANVAS_RENDER_SCALE` applied to the page's own dimensions, so a
+ * large-format scan cost several times a paperback page's canvas at the same
+ * size on screen.
+ */
+function pdfCanvasBudget(): PdfCanvasBudget {
+  const devicePixelRatio = Math.max(window.devicePixelRatio || 1, 1);
+  const displayHeight = Math.max(window.screen?.height || 0, window.innerHeight, 600);
+  return {
+    heightPx: displayHeight * devicePixelRatio,
+    maxScale: CANVAS_RENDER_SCALE * devicePixelRatio,
+  };
+}
 
 // How far around the reading position spreads are painted, and how far they
 // stay painted. Every painted page holds a canvas backing store plus, inside
 // PDF.js, the page's decoded images, so the window is bounded rather than
-// spanning the document; the radii match the in-app viewer's.
-const PDF_RENDER_RADIUS = 2;
-const PDF_KEEP_RADIUS = 3;
+// spanning the document. The radii match the in-app viewer's, including the
+// asymmetry: spreads between the two stay painted without being maintained, so
+// stepping back through the book does not repaint.
+const PDF_RENDER_RADIUS = 1;
+const PDF_KEEP_RADIUS = 2;
 
 // Scan analysis for deskew and margin trimming (viewer settings "deskewMode"
 // and "trimMode"); mirrors the in-app viewer's analyzer in src/main.ts.
@@ -175,13 +205,18 @@ const pdfPageAnalyzer = new PdfPageAnalyzer((): PageSampleSurface | null => {
 async function renderPdfPageCanvas(
   page: PdfPage,
   pageNumber: number,
-  devicePixelRatio: number,
+  budget: PdfCanvasBudget,
   pdfDocument: PdfDocumentLike,
   onInternalLink: (pageNumber: number) => void,
   deskewFilePath: string | null,
   trimBoxes: TrimBoxes | null,
 ): Promise<HTMLElement> {
-  const viewport = page.getViewport({ scale: CANVAS_RENDER_SCALE });
+  // The device-pixel multiplier is already folded into the scale, so the
+  // content transform needs none and the canvas is exactly the content's size.
+  const scale = canvasRenderScale(page.getViewport({ scale: 1 }).height, budget.heightPx, {
+    max: budget.maxScale,
+  });
+  const viewport = page.getViewport({ scale });
   // With deskew on, measure the scan's tilt first so the canvas is drawn level
   // from its first paint (see src/pdf-deskew.ts).
   const deskewAngle = deskewFilePath
@@ -190,7 +225,8 @@ async function renderPdfPageCanvas(
   const content = pageContentTransform({
     width: viewport.width,
     height: viewport.height,
-    outputScale: devicePixelRatio,
+    outputScale: 1,
+
     angleDeg: deskewAngle,
     crop: cropRectForPage(trimBoxes, pageNumber, viewport),
   });
@@ -205,8 +241,9 @@ async function renderPdfPageCanvas(
   applyPdfPageOverlayTransform(pageEl, content.overlay);
 
   const canvas = document.createElement("canvas");
-  canvas.width = Math.floor(content.contentWidth * devicePixelRatio);
-  canvas.height = Math.floor(content.contentHeight * devicePixelRatio);
+  canvas.width = Math.floor(content.contentWidth);
+  canvas.height = Math.floor(content.contentHeight);
+
   // Intentionally do not set canvas.style.width / .style.height; CSS in the
   // viewer-window scope sizes the canvas via max-height / max-width.
   pageEl.appendChild(canvas);
@@ -1605,7 +1642,8 @@ async function renderPdfDocument(
   viewerEl.dataset.filePath = filePath;
   viewerEl.hidden = false;
 
-  const devicePixelRatio = window.devicePixelRatio || 1;
+  const canvasBudget = pdfCanvasBudget();
+
   const spreadIndex: SpreadIndexEntry[] = [];
   const spreadVisualOrders: number[][] = [];
 
@@ -1670,8 +1708,9 @@ async function renderPdfDocument(
       const pageEl = await renderPdfPageCanvas(
         page,
         pageNumber,
-        devicePixelRatio,
+        canvasBudget,
         pdfDocument,
+
         navigation.jumpToPage,
         preferences.deskewMode === "auto" ? filePath : null,
         trimBoxes,

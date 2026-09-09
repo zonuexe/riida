@@ -215,7 +215,13 @@ measurements: [docs/pdf.md](docs/pdf.md#メモリ使用量).
   `releasePdfRenderPlan` can release a spread that leaves the keep window,
   and the trim pre-pass (`resolvePdfTrimBoxes`) releases each page it samples.
 - **Canvas backing stores.** Set `canvas.width = canvas.height = 0` before
-  detaching; WKWebView holds the ImageBuffer until collection otherwise.
+  detaching; WKWebView holds the ImageBuffer until collection otherwise. Their
+  size is display-driven in both viewers: the in-app one gets it from
+  `baseScale` (fit-width / fit-height), and the standalone window from
+  `pdfCanvasBudget()` + `canvasRenderScale`, capped at the flat scale it
+  replaced so no page is drawn larger than before and only over-rendered
+  large-format pages come down.
+
 - **The file bytes.** Tauri's asset protocol answers `Range` requests but
   does not advertise `Accept-Ranges` up front, so PDF.js concludes ranges are
   unsupported and reads the whole file.
@@ -229,8 +235,16 @@ The standalone viewer window ([src/main-viewer.ts](src/main-viewer.ts)) uses
 the same render window as the in-app viewer; it used to paint every spread in
 the document.
 
-### Scan Corrections (Deskew, Margin Trimming)
+`PDF_RENDER_RADIUS` (1) is one spread of prefetch, which is what the default
+paged scroll mode consumes; `PDF_KEEP_RADIUS` (2) is deliberately larger, so
+spreads between the two stay painted without being maintained and stepping back
+through a book does not repaint. Neither radius affects how a page looks — a
+page's resolution is `baseScale × outputScale` — so they trade memory against
+repaint frequency only. Capping `outputScale` would be the quality-affecting
+knob; that decision is open in
+[#22](https://github.com/zonuexe/riida/issues/22).
 
+### Scan Corrections (Deskew, Margin Trimming)
 
 Two viewer preferences correct book scans (BOOKSCAN-style PDFs), both
 `"off"` | `"auto"`, default `"off"`, global or per file:

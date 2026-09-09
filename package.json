@@ -68,7 +68,7 @@
     "license-checker": "^25.0.1",
     "oxfmt": "^0.67.0",
     "oxlint": "^1.58.0",
-    "typescript": "~6.0.0",
+    "typescript": "~7.0.0",
     "vite": "^8.0.0",
     "vite-plugin-static-copy": "^4.0.0",
     "vitest": "^5.0.0"

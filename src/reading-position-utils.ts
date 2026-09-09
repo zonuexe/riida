@@ -63,15 +63,13 @@ const cachedReadingPositionSchema = v.pipe(
     cfi: v.optional(v.nullable(v.string()), null),
     updatedAt: v.nullable(v.number(), null),
   }),
-  v.transform(
-    (parsed): ReadingPositionLike => ({
-      filePath: parsed.filePath,
-      pageNumber: parsed.pageNumber,
-      pageOffsetRatio: clampReadingPositionOffsetRatio(parsed.pageOffsetRatio),
-      cfi: typeof parsed.cfi === "string" ? parsed.cfi : null,
-      updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : null,
-    }),
-  ),
+  v.transform((parsed): ReadingPositionLike => ({
+    filePath: parsed.filePath,
+    pageNumber: parsed.pageNumber,
+    pageOffsetRatio: clampReadingPositionOffsetRatio(parsed.pageOffsetRatio),
+    cfi: typeof parsed.cfi === "string" ? parsed.cfi : null,
+    updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : null,
+  })),
 );
 
 export function parseCachedReadingPosition(rawValue: string | null): ReadingPositionLike | null {

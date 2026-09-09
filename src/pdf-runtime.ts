@@ -10,6 +10,8 @@ type BinaryDataKind = "cMapUrl" | "standardFontDataUrl" | "wasmUrl";
 export type PdfJsRuntime = {
   TextLayer: typeof import("pdfjs-dist").TextLayer;
   getDocument: typeof import("pdfjs-dist").getDocument;
+  /** Base class for range-loaded sources; see src/pdf-range-source.ts. */
+  PDFDataRangeTransport: typeof import("pdfjs-dist").PDFDataRangeTransport;
 };
 
 /**
@@ -81,6 +83,7 @@ export async function loadPdfJsRuntime(): Promise<PdfJsRuntime> {
     return {
       TextLayer: runtime.TextLayer,
       getDocument: runtime.getDocument,
+      PDFDataRangeTransport: runtime.PDFDataRangeTransport,
     };
   });
 

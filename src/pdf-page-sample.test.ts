@@ -7,8 +7,8 @@ import {
   renderPageSample,
   resolvePdfTrimBoxes,
   type PdfDocumentLike,
-  type PdfPageLike,
 } from "./pdf-page-sample";
+
 import {
   blankPage,
   fakePage,
@@ -142,12 +142,15 @@ describe("resolvePdfTrimBoxes", () => {
     };
   }
 
-  function fakeDocument(numPages: number): PdfDocumentLike & { requested: number[] } {
+  function fakeDocument(
+    numPages: number,
+  ): PdfDocumentLike & { requested: number[]; pages: Map<number, ReturnType<typeof fakePage>> } {
     const requested: number[] = [];
-    const pages = new Map<number, PdfPageLike>();
+    const pages = new Map<number, ReturnType<typeof fakePage>>();
     return {
       numPages,
       requested,
+      pages,
       getPage: async (pageNumber) => {
         requested.push(pageNumber);
         let page = pages.get(pageNumber);
@@ -200,6 +203,22 @@ describe("resolvePdfTrimBoxes", () => {
       storage,
     });
     expect(again).toEqual(boxes);
+  });
+
+  it("releases every sampled page, so the pre-pass leaves no decoded images behind", async () => {
+    const document = fakeDocument(120);
+    await resolvePdfTrimBoxes({
+      document,
+      filePath: "/books/released.pdf",
+      deskew: false,
+      analyzer: analyzerFor(0),
+      storage: memoryStorage(),
+    });
+
+    expect(document.pages.size).toBeGreaterThan(0);
+    for (const page of document.pages.values()) {
+      expect(page.cleanups).toBe(1);
+    }
   });
 
   it("widens the boxes for the rotation when deskew is on", async () => {

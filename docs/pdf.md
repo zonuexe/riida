@@ -348,6 +348,137 @@ PDF が数百ページに及ぶことは普通なので、全ページを一度�
 が新しいウィンドウを計算し、外に出た plan は `releasePdfRenderPlan` で
 canvas / textLayer を廃棄します。
 
+別ウィンドウビューア ([src/main-viewer.ts](../src/main-viewer.ts)) も同じ
+planner を使って同じ半径でウィンドウ描画します。spread の高さは
+`height: calc(100vh - 56px)` で中身に依存しないので、未描画でもスクロール
+レイアウトは確定しており、位置復元は canvas の有無に影響されません。
+
+### 半径の選び方
+
+`PDF_RENDER_RADIUS = 1` / `PDF_KEEP_RADIUS = 2`。
+
+- **render 半径 1** = 前後 1 spread ぶんの先読み。既定の `scrollMode: "paged"`
+  は 1 spread 単位で送るので、次に来る spread は必ず描画済みになります。
+- **keep 半径 2 > render 半径 1** の非対称性は意図的です。2 つの半径の間に
+  ある spread は「描画済みだが更新対象外」として DOM に残るので、1 つ前に
+  戻ったときに再描画が発生しません。両方を 1 にすると 1 spread 戻るたびに
+  JPEG 再デコードが走ります。
+
+半径は**描画品質には影響しません**。1 ページの解像度は `baseScale`
+（ズーム / フィット設定）× `outputScale`（`devicePixelRatio`）で決まり、
+半径は「どの spread を描くか」しか決めません。半径を変えて変わるのは、
+高速スクロール時に白いページが見える頻度と、戻ったときの再描画コストです。
+
+---
+
+## メモリ使用量
+
+自炊 PDF は 1 ページが 1 枚の大きなスキャン画像なので、pdf.js の既定の
+挙動をそのまま使うとメモリが素直に積み上がります。実測例として
+`1625 × 2441` RGB JPEG / 300dpi / 376 ページ / 126 MB のスキャン本では、
+1 ページのデコード済みビットマップだけで約 16 MB あります。
+
+効いているのは次の 3 か所で、いずれも「放っておくと解放されない」ものです。
+
+### 1. ドキュメントの loading task
+
+`getDocument()` が返す loading task を `destroy()` するまで、pdf.js は
+専用 Web Worker・ファイルのバイト列・全ページのデコード済み画像を保持し
+続けます。本を閉じても別の本に移っても解放されないので、1 セッションで
+数冊開くとそのぶん丸ごと residents になります。
+
+`releaseActivePdfDocument()` ([src/main.ts](../src/main.ts)) が
+`activePdfRenderSession` のクリアと loading task の `destroy()` をまとめて
+行い、PDF ビューアを離れる経路すべて（別の本、EPUB、画像 EPUB、native
+レンダラ）がここを通ります。`pdfRenderToken` の加算も同じ関数に入れて、
+破棄中のドキュメントに進行中のレンダーが触れないようにしています。
+
+`destroy()` は保留中のページ要求を reject するので、**破棄されたセッション
+側の catch は「失敗」として扱ってはいけません**。`renderCurrentPage` の
+catch と `updatePdfRenderWindow` の catch は、どちらも token が進んでいたら
+黙って戻ります。ここを外すと、ウィンドウリサイズのたびに前のレンダーの
+reject が新しいレンダーの DOM をエラー表示で上書きします。
+
+### 2. ページのデコード済み画像 (`page.objs`)
+
+pdf.js はページのデコード済み画像を `PDFPageProxy.objs` に置き、
+`page.cleanup()` が呼ばれるまで解放しません（`PDFObjects.clear()` が
+`ImageBitmap.close()` まで面倒を見ます）。`objs` の中身を個別に捨てる仕組み
+はフォントのグリフパス以外に無く、`WorkerTransport` はページプロキシを
+永久にキャッシュするので、**読んだページの枚数 × 16 MB がそのまま残ります**。
+
+そのため:
+
+- `PdfRenderPlan.renderedPages` に描画したページプロキシを持たせ、
+  `releasePdfRenderPlan` でキープ半径の外に出たときに `cleanup()` する。
+  プロキシは `getPage()` の直後に登録するので、2d コンテキストが取れずに
+  途中で抜けたページも取りこぼしません。
+- トリミングの事前パス (`resolvePdfTrimBoxes`) も、サンプルしたページを
+  測り終えたら `cleanup()` する。サンプルは文書全体に散らしたページなので、
+  直後に表示される見込みはほぼありません。測定結果は `PdfPageAnalyzer` の
+  メモに残るため、再サンプルは発生しません。
+
+`cleanup()` は描画タスクが走っている間は `false` を返して何もしません。
+
+### 3. canvas のバッキングストア
+
+`innerHTML = ""` で DOM から外しただけでは、WKWebView は canvas の
+ImageBuffer を要素が回収されるまで抱えます。捨てる前に
+`canvas.width = canvas.height = 0` を入れると即座に解放されます。
+
+サイズの決め方も 2 系統で違います。アプリ内ビューアは `baseScale` を
+ビューアの寸法（fit-width / fit-height）から出すので、canvas は元から
+画面基準です。一方、別ウィンドウビューアは `getViewport({ scale: 2.0 })`
+と固定倍率をページの寸法に掛けていたため、**画面上の表示サイズが同じでも
+判型が大きいほど canvas が大きく**なっていました（B4 の画集や 600dpi
+スキャンで文庫の数倍）。
+
+現在は [src/main-viewer.ts](../src/main-viewer.ts) の `pdfCanvasBudget()` が
+「この画面でページが取り得る最大の高さ」（`screen.height × devicePixelRatio`）
+を出し、`canvasRenderScale`
+([src/pdf-page-transform.ts](../src/pdf-page-transform.ts)) がページごとに
+その高さへ合わせる倍率を返します。ウィンドウは描画後に最大化され得るうえ
+表示サイズは CSS が決めるので、現在の寸法ではなく画面基準にしています。
+
+倍率の上限は旧来の固定値 `CANVAS_RENDER_SCALE × devicePixelRatio` に据えて
+あります。これが「純粋な削減」であることを担保する部分で、**どのページも
+以前より高い解像度にはならず**、過剰に描いていた大判ページだけが下がります
+（上限を外すと文庫は逆にシャープになる代わりにメモリが増えます）。
+
+### 全体ダウンロードを避ける (レンジ読み込み)
+
+Tauri の asset プロトコルは **range ヘッダが付いたリクエストへの応答にしか
+`Accept-Ranges` を付けません**
+([tauri/src/protocol/asset.rs](https://github.com/tauri-apps/tauri))。
+pdf.js の `validateRangeRequestCapabilities` は最初のレスポンスのヘッダを
+見て判断するので、range 非対応と結論して全体をダウンロードします。しかも
+worker 側はストリームを集め直して `LocalPdfManager` に渡すため、オープン時に
+ファイルサイズの数倍がピークで乗ります。
+
+一方、asset プロトコルは range 自体は普通に処理します。そこで
+[src/pdf-range-source.ts](../src/pdf-range-source.ts) が自前で
+`Range: bytes=0-65535` を投げて確かめ、`206` と `Content-Range` が返れば
+`PDFDataRangeTransport` 経由で読みます。判定に失敗したら従来どおり `url`
+を渡すだけなので、この経路が原因で開けなくなることはありません。
+
+注意点:
+
+- **1 レスポンスは 1,024,000 バイトで打ち切られます**（asset.rs の
+  `MAX_LEN`）。pdf.js は未取得の連続チャンクをまとめて 1 回で要求してくる
+  ので、数 MB の要求が普通に来ます。短い応答をそのまま `onDataRange` に
+  渡すと、pdf.js は最初のチャンクを答え全体とみなし、残りが永久に埋まらず
+  ページが止まります。`fetchByteRange` は実際に返ってきた長さぶんだけ
+  カーソルを進めながら要求範囲が埋まるまでループします。
+- プローブの 64 KB がそのまま `initialData` になり、`progressiveDone: true`
+  で「順次読みはこれで終わり」と伝えます。以降はすべて range 要求です。
+- worker 側は `disableAutoFetch ||= isStreamingSupported` により自動で
+  先読みを切りますが、意図を明示するため `getDocument` にも渡しています。
+- `ChunkedStream` は `new Uint8Array(length)` を最初に確保します。触って
+  いないページはゼロページのままなので RSS は取得済みバイト数に比例します
+  が、仮想サイズはファイルサイズぶん出ます。
+- xref が壊れていて `recoverXref` に落ちると `requestAllChunks()` で全体を
+  取りに行きます。これは意図した縮退動作です。
+
 ---
 
 ## 見開き (spread) レイアウトと visualPageOrder

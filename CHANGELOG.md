@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Large PDFs — book scans above all — now use much less memory and open faster. riida reads only the parts of a file it needs instead of the whole thing, gives back a page once it scrolls well out of view, and releases a book completely when you close it or open another, so memory no longer climbs through a reading session. Pages you scroll back to are drawn again rather than kept, which can take a moment on a large scan.
+- The separate viewer window no longer draws every page of a book before you can read it. Like the main window, it now draws the pages around where you are, so a long book opens quickly instead of working through hundreds of pages in the background. It also stops drawing large-format books — art books, oversized scans — at a far higher resolution than the screen can show, which was costing several times what an ordinary page costs to look no different.
+
 ## [0.9.0] - 2026-09-09
 
 This release is for readers of scanned books: two new viewer settings straighten each page and trim away its margins, so BOOKSCAN-style PDFs read level and fill more of the window.

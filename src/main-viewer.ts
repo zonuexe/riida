@@ -34,10 +34,12 @@ import { detectPdfBindingDirection } from "./pdf-binding-detect";
 import { PdfPageAnalyzer, resolvePdfTrimBoxes, type PageSampleSurface } from "./pdf-page-sample";
 import {
   applyPdfPageOverlayTransform,
+  canvasRenderScale,
   mapRectThroughMatrix,
   pageContentTransform,
   type PageContentTransform,
 } from "./pdf-page-transform";
+import { createPdfRangeTransport, probePdfRangeSource } from "./pdf-range-source";
 import { cropRectForPage, type TrimBoxes } from "./pdf-trim";
 import {
   resolvePdfLinkTarget,
@@ -150,11 +152,47 @@ type PdfDocumentLike = Awaited<
 >;
 type PdfPage = Awaited<ReturnType<PdfDocumentLike["getPage"]>>;
 
-// Pick a backing-buffer resolution that stays crisp when CSS upscales it to
-// fit a large window. The viewer window can be maximized after the canvases
-// are rendered, so we give ourselves headroom and let CSS handle the actual
-// display size.
+// The viewport scale page canvases used to be rendered at, flat for every page.
+// It is now the ceiling rather than the value (see pdfCanvasBudget), so no page
+// is drawn at a higher resolution than it was before.
 const CANVAS_RENDER_SCALE = 2.0;
+
+type PdfCanvasBudget = {
+  /** Height, in device pixels, a page canvas is rendered to. */
+  heightPx: number;
+  /** Ceiling on the render scale, so a small page is never enlarged. */
+  maxScale: number;
+};
+
+/**
+ * How much raster a page canvas may have in this window.
+ *
+ * CSS — not the canvas size — decides how large a page is drawn here
+ * (`height: calc(100vh - 56px)` on the spread, see styles.css), and the window
+ * can be maximized after a page is painted, so the height comes from the
+ * tallest a page can become on this screen rather than from its current size.
+ * Sizing every canvas to that height makes the cost per page uniform; the old
+ * flat `CANVAS_RENDER_SCALE` applied to the page's own dimensions, so a
+ * large-format scan cost several times a paperback page's canvas at the same
+ * size on screen.
+ */
+function pdfCanvasBudget(): PdfCanvasBudget {
+  const devicePixelRatio = Math.max(window.devicePixelRatio || 1, 1);
+  const displayHeight = Math.max(window.screen?.height || 0, window.innerHeight, 600);
+  return {
+    heightPx: displayHeight * devicePixelRatio,
+    maxScale: CANVAS_RENDER_SCALE * devicePixelRatio,
+  };
+}
+
+// How far around the reading position spreads are painted, and how far they
+// stay painted. Every painted page holds a canvas backing store plus, inside
+// PDF.js, the page's decoded images, so the window is bounded rather than
+// spanning the document. The radii match the in-app viewer's, including the
+// asymmetry: spreads between the two stay painted without being maintained, so
+// stepping back through the book does not repaint.
+const PDF_RENDER_RADIUS = 1;
+const PDF_KEEP_RADIUS = 2;
 
 // Scan analysis for deskew and margin trimming (viewer settings "deskewMode"
 // and "trimMode"); mirrors the in-app viewer's analyzer in src/main.ts.
@@ -167,13 +205,18 @@ const pdfPageAnalyzer = new PdfPageAnalyzer((): PageSampleSurface | null => {
 async function renderPdfPageCanvas(
   page: PdfPage,
   pageNumber: number,
-  devicePixelRatio: number,
+  budget: PdfCanvasBudget,
   pdfDocument: PdfDocumentLike,
   onInternalLink: (pageNumber: number) => void,
   deskewFilePath: string | null,
   trimBoxes: TrimBoxes | null,
 ): Promise<HTMLElement> {
-  const viewport = page.getViewport({ scale: CANVAS_RENDER_SCALE });
+  // The device-pixel multiplier is already folded into the scale, so the
+  // content transform needs none and the canvas is exactly the content's size.
+  const scale = canvasRenderScale(page.getViewport({ scale: 1 }).height, budget.heightPx, {
+    max: budget.maxScale,
+  });
+  const viewport = page.getViewport({ scale });
   // With deskew on, measure the scan's tilt first so the canvas is drawn level
   // from its first paint (see src/pdf-deskew.ts).
   const deskewAngle = deskewFilePath
@@ -182,7 +225,8 @@ async function renderPdfPageCanvas(
   const content = pageContentTransform({
     width: viewport.width,
     height: viewport.height,
-    outputScale: devicePixelRatio,
+    outputScale: 1,
+
     angleDeg: deskewAngle,
     crop: cropRectForPage(trimBoxes, pageNumber, viewport),
   });
@@ -197,8 +241,9 @@ async function renderPdfPageCanvas(
   applyPdfPageOverlayTransform(pageEl, content.overlay);
 
   const canvas = document.createElement("canvas");
-  canvas.width = Math.floor(content.contentWidth * devicePixelRatio);
-  canvas.height = Math.floor(content.contentHeight * devicePixelRatio);
+  canvas.width = Math.floor(content.contentWidth);
+  canvas.height = Math.floor(content.contentHeight);
+
   // Intentionally do not set canvas.style.width / .style.height; CSS in the
   // viewer-window scope sizes the canvas via max-height / max-width.
   pageEl.appendChild(canvas);
@@ -1538,10 +1583,20 @@ async function renderPdfDocument(
   scrollEl: HTMLElement,
 ): Promise<RenderedPdf> {
   const sourceUrl = convertFileSrc(filePath);
-  const { getDocument } = await loadPdfJsRuntime();
+  const { getDocument, PDFDataRangeTransport } = await loadPdfJsRuntime();
 
+  // Read the document in byte ranges when the source serves them, so the
+  // worker holds the pages actually read instead of the whole file (see
+  // src/pdf-range-source.ts). Falls back to the plain URL when it cannot.
+  const rangeSource = await probePdfRangeSource(sourceUrl, fetch);
+  if (!rangeSource) {
+    console.info("[riida] PDF source does not serve byte ranges; reading the whole file");
+  }
   const documentTask = getDocument({
-    url: sourceUrl,
+    ...(rangeSource
+      ? { range: createPdfRangeTransport(PDFDataRangeTransport, sourceUrl, rangeSource, fetch) }
+      : { url: sourceUrl }),
+    disableAutoFetch: true,
     cMapUrl: "/pdfjs/cmaps/node_modules/pdfjs-dist/cmaps/",
     cMapPacked: true,
     standardFontDataUrl: "/pdfjs/standard_fonts/node_modules/pdfjs-dist/standard_fonts/",
@@ -1587,7 +1642,8 @@ async function renderPdfDocument(
   viewerEl.dataset.filePath = filePath;
   viewerEl.hidden = false;
 
-  const devicePixelRatio = window.devicePixelRatio || 1;
+  const canvasBudget = pdfCanvasBudget();
+
   const spreadIndex: SpreadIndexEntry[] = [];
   const spreadVisualOrders: number[][] = [];
 
@@ -1634,21 +1690,41 @@ async function renderPdfDocument(
   const targetEntry = cached ? findSpreadForPage(spreadIndex, cached.pageNumber) : null;
   const targetGroupIndex = targetEntry ? Math.max(0, spreadIndex.indexOf(targetEntry)) : 0;
 
+  // Painted spreads, each holding the page proxies whose decoded images PDF.js
+  // keeps until they are cleaned up. Presence in the map also means "already
+  // painted, or being painted", which keeps concurrent window updates from
+  // drawing a spread twice.
+  const renderedSpreads = new Map<number, PdfPage[]>();
+
   const renderSpread = async (groupIndex: number): Promise<void> => {
     const entry = spreadIndex[groupIndex];
     const visualOrder = spreadVisualOrders[groupIndex];
-    if (!entry || !visualOrder) return;
+    if (!entry || !visualOrder || renderedSpreads.has(groupIndex)) return;
+    const pages: PdfPage[] = [];
+    renderedSpreads.set(groupIndex, pages);
     for (const pageNumber of visualOrder) {
       const page = await pdfDocument.getPage(pageNumber);
+      pages.push(page);
       const pageEl = await renderPdfPageCanvas(
         page,
         pageNumber,
-        devicePixelRatio,
+        canvasBudget,
         pdfDocument,
+
         navigation.jumpToPage,
         preferences.deskewMode === "auto" ? filePath : null,
         trimBoxes,
       );
+      // The spread may have left the window while this page was rendering, in
+      // which case releaseSpread has already cleaned up what is on screen and
+      // this canvas would be an orphan holding its backing store.
+      if (!renderedSpreads.has(groupIndex)) {
+        for (const canvas of pageEl.querySelectorAll("canvas")) {
+          canvas.width = 0;
+          canvas.height = 0;
+        }
+        return;
+      }
       entry.spreadEl.appendChild(pageEl);
     }
     // Both pages of the spread are in the DOM, so the canvases have their final
@@ -1656,22 +1732,77 @@ async function renderPdfDocument(
     syncPdfLinkLayers(entry.spreadEl);
   };
 
-  // buildPdfRenderWindowPlan with a radius spanning every spread yields a
-  // distance-ordered sweep: the target spread first, then alternating
-  // neighbours outward.
-  const { renderOrder } = buildPdfRenderWindowPlan(
-    spreadIndex.length,
-    targetGroupIndex,
-    spreadIndex.length,
-    spreadIndex.length,
-  );
-  const [firstGroup, ...remainingGroups] = renderOrder;
+  // Give back both halves of a spread's memory: the canvas backing stores,
+  // which WebKit holds until the detached elements are collected unless they
+  // are resized to nothing first, and the pages' decoded images. The spread
+  // element keeps its 100vh height either way, so the scroll layout is
+  // unaffected and the spread repaints when it comes back into the window.
+  const releaseSpread = (groupIndex: number): void => {
+    const pages = renderedSpreads.get(groupIndex);
+    const entry = spreadIndex[groupIndex];
+    if (!pages || !entry) return;
+    renderedSpreads.delete(groupIndex);
+    for (const canvas of entry.spreadEl.querySelectorAll("canvas")) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    entry.spreadEl.innerHTML = "";
+    for (const page of pages) {
+      page.cleanup();
+    }
+  };
+
+  let windowUpdateRunning = false;
+  let windowUpdatePending = false;
+
+  // Paint the spreads around the reading position and drop the rest. Runs one
+  // at a time; a request that arrives mid-update is collapsed into a single
+  // follow-up so a fast scroll does not queue a pass per frame.
+  const updateRenderWindow = async (focusIndex?: number): Promise<void> => {
+    if (windowUpdateRunning) {
+      windowUpdatePending = true;
+      return;
+    }
+    windowUpdateRunning = true;
+    try {
+      const activeIndex = focusIndex ?? Math.max(findCurrentSpreadIndex(scrollEl, spreadIndex), 0);
+      const plan = buildPdfRenderWindowPlan(
+        spreadIndex.length,
+        activeIndex,
+        PDF_RENDER_RADIUS,
+        PDF_KEEP_RADIUS,
+      );
+      for (const groupIndex of renderedSpreads.keys()) {
+        if (groupIndex < plan.keepMin || groupIndex > plan.keepMax) {
+          // releaseSpread deletes the entry the iterator is sitting on, which
+          // Map iteration defines as safe.
+          releaseSpread(groupIndex);
+        }
+      }
+
+      for (const groupIndex of plan.renderOrder) {
+        // A scroll that arrived while the previous page was rendering has
+        // already queued the pass that supersedes this one — painting the rest
+        // of a window the reader has left only delays the one they are on.
+        if (windowUpdatePending) {
+          break;
+        }
+        await renderSpread(groupIndex);
+      }
+    } catch (error) {
+      console.warn("[riida] viewer window: page rendering stopped:", error);
+    } finally {
+      windowUpdateRunning = false;
+    }
+    if (windowUpdatePending) {
+      windowUpdatePending = false;
+      void updateRenderWindow();
+    }
+  };
 
   // Await only the target spread so the window becomes usable as soon as the
-  // requested page is on screen; paint the rest in the background.
-  if (firstGroup !== undefined) {
-    await renderSpread(firstGroup);
-  }
+  // requested page is on screen; its neighbours follow in the background.
+  await renderSpread(targetGroupIndex);
 
   // The status overlay sits above the viewer in normal flow; hide it before
   // measuring spread offsets so the restored scroll position is accurate.
@@ -1681,15 +1812,21 @@ async function renderPdfDocument(
   scrollEl.dataset.scrollMode = preferences.scrollMode;
   restoreScrollAfterRender(scrollEl, cached, targetEntry);
 
-  void (async () => {
-    try {
-      for (const groupIndex of remainingGroups) {
-        await renderSpread(groupIndex);
-      }
-    } catch (error) {
-      console.warn("[riida] viewer window: background page rendering stopped:", error);
-    }
-  })();
+  let windowUpdateScheduled = false;
+  scrollEl.addEventListener(
+    "scroll",
+    () => {
+      if (windowUpdateScheduled) return;
+      windowUpdateScheduled = true;
+      requestAnimationFrame(() => {
+        windowUpdateScheduled = false;
+        void updateRenderWindow();
+      });
+    },
+    { passive: true },
+  );
+
+  void updateRenderWindow(targetGroupIndex);
 
   return { spreadIndex, bindingDirection: resolvedBinding };
 }

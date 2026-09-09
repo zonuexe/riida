@@ -133,9 +133,12 @@ export function fakePage(
   baseWidth: number,
   baseHeight: number,
   onRender?: (viewport: PageViewportLike) => Promise<unknown>,
-): PdfPageLike & { renders: PageViewportLike[] } {
+): PdfPageLike & { renders: PageViewportLike[]; cleanups: number } {
   const page = {
     renders: [] as PageViewportLike[],
+    // Counts pdf.js `PDFPageProxy.cleanup()` calls, which is how callers give
+    // back a page's decoded images.
+    cleanups: 0,
     getViewport: ({ scale }: { scale: number }) => ({
       width: baseWidth * scale,
       height: baseHeight * scale,
@@ -143,6 +146,10 @@ export function fakePage(
     render: ({ viewport }: { viewport: PageViewportLike }) => {
       page.renders.push(viewport);
       return { promise: onRender ? onRender(viewport) : Promise.resolve() };
+    },
+    cleanup: () => {
+      page.cleanups += 1;
+      return true;
     },
   };
   return page;

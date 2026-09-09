@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-09
+
+A book now costs a fraction of the memory it used to while you read it, and a long one opens without drawing itself out first.
+
 ### Changed
 
 - Large PDFs — book scans above all — now use much less memory and open faster. riida reads only the parts of a file it needs instead of the whole thing, gives back a page once it scrolls well out of view, and releases a book completely when you close it or open another, so memory no longer climbs through a reading session. Pages you scroll back to are drawn again rather than kept, which can take a moment on a large scan.
@@ -478,7 +482,8 @@ Thanks to [@i999rri](https://github.com/i999rri), Windows builds work again star
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/zonuexe/riida/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/zonuexe/riida/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/zonuexe/riida/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/zonuexe/riida/compare/v0.8.0...v0.8.1

@@ -15570,7 +15570,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### rustls 0.23.44
+### rustls 0.23.45
 
 - License: Apache-2.0 OR ISC OR MIT
 - Source: https://github.com/rustls/rustls

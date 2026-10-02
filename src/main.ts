@@ -588,7 +588,7 @@ let pdfZoomScale = 1;
 let lastAppConfig: AppConfigPayload | null = null;
 let cachedHomeDir: string | null = null;
 let cachedAppName = "riida";
-let cachedAppVersion = "0.9.1";
+let cachedAppVersion = "0.9.2";
 const buildDate = __BUILD_DATE__;
 let cachedLicenseText = "Loading license text...";
 let cachedThirdPartyRustText = "Loading Rust notices...";
@@ -4424,7 +4424,9 @@ async function applyNavigationState(state: NavigationState) {
   ensureExpandedPath(state.activeDirectory);
   ensureExpandedTag(state.activeTag);
 
-  if (nextBook) {
+  // A non-openable (external) book has nothing to render; never hand its
+  // synthetic `kindle:` path to the PDF or EPUB viewer.
+  if (nextBook?.isOpenable) {
     // Fast path: same EPUB book already rendered — jump directly via CFI
     // to avoid destroying and re-creating the rendition.
     if (
@@ -7255,6 +7257,13 @@ function openFulltextHit(
   filePath: string,
   location: { kind: "metadata" | "note" | "body"; page: number | null; anchor: string | null },
 ) {
+  // External books (Kindle) have no viewer; activate them the way the library
+  // list does, by opening the metadata editor instead of navigating.
+  const book = lastSnapshot?.books.find((candidate) => candidate.filePath === filePath);
+  if (book && !book.isOpenable) {
+    void openBookMetadataEditor(book);
+    return;
+  }
   const target = jumpTargetForHit(location);
   pendingViewerJump = target ? { filePath, page: target.page, cfi: target.cfi } : null;
   void navigateToState(

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-03
+
+Kindle books that turn up in a full-text search now open the way they do from the library.
+
+### Fixed
+
+- Clicking a Kindle book in the full-text search results no longer fails with a PDF loading error. Like a Kindle book in the library list, it now opens its metadata editor.
+
+### Security
+
+- Updated the bundled rustls TLS library to 0.23.45, which fixes RUSTSEC-2026-0285.
+
 ## [0.9.1] - 2026-09-09
 
 A book now costs a fraction of the memory it used to while you read it, and a long one opens without drawing itself out first.
@@ -482,7 +494,8 @@ Thanks to [@i999rri](https://github.com/i999rri), Windows builds work again star
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/zonuexe/riida/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/zonuexe/riida/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/zonuexe/riida/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/zonuexe/riida/compare/v0.8.1...v0.8.2

@@ -573,11 +573,16 @@ If schema semantics change, consider migration behavior early.
 Cross-library full-text search over book body (PDF/EPUB), notes, metadata,
 and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-search-design.md).
 
-- **Engine:** [tantivy](https://github.com/quickwit-oss/tantivy) `0.25` with a
-  [lindera](https://github.com/lindera/lindera) IPADIC tokenizer (registered as
-  `lang_ja`, `embed-ipadic`). These are pinned to the matched set
-  `lindera-tantivy 2.0.0` requires; newer tantivy/lindera are not usable until
-  lindera-tantivy targets them.
+- **Engine:** [tantivy](https://github.com/quickwit-oss/tantivy) `0.27` with a
+  [lindera](https://github.com/lindera/lindera) `6` IPADIC tokenizer (registered
+  as `lang_ja`, `embed-ipadic`). The tantivy adapter (`LinderaTokenizer` in
+  `fulltext.rs`) is in-tree rather than the `lindera-tantivy` crate:
+  lindera-tantivy lags tantivy by a major version, and its tantivy dependency
+  (default features) dragged the vulnerable `zstd 0.13` back into the tree.
+  tantivy and lindera can therefore be upgraded independently; the adapter only
+  depends on `tantivy::tokenizer` (`tantivy-tokenizer-api`) and
+  `Segmenter::segment`. lindera-ipadic's build script downloads the IPADIC
+  tarball, so a cold build needs network access.
 - **PDF text:** [pdfium-render](https://github.com/ajrcarey/pdfium-render) with
   runtime dynamic binding (no build-time linking). `bind_pdfium` resolves
   libpdfium from `PDFIUM_LIB_DIR` (the Nix dev shell sets it to nixpkgs

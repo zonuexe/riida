@@ -325,6 +325,32 @@ Sidebar collapse toggle:
 - When the sidebar is collapsed, the same button sits half-buried in the screen's left edge so it remains discoverable without floating freely in the reading stage
 - The half-buried geometry doubles as the left-alignment baseline for other left-edge overlay chrome
 
+### First-run welcome and folder drops
+
+Pattern:
+
+- Until a library folder exists, the home view is replaced by one centered
+  frosted panel: kicker, hero-size title, a short lead, a dashed drop zone, and
+  a single primary `Choose a folder…` pill
+- Settings no longer opens by itself on first launch; adding the first folder
+  is the welcome screen's job
+- Settings can reopen the same screen at any time (`Open welcome screen` under
+  Library roots); opened that way it gains a secondary `Back to library` pill
+  and closes on its own once a folder is added
+- Folders can be dropped anywhere in the main window, on the welcome screen or
+  later; each drop is added and scanned immediately, with no save step
+
+Behavior:
+
+- While a folder is dragged over the window, a lightly blurred scrim shows a
+  dashed card describing the drop; on the welcome screen the drop zone also
+  takes an accent wash
+- Progress and outcomes stay quiet: on the welcome screen they use its inline
+  status line; elsewhere the overlay shrinks to a small status pill at the
+  bottom that fades out after a few seconds
+- Drops are ignored while the Settings sheet is open, since it edits its own
+  draft of the folder list
+
 ### Panels
 
 Pattern:

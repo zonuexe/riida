@@ -905,6 +905,25 @@ Current scope is intentionally narrow:
 
 This keeps adoption simple while still covering the main frontend code path.
 
+## Frontend Localization
+
+[src/i18n.ts](src/i18n.ts) picks the UI language from the OS locale
+(`navigator.languages`; Japanese or English, English otherwise) and holds the
+message catalogs. Only the first-run flow (welcome screen, folder drops, the
+Settings entry that reopens it) is translated so far; the rest of the shell
+keeps its fixed copy.
+
+- Static markup keeps its English text and carries `data-i18n="<key>"`;
+  `applyStaticTranslations()` in [src/main.ts](src/main.ts) swaps it at startup
+  and sets `<html lang>`.
+- Dynamic text goes through `t(key, params)`; `{name}`-style placeholders are
+  filled from `params`.
+- The `ja` catalog is typed against the `en` keys, so a missing translation is
+  a type error.
+- Backend errors meant for the user are returned as structured values (for
+  example `add_library_root`'s `{ kind, reason }`) and worded on the frontend,
+  not formatted in Rust.
+
 ## Frontend Boundary Schemas
 
 External payloads parsed by the frontend (cached `localStorage`

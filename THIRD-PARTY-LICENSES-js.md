@@ -2,13 +2,46 @@
 
 This file was generated from the production (bundled) JavaScript dependencies used by riida. Dev-only tooling is excluded.
 
-- npm dependencies: 195
+- npm dependencies: 201
 
 _Regenerate with `npm run generate:third-party-licenses` inside the Nix development shell._
 
 ## npm Dependencies
 
-### @babel/helper-string-parser 7.29.7
+### @babel/helper-string-parser 7.29.11
+
+- License: MIT
+- Authors: The Babel Team (https://babel.dev/team)
+- Source: https://github.com/babel/babel.git
+
+#### LICENSE
+
+```text
+MIT License
+
+Copyright (c) 2014-present Sebastian McKenzie and other contributors
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+### @babel/helper-string-parser 7.29.11
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -74,37 +107,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/parser 7.29.8
-
-- License: MIT
-- Authors: The Babel Team (https://babel.dev/team)
-- Source: https://github.com/babel/babel.git
-
-#### LICENSE
-
-```text
-Copyright (C) 2012-2014 by various contributors (see AUTHORS)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-```
-
-### @babel/types 7.29.8
+### @babel/helper-validator-identifier 7.29.7
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -137,7 +140,133 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @codemirror/language 6.12.4
+### @babel/parser 7.29.11
+
+- License: MIT
+- Authors: The Babel Team (https://babel.dev/team)
+- Source: https://github.com/babel/babel.git
+
+#### LICENSE
+
+```text
+Copyright (C) 2012-2014 by various contributors (see AUTHORS)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```
+
+### @babel/parser 7.29.11
+
+- License: MIT
+- Authors: The Babel Team (https://babel.dev/team)
+- Source: https://github.com/babel/babel.git
+
+#### LICENSE
+
+```text
+Copyright (C) 2012-2014 by various contributors (see AUTHORS)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```
+
+### @babel/types 7.29.11
+
+- License: MIT
+- Authors: The Babel Team (https://babel.dev/team)
+- Source: https://github.com/babel/babel.git
+
+#### LICENSE
+
+```text
+MIT License
+
+Copyright (c) 2014-present Sebastian McKenzie and other contributors
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+### @babel/types 7.29.11
+
+- License: MIT
+- Authors: The Babel Team (https://babel.dev/team)
+- Source: https://github.com/babel/babel.git
+
+#### LICENSE
+
+```text
+MIT License
+
+Copyright (c) 2014-present Sebastian McKenzie and other contributors
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+### @codemirror/language 6.13.1
 
 - License: MIT
 - Authors: Marijn Haverbeke <marijn@haverbeke.berlin> (http://marijnhaverbeke.nl)
@@ -169,7 +298,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @codemirror/state 6.7.4
+### @codemirror/state 6.7.6
 
 - License: MIT
 - Authors: Marijn Haverbeke <marijn@haverbeke.berlin> (http://marijnhaverbeke.nl)
@@ -201,7 +330,39 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @codemirror/view 6.43.11
+### @codemirror/streamparser 6.0.0
+
+- License: MIT
+- Authors: Marijn Haverbeke <marijn@haverbeke.berlin> (http://marijnhaverbeke.nl)
+- Source: git+https://code.haverbeke.berlin/codemirror/streamparser.git
+
+#### LICENSE
+
+```text
+MIT License
+
+Copyright (C) 2018-2021 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```
+
+### @codemirror/view 6.43.15
 
 - License: MIT
 - Authors: Marijn Haverbeke <marijn@haverbeke.berlin> (http://marijnhaverbeke.nl)
@@ -356,11 +517,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @lezer/common 1.5.2
+### @lezer/common 1.5.4
 
 - License: MIT
 - Authors: Marijn Haverbeke <marijn@haverbeke.berlin>
-- Source: https://github.com/lezer-parser/common.git
+- Source: git+https://code.haverbeke.berlin/lezer/common.git
 
 #### LICENSE
 
@@ -388,11 +549,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @lezer/highlight 1.2.3
+### @lezer/highlight 1.2.5
 
 - License: MIT
 - Authors: Marijn Haverbeke <marijn@haverbeke.berlin>
-- Source: https://github.com/lezer-parser/highlight.git
+- Source: git+https://code.haverbeke.berlin/lezer/highlight.git
 
 #### LICENSE
 
@@ -420,7 +581,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @lezer/lr 1.4.10
+### @lezer/lr 1.4.11
 
 - License: MIT
 - Authors: Marijn Haverbeke <marijn@haverbeke.berlin>
@@ -484,7 +645,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @milkdown/components 7.22.1
+### @milkdown/components 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -515,7 +676,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/core 7.22.1
+### @milkdown/core 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -546,7 +707,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/ctx 7.22.1
+### @milkdown/ctx 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -577,7 +738,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/exception 7.22.1
+### @milkdown/exception 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -608,7 +769,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/kit 7.22.1
+### @milkdown/kit 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -639,7 +800,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/plugin-block 7.22.1
+### @milkdown/plugin-block 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -670,7 +831,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/plugin-clipboard 7.22.1
+### @milkdown/plugin-clipboard 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -701,7 +862,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/plugin-cursor 7.22.1
+### @milkdown/plugin-cursor 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -732,7 +893,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/plugin-diff 7.22.1
+### @milkdown/plugin-diff 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -763,7 +924,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/plugin-history 7.22.1
+### @milkdown/plugin-history 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -794,7 +955,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/plugin-indent 7.22.1
+### @milkdown/plugin-indent 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -825,7 +986,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/plugin-listener 7.22.1
+### @milkdown/plugin-listener 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -856,7 +1017,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/plugin-slash 7.22.1
+### @milkdown/plugin-slash 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -887,7 +1048,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/plugin-streaming 7.22.1
+### @milkdown/plugin-streaming 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -918,7 +1079,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/plugin-tooltip 7.22.1
+### @milkdown/plugin-tooltip 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -949,7 +1110,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/plugin-trailing 7.22.1
+### @milkdown/plugin-trailing 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -980,7 +1141,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/plugin-upload 7.22.1
+### @milkdown/plugin-upload 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -1011,7 +1172,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/preset-commonmark 7.22.1
+### @milkdown/preset-commonmark 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -1042,7 +1203,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/preset-gfm 7.22.1
+### @milkdown/preset-gfm 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -1073,7 +1234,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/prose 7.22.1
+### @milkdown/prose 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -1104,7 +1265,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/theme-nord 7.22.1
+### @milkdown/theme-nord 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -1135,7 +1296,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/transformer 7.22.1
+### @milkdown/transformer 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -1166,7 +1327,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @milkdown/utils 7.22.1
+### @milkdown/utils 7.23.0
 
 - License: MIT
 - Source: git+https://github.com/Milkdown/milkdown.git
@@ -1197,7 +1358,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @napi-rs/canvas 1.0.8
+### @napi-rs/canvas 1.0.13
 
 - License: MIT
 - Source: git+https://github.com/Brooooooklyn/canvas.git
@@ -1226,9 +1387,43 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+src/svg_doc/broken_image.png is Chromium's broken-image icon
+(third_party/blink/public/default_100_percent/blink/broken_image.png),
+used under the Chromium license:
+
+Copyright 2015 The Chromium Authors
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google LLC nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### @ocavue/utils 1.8.0
+### @ocavue/utils 1.9.0
 
 - License: MIT
 - Authors: ocavue <ocavue@gmail.com>
@@ -1260,17 +1455,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @tauri-apps/api 2.11.1
+### @tauri-apps/api 2.12.4
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
 - Source: git+https://github.com/tauri-apps/tauri.git
 
-#### LICENSE_APACHE-2.0
+#### LICENSE-APACHE-2.0
 
 _See the [full text of the Apache License 2.0](#apache-20)._
 
-#### LICENSE_MIT
+#### LICENSE-MIT
 
 ```text
 MIT License
@@ -1296,7 +1491,32 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @tauri-apps/plugin-dialog 2.7.3
+#### LICENSE.spdx
+
+```text
+SPDXVersion: SPDX-2.1
+DataLicense: CC0-1.0
+PackageName: tauri
+DataFormat: SPDXRef-1
+PackageSupplier: Organization: The Tauri Programme in the Commons Conservancy
+PackageHomePage: https://tauri.app
+PackageLicenseDeclared: Apache-2.0
+PackageLicenseDeclared: MIT
+PackageCopyrightText: 2019-2025, The Tauri Programme in the Commons Conservancy
+PackageSummary: <text>Tauri is a rust project that enables developers to make secure
+and small desktop applications using a web frontend.
+                </text>
+PackageComment: <text>The package includes the following libraries; see
+Relationship information.
+                </text>
+Created: 2019-05-20T09:00:00Z
+PackageDownloadLocation: git://github.com/tauri-apps/tauri
+PackageDownloadLocation: git+https://github.com/tauri-apps/tauri.git
+PackageDownloadLocation: git+ssh://github.com/tauri-apps/tauri.git
+Creator: Person: Daniel Thompson-Yvetot
+```
+
+### @tauri-apps/plugin-dialog 2.8.3
 
 - License: MIT OR Apache-2.0
 - Authors: Tauri Programme within The Commons Conservancy
@@ -1327,7 +1547,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/tauri.git
 Creator: Person: Daniel Thompson-Yvetot
 ```
 
-### @tauri-apps/plugin-opener 2.5.5
+### @tauri-apps/plugin-opener 2.7.2
 
 - License: MIT OR Apache-2.0
 - Authors: Tauri Programme within The Commons Conservancy
@@ -1397,7 +1617,7 @@ Creator: Person: Daniel Thompson-Yvetot
 
 _No local license or notice file was found in the installed package._
 
-### @types/lodash 4.17.25
+### @types/lodash 4.17.27
 
 - License: MIT
 - Authors: Brian Zengel (https://github.com/bczengel), Ilya Mochalov (https://github.com/chrootsu), AJ Richardson (https://github.com/aj-r), e-cloud (https://github.com/e-cloud), Jack Moore (https://github.com/jtmthf), Dominique Rau (https://github.com/DomiR), William Chelman (https://github.com/WilliamChelman)
@@ -1589,7 +1809,7 @@ _No local license or notice file was found in the installed package._
     SOFTWARE
 ```
 
-### @vue/compiler-core 3.5.42
+### @vue/compiler-core 3.5.44
 
 - License: MIT
 - Authors: Evan You
@@ -1621,7 +1841,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/compiler-dom 3.5.42
+### @vue/compiler-dom 3.5.44
 
 - License: MIT
 - Authors: Evan You
@@ -1653,7 +1873,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/compiler-sfc 3.5.42
+### @vue/compiler-sfc 3.5.44
 
 - License: MIT
 - Authors: Evan You
@@ -1685,7 +1905,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/compiler-ssr 3.5.42
+### @vue/compiler-ssr 3.5.44
 
 - License: MIT
 - Authors: Evan You
@@ -1717,7 +1937,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/reactivity 3.5.42
+### @vue/reactivity 3.5.44
 
 - License: MIT
 - Authors: Evan You
@@ -1749,7 +1969,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/runtime-core 3.5.42
+### @vue/runtime-core 3.5.44
 
 - License: MIT
 - Authors: Evan You
@@ -1781,7 +2001,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/runtime-dom 3.5.42
+### @vue/runtime-dom 3.5.44
 
 - License: MIT
 - Authors: Evan You
@@ -1813,7 +2033,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/server-renderer 3.5.42
+### @vue/server-renderer 3.5.44
 
 - License: MIT
 - Authors: Evan You
@@ -1845,7 +2065,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/shared 3.5.42
+### @vue/shared 3.5.44
 
 - License: MIT
 - Authors: Evan You
@@ -2014,7 +2234,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### core-js 3.50.0
+### core-js 3.51.0
 
 - License: MIT
 - Authors: Denis Pushkarev <zloirock@zloirock.ru> (http://zloirock.ru)
@@ -2289,7 +2509,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### dompurify 3.4.15
+### dompurify 3.4.17
 
 - License: (MPL-2.0 OR Apache-2.0)
 - Authors: Dr.-Ing. Mario Heiderich, Cure53 <mario@cure53.de> (https://cure53.de/)
@@ -3076,7 +3296,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 _No local license or notice file was found in the installed package._
 
-### jszip 3.10.1
+### jszip 3.10.2
 
 - License: (MIT OR GPL-3.0-or-later)
 - Authors: Stuart Knightley <stuart@stuartk.com>
@@ -4023,7 +4243,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### mdast-util-find-and-replace 3.0.2
+### mdast-util-find-and-replace 3.0.4
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -4056,7 +4276,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### mdast-util-from-markdown 2.0.3
+### mdast-util-from-markdown 2.1.0
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -4188,7 +4408,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### mdast-util-gfm-strikethrough 2.0.0
+### mdast-util-gfm-strikethrough 2.0.1
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -4199,7 +4419,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```text
 (The MIT License)
 
-Copyright (c) 2020 Titus Wormer <tituswormer@gmail.com>
+Copyright (c) Titus Wormer <tituswormer@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -4321,7 +4541,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### mdast-util-to-markdown 2.1.2
+### mdast-util-to-markdown 2.2.1
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -4387,7 +4607,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### micromark 4.0.2
+### micromark 4.0.3
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -4420,7 +4640,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### micromark-core-commonmark 2.0.3
+### micromark-core-commonmark 2.0.4
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -4585,7 +4805,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### micromark-extension-gfm-table 2.1.1
+### micromark-extension-gfm-table 2.1.2
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -4750,7 +4970,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### micromark-factory-space 2.0.1
+### micromark-factory-space 2.1.0
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -5047,6 +5267,39 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+### micromark-util-edit-map 1.0.0
+
+- License: MIT
+- Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
+- Source: https://github.com/micromark/micromark/tree/main/packages/micromark-util-edit-map
+
+#### license
+
+```text
+(The MIT License)
+
+Copyright (c) Titus Wormer <tituswormer@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+'Software'), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
 ### micromark-util-encode 2.0.1
 
 - License: MIT
@@ -5278,7 +5531,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### micromark-util-types 2.0.2
+### micromark-util-types 2.0.3
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -5342,7 +5595,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### nanoid 3.3.18
+### nanoid 3.3.20
 
 - License: MIT
 - Authors: Andrey Sitnik <andrey@sitnik.ru>
@@ -5373,7 +5626,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### nanoid 6.0.1
+### nanoid 6.0.2
 
 - License: MIT
 - Authors: Andrey Sitnik <andrey@sitnik.es>
@@ -5500,7 +5753,7 @@ THE SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### pdfjs-dist 6.3.289
+### pdfjs-dist 6.4.299
 
 - License: Apache-2.0
 - Source: git+https://github.com/mozilla/pdf.js.git
@@ -5535,7 +5788,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
-### postcss 8.5.28
+### postcss 8.5.32
 
 - License: MIT
 - Authors: Andrey Sitnik <andrey@sitnik.es>
@@ -5595,7 +5848,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.**
 ```
 
-### prosemirror-changeset 2.4.2
+### prosemirror-changeset 2.4.4
 
 - License: MIT
 - Source: git+https://code.haverbeke.berlin/prosemirror/prosemirror-changeset.git
@@ -5685,7 +5938,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### prosemirror-dropcursor 1.8.3
+### prosemirror-dropcursor 1.8.4
 
 - License: MIT
 - Source: git+https://code.haverbeke.berlin/prosemirror/prosemirror-dropcursor.git
@@ -5743,10 +5996,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### prosemirror-history 1.5.0
+### prosemirror-history 1.5.1
 
 - License: MIT
-- Source: git://github.com/prosemirror/prosemirror-history.git
+- Source: git+https://code.haverbeke.berlin/prosemirror/prosemirror-history.git
 
 #### LICENSE
 
@@ -5830,7 +6083,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### prosemirror-model 1.25.11
+### prosemirror-model 1.25.12
 
 - License: MIT
 - Source: git+https://code.haverbeke.berlin/prosemirror/prosemirror-model.git
@@ -5978,7 +6231,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### prosemirror-transform 1.12.1
+### prosemirror-transform 1.12.4
 
 - License: MIT
 - Source: git+https://code.haverbeke.berlin/prosemirror/prosemirror-transform.git
@@ -6007,7 +6260,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### prosemirror-view 1.42.3
+### prosemirror-view 1.42.8
 
 - License: MIT
 - Source: git+https://code.haverbeke.berlin/prosemirror/prosemirror-view.git
@@ -6348,7 +6601,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### source-map-js 1.2.1
+### source-map-js 1.2.2
 
 - License: BSD-3-Clause
 - Authors: Valentin 7rulnik Semirulnik <v7rulnik@gmail.com>
@@ -6444,11 +6697,11 @@ IN THE SOFTWARE.
 """
 ```
 
-### style-mod 4.1.3
+### style-mod 4.1.4
 
 - License: MIT
 - Authors: Marijn Haverbeke <marijn@haverbeke.berlin>
-- Source: git+https://github.com/marijnh/style-mod.git
+- Source: git+https://code.haverbeke.berlin/marijn/style-mod.git
 
 #### LICENSE
 
@@ -7112,7 +7365,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### unist-util-visit 5.1.0
+### unist-util-visit 5.2.0
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -7123,7 +7376,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```text
 (The MIT License)
 
-Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com>
+Copyright (c) Titus Wormer <tituswormer@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -7145,7 +7398,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### unist-util-visit-parents 6.0.2
+### unist-util-visit-parents 6.1.0
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -7156,7 +7409,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```text
 (The MIT License)
 
-Copyright (c) 2016 Titus Wormer <tituswormer@gmail.com>
+Copyright (c) Titus Wormer <tituswormer@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -7213,7 +7466,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### valibot 1.4.2
+### valibot 1.5.0
 
 - License: MIT
 - Authors: Fabian Hiller
@@ -7298,7 +7551,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### vue 3.5.42
+### vue 3.5.44
 
 - License: MIT
 - Authors: Evan You

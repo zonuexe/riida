@@ -248,6 +248,9 @@ real-file check is kept at `src-tauri/tests/pdfium_spike.rs`.
   `lindera-tantivy 2.0.0` pins `tantivy ^0.25` + `lindera ^2`. Staying on the
   matched set avoids a custom tokenizer adapter; revisit when lindera-tantivy
   ships a 0.26 release.
+  *Superseded (2026-10):* tantivy 0.27 / lindera 6 with an in-tree
+  tokenizer adapter replacing lindera-tantivy, to pick up the fixed
+  `zstd 0.14` (RUSTSEC-2026-0391/-0398/-0403).
 - **Lindera IPADIC tokenization works** end-to-end in tantivy: morphological
   tokens (`検索`, `形態素`) match/rank correctly; absent terms return nothing.
 - **pdfium dynamic binding works** against nixpkgs `pdfium-binaries` (v7749) —
@@ -294,7 +297,7 @@ Implementation status (v0.7.0 work, branch `feature/fulltext-search`):
 - New Rust module(s) — extraction pipeline + tantivy wrapper (keep testable
   cores separate from IO).
 - [`src-tauri/Cargo.toml`](../src-tauri/Cargo.toml) — tantivy, lindera,
-  lindera-tantivy, pdfium-render.
+  pdfium-render.
 - [`flake.nix`](../flake.nix) — libpdfium in the dev shell.
 - [`deny.toml`](../deny.toml) + notices + dependency-review config — license
   gate.

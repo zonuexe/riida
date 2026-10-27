@@ -17,7 +17,6 @@
 use lindera::dictionary::load_dictionary;
 use lindera::mode::Mode;
 use lindera::segmenter::Segmenter;
-use lindera_tantivy::tokenizer::LinderaTokenizer;
 use serde::{Deserialize, Serialize};
 use tantivy::collector::TopDocs;
 use tantivy::directory::MmapDirectory;
@@ -26,6 +25,7 @@ use tantivy::schema::{
     Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, Value, STORED, STRING,
 };
 use tantivy::snippet::SnippetGenerator;
+use tantivy::tokenizer::{Token, TokenStream, Tokenizer};
 use tantivy::{doc, Index, IndexReader, IndexWriter, TantivyDocument, Term};
 
 /// Tokenizer name registered on the index for all Japanese text fields.
@@ -163,12 +163,70 @@ fn build_schema() -> (Schema, Fields) {
     (schema, fields)
 }
 
+/// tantivy tokenizer over a lindera segmenter.
+///
+/// This replaces the `lindera-tantivy` crate, which lags tantivy releases and
+/// would otherwise hold tantivy (and its bundled zstd) back a major version.
+#[derive(Clone)]
+struct LinderaTokenizer {
+    segmenter: Segmenter,
+    token: Token,
+}
+
+struct LinderaTokenStream<'a> {
+    tokens: std::vec::IntoIter<lindera::token::Token<'a>>,
+    token: &'a mut Token,
+}
+
+impl Tokenizer for LinderaTokenizer {
+    type TokenStream<'a> = LinderaTokenStream<'a>;
+
+    fn token_stream<'a>(&'a mut self, text: &'a str) -> LinderaTokenStream<'a> {
+        self.token.reset();
+        // Segmentation only fails on dictionary corruption, which the embedded
+        // IPADIC rules out; an empty stream just leaves the text unindexed.
+        let tokens = self
+            .segmenter
+            .segment(std::borrow::Cow::Borrowed(text))
+            .unwrap_or_default();
+        LinderaTokenStream {
+            tokens: tokens.into_iter(),
+            token: &mut self.token,
+        }
+    }
+}
+
+impl TokenStream for LinderaTokenStream<'_> {
+    fn advance(&mut self) -> bool {
+        let Some(next) = self.tokens.next() else {
+            return false;
+        };
+        self.token.text.clear();
+        self.token.text.push_str(&next.surface);
+        self.token.offset_from = next.byte_start;
+        self.token.offset_to = next.byte_end;
+        self.token.position = next.position;
+        self.token.position_length = next.position_length;
+        true
+    }
+
+    fn token(&self) -> &Token {
+        self.token
+    }
+
+    fn token_mut(&mut self) -> &mut Token {
+        self.token
+    }
+}
+
 /// Construct the lindera (IPADIC, embedded) tokenizer for tantivy.
 fn build_tokenizer() -> Result<LinderaTokenizer, String> {
     let dictionary =
         load_dictionary("embedded://ipadic").map_err(|e| format!("load ipadic: {e}"))?;
-    let segmenter = Segmenter::new(Mode::Normal, dictionary, None);
-    Ok(LinderaTokenizer::from_segmenter(segmenter))
+    Ok(LinderaTokenizer {
+        segmenter: Segmenter::new(Mode::Normal, dictionary, None),
+        token: Token::default(),
+    })
 }
 
 impl FullTextIndex {
@@ -387,7 +445,7 @@ impl FullTextIndex {
         snippet_gen.set_max_num_chars(160);
 
         let top = searcher
-            .search(&query, &TopDocs::with_limit(limit))
+            .search(&query, &TopDocs::with_limit(limit).order_by_score())
             .map_err(|e| format!("search: {e}"))?;
 
         // Per-hit cost is dominated by snippet generation (it tokenizes the

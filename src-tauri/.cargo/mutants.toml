@@ -20,6 +20,7 @@ exclude_re = [
   '\binitialize_database\b',
   '\bmigrate_legacy_config_if_needed\b', # wrapper; *_with_connection is tested
   '\bsave_config_input_file\b',          # writes to the global config_file() path
+  '\bsave_config_file\b',                # wrapper over save_config_input_file
   # Thumbnail cache paths and external-process generation.
   '\bthumbnail_cache_dir\b',
   '\bthumbnail_output_file\b',
@@ -29,6 +30,8 @@ exclude_re = [
   '\bextract_epub_metadata\b',
   '\bemit_library_snapshot\b',
   '\bstart_library_watcher\b',
+  '\blibrary_watcher_is_current\b', # global watcher generation
+  '\badd_library_root\b',
   '\bbook_thumbnail\b',
   '\bopen_viewer_window\b',
   '\brename_tag_globally\b',

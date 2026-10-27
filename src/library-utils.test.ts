@@ -6,6 +6,8 @@ import {
   deriveSources,
   deriveTags,
   describeEmptyLibraryState,
+  folderDisplayName,
+  shouldShowLibraryWelcome,
   filterVisibleBooks,
   formatAuthorByline,
   formatBookLocation,
@@ -334,6 +336,7 @@ describe("describeEmptyLibraryState", () => {
   it("prompts onboarding when no library roots are configured", () => {
     const result = describeEmptyLibraryState({ ...baseInput, libraryRoots: [] });
     expect(result.message).toBe("No library folders selected yet.");
+    expect(result.detail).toContain("Drop a folder");
     expect(result.detail).toContain("Settings");
   });
 
@@ -358,7 +361,7 @@ describe("describeEmptyLibraryState", () => {
   it("uses the simple detail when bookCount is 0 and all roots exist", () => {
     const result = describeEmptyLibraryState(baseInput);
     expect(result.message).toBe("Your library is empty.");
-    expect(result.detail).toContain("No PDFs were found");
+    expect(result.detail).toContain("No PDF or EPUB books were found");
   });
 
   it("filter takes precedence over missing-roots and library error", () => {
@@ -369,6 +372,50 @@ describe("describeEmptyLibraryState", () => {
       libraryRoots: [],
     });
     expect(result.message).toBe("No matching books.");
+  });
+});
+
+describe("shouldShowLibraryWelcome", () => {
+  const firstRun = {
+    libraryRoots: [] as string[],
+    totalBookCount: 0,
+    hasFilter: false,
+    libraryErrorMessage: null as string | null,
+  };
+
+  it("shows the welcome screen before any folder or book exists", () => {
+    expect(shouldShowLibraryWelcome(firstRun)).toBe(true);
+  });
+
+  it("hides it once a library folder is configured", () => {
+    expect(shouldShowLibraryWelcome({ ...firstRun, libraryRoots: ["/books"] })).toBe(false);
+  });
+
+  it("hides it when external books exist without a folder", () => {
+    expect(shouldShowLibraryWelcome({ ...firstRun, totalBookCount: 1 })).toBe(false);
+  });
+
+  it("hides it while a filter is active", () => {
+    expect(shouldShowLibraryWelcome({ ...firstRun, hasFilter: true })).toBe(false);
+  });
+
+  it("hides it when the library failed to load", () => {
+    expect(shouldShowLibraryWelcome({ ...firstRun, libraryErrorMessage: "Boom!" })).toBe(false);
+  });
+});
+
+describe("folderDisplayName", () => {
+  it("returns the last path segment", () => {
+    expect(folderDisplayName("/Users/reader/Books")).toBe("Books");
+  });
+
+  it("ignores trailing separators", () => {
+    expect(folderDisplayName("/Users/reader/Books/")).toBe("Books");
+    expect(folderDisplayName("C:\\Users\\reader\\Books\\")).toBe("Books");
+  });
+
+  it("falls back to the full path for a root", () => {
+    expect(folderDisplayName("/")).toBe("/");
   });
 });
 

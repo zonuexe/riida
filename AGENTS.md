@@ -800,8 +800,22 @@ The frontend has a parallel mutation-testing setup via
 [Stryker](https://stryker-mutator.io). It is not part of `check:frontend`
 for the same speed reasons. Configuration lives in
 [stryker.config.json](stryker.config.json) and excludes DOM-driven
-entry points (`src/main.ts`, `src/note-editor.ts`) and the large
-`cjk-radical-map.ts` data module.
+entry points (`src/main.ts`, `src/note-editor.ts`), the large
+`cjk-radical-map.ts` data module, and the test-only
+`pdf-page-fixtures.ts`.
+
+It also excludes the scan-correction pixel analysis (`pdf-deskew.ts`,
+`pdf-trim.ts`, `pdf-gray-image.ts`, `pdf-page-sample.ts`). Stryker
+instruments every expression in their per-pixel loops, which slows those
+tests ~300× (dry run: 3 s without them, ~2.5 min with them) and pushes a
+full run past the nightly job's time limit. They stay covered by unit tests
+and the coverage thresholds. To audit one of them by hand, pass it via
+`--mutate` and raise vitest's `testTimeout` for that run.
+
+Stryker 10's tsconfig preprocessor calls a TypeScript JS API that
+TypeScript 7 removed, so `tsconfigFile` points at a file that does not
+exist to skip the preprocessor (it only rewrites `extends`/`references`
+paths, which our tsconfig does not use).
 
 ```bash
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run mutants:frontend

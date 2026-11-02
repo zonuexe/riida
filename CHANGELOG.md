@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-02
+
+Getting started no longer begins in Settings: a new welcome screen takes the folder your ebooks are in, dropped straight into the window.
+
+### Added
+
+- A first launch now opens on a welcome screen instead of the Settings sheet. Drag a folder of PDF or EPUB books anywhere into the window, or pick one with "Choose a folder…", and riida adds it and scans it right away, with no Save step. The files stay where they are; nothing is copied or moved.
+- Folders can be dropped into the window at any time, not only on first launch, to add them to the library. A short message at the bottom of the window says when the scan is done, or why a folder could not be added: it is a file rather than a folder, it is outside your home folder, or it is already part of the library.
+- Settings has an "Open welcome screen" button under Library roots that brings the welcome screen back.
+- The welcome screen and its messages appear in Japanese when Japanese is your system's preferred language, and in English otherwise.
+
+### Fixed
+
+- Adding or removing a library folder in Settings now takes effect for file watching right away. Before, riida kept watching the folders it started with until you restarted it, and a change it noticed there could drop books from a newly added folder out of the library.
+
+### Security
+
+- Updated the full-text search engine to tantivy 0.27, which no longer bundles the zstd library affected by RUSTSEC-2026-0391, RUSTSEC-2026-0398, and RUSTSEC-2026-0403. Existing search indexes keep working without a rebuild.
+
 ## [0.9.2] - 2026-10-03
 
 Kindle books that turn up in a full-text search now open the way they do from the library.
@@ -494,7 +513,8 @@ Thanks to [@i999rri](https://github.com/i999rri), Windows builds work again star
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/zonuexe/riida/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/zonuexe/riida/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/zonuexe/riida/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/zonuexe/riida/compare/v0.8.2...v0.9.0

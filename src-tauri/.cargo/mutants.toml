@@ -110,4 +110,11 @@ exclude_re = [
   '\bfulltext_index_size_bytes\b',
   '\bfulltext_clear_index\b',
   '\brun_fulltext_sync\b',
+  # Mutants that can only hang. cargo-mutants exits 3 on any timeout, so a
+  # mutant whose sole effect is an endless loop fails the gate even though the
+  # change is "caught". These patterns name the mutation, not the function, so
+  # every other mutant in these functions stays in scope.
+  'delete match arm (Ok\()?XmlEvent::Eof', # XML read loops lose their only exit
+  'replace \+= with [-*]= in (jpeg_dimensions|percent_decode)$', # byte cursor stops advancing
+  'LinderaTokenStream.*::advance -> bool with true', # token stream never ends
 ]

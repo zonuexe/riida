@@ -836,9 +836,12 @@ surviving mutant (exit 2) fails the job — the fix is to add a killing
 unit test, or, for a genuinely untestable function (a `#[tauri::command]`
 handler, external-process IO, an app-path/global-state helper, or an
 entry point), add it to `exclude_re` in
-[src-tauri/.cargo/mutants.toml](src-tauri/.cargo/mutants.toml). The
-deletions of the EPUB read-loop `Eof`/`Err` arms are caught as timeouts
-(they cause infinite loops), which counts as caught. `frontend-mutation`
+[src-tauri/.cargo/mutants.toml](src-tauri/.cargo/mutants.toml). A
+timeout also fails the job (exit 3), so mutants that can only hang — deleting
+an XML read loop's `Eof` arm, a byte cursor that stops advancing — are
+excluded there by mutant name rather than left to time out. Struct-field
+deletion mutants ignore `exclude_re` altogether and need a killing test.
+`frontend-mutation`
 likewise gates on Stryker's score threshold (`break: 50`). `rust-coverage`
 is reporting-only. Reports always upload (`if: always()`). CI installs the
 tools via `taiki-e/install-action` and, for coverage, the

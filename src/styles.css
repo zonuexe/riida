@@ -1347,6 +1347,162 @@ h1 {
   box-sizing: border-box;
 }
 
+/* First-run welcome: replaces the home view until a library folder exists. */
+.library-welcome {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 560px;
+  margin: 8vh auto 0;
+  padding: 40px 32px 32px;
+  text-align: center;
+}
+
+.library-welcome[hidden],
+.library-home[hidden] {
+  display: none;
+}
+
+.library-welcome-kicker {
+  margin: 0;
+  color: rgb(var(--accent-rgb) / 0.72);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.library-welcome-title {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.library-welcome-lead {
+  max-width: 440px;
+  margin: 0;
+  color: rgb(var(--ink-rgb) / 0.7);
+  line-height: 1.6;
+}
+
+.library-welcome-dropzone {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 12px 0 8px;
+  padding: 32px 16px;
+  border: 1.5px dashed rgb(var(--border-rgb) / 0.32);
+  border-radius: 20px;
+  background: rgb(var(--surface-rgb) / 0.4);
+  color: rgb(var(--ink-rgb) / 0.58);
+  box-sizing: border-box;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.library-welcome-dropzone i {
+  font-size: 2rem;
+  color: rgb(var(--accent-rgb) / 0.6);
+}
+
+body[data-library-drag="active"] .library-welcome-dropzone {
+  border-color: rgb(var(--accent-rgb) / 0.6);
+  background: rgb(var(--accent-rgb) / 0.08);
+  color: rgb(var(--ink-rgb) / 0.82);
+}
+
+.library-welcome-choose:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.library-welcome-status {
+  margin: 0;
+  color: rgb(var(--ink-rgb) / 0.58);
+  font-size: 0.9rem;
+}
+
+.library-welcome-status[data-tone="error"] {
+  color: rgb(var(--danger-rgb));
+}
+
+.library-welcome-status[data-tone="success"] {
+  color: rgb(var(--success-rgb));
+}
+
+/* Folder drops anywhere in the window. While dragging it dims the stage;
+   afterwards it shrinks to a quiet status card at the bottom. */
+.library-drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(var(--backdrop-rgb) / 0.22);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  transition: background-color 160ms ease;
+}
+
+.library-drop-overlay[hidden] {
+  display: none;
+}
+
+.library-drop-overlay-card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  max-width: 420px;
+  padding: 28px 32px;
+  border: 1.5px dashed rgb(var(--accent-rgb) / 0.5);
+  border-radius: 24px;
+  background: rgb(var(--panel-rgb) / 0.92);
+  box-shadow: 0 20px 40px var(--shadow);
+  text-align: center;
+}
+
+.library-drop-overlay-card i {
+  font-size: 2rem;
+  color: rgb(var(--accent-rgb) / 0.8);
+}
+
+.library-drop-overlay-message {
+  margin: 0;
+  color: rgb(var(--ink-rgb) / 0.82);
+  line-height: 1.5;
+}
+
+.library-drop-overlay[data-phase="status"] {
+  place-items: end center;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.library-drop-overlay[data-phase="status"] .library-drop-overlay-card {
+  grid-auto-flow: column;
+  align-items: center;
+  max-width: min(560px, calc(100vw - 48px));
+  padding: 12px 20px;
+  border-style: solid;
+  border-color: var(--border);
+  border-radius: 999px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 18px var(--shadow);
+}
+
+.library-drop-overlay[data-phase="status"] .library-drop-overlay-card i {
+  font-size: 1rem;
+}
+
+.library-drop-overlay[data-tone="error"] .library-drop-overlay-message {
+  color: rgb(var(--danger-rgb));
+}
+
 .pdf-view {
   flex: 1;
   display: flex;

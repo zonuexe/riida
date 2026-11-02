@@ -124,74 +124,120 @@
         </div>
 
         <section id="home-view">
-          <section class="panel-grid">
-            <article class="panel">
-              <h2>Books</h2>
-              <p class="stat" id="indexed-count">0</p>
-            </article>
+          <section
+            id="library-welcome"
+            class="library-welcome panel"
+            aria-labelledby="library-welcome-title"
+            hidden
+          >
+            <p class="library-welcome-kicker" data-i18n="welcome.kicker">Welcome to riida</p>
+            <h2 id="library-welcome-title" class="library-welcome-title" data-i18n="welcome.title">
+              Bring in your bookshelf
+            </h2>
+            <p class="library-welcome-lead" data-i18n="welcome.lead">
+              Drag a folder of PDF or EPUB books anywhere into this window. riida reads the files
+              where they are; nothing is copied or moved.
+            </p>
+            <div class="library-welcome-dropzone" aria-hidden="true">
+              <i class="fa-regular fa-folder-open" aria-hidden="true"></i>
+              <span data-i18n="welcome.dropzone">Drop a folder here</span>
+            </div>
+            <button
+              id="library-welcome-choose"
+              class="library-welcome-choose app-settings-primary"
+              type="button"
+              data-i18n="welcome.choose"
+            >
+              Choose a folder…
+            </button>
+            <p
+              id="library-welcome-status"
+              class="library-welcome-status"
+              role="status"
+              aria-live="polite"
+              hidden
+            ></p>
+            <button
+              id="library-welcome-close"
+              class="library-welcome-close app-settings-secondary"
+              type="button"
+              data-i18n="welcome.close"
+              hidden
+            >
+              Back to library
+            </button>
           </section>
 
-          <section class="panel">
-            <div class="library-header">
-              <h2>Library</h2>
-              <div class="library-header-controls">
-                <select id="library-sort" class="library-sort" aria-label="並び順">
-                  <option value="default">並び順: デフォルト</option>
-                  <option value="title-asc">タイトル (A→Z)</option>
-                  <option value="title-desc">タイトル (Z→A)</option>
-                  <option value="last-read">最近読んだ順</option>
-                  <option value="added-desc">追加が新しい順</option>
-                  <option value="added-asc">追加が古い順</option>
-                  <option value="file-size">ファイルサイズ順</option>
-                </select>
-                <button
-                  id="library-view-toggle"
-                  class="library-view-toggle"
-                  type="button"
-                  aria-label="グリッド表示に切り替え"
-                >
-                  <i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>
+          <section id="library-home" class="library-home">
+            <section class="panel-grid">
+              <article class="panel">
+                <h2>Books</h2>
+                <p class="stat" id="indexed-count">0</p>
+              </article>
+            </section>
+
+            <section class="panel">
+              <div class="library-header">
+                <h2>Library</h2>
+                <div class="library-header-controls">
+                  <select id="library-sort" class="library-sort" aria-label="並び順">
+                    <option value="default">並び順: デフォルト</option>
+                    <option value="title-asc">タイトル (A→Z)</option>
+                    <option value="title-desc">タイトル (Z→A)</option>
+                    <option value="last-read">最近読んだ順</option>
+                    <option value="added-desc">追加が新しい順</option>
+                    <option value="added-asc">追加が古い順</option>
+                    <option value="file-size">ファイルサイズ順</option>
+                  </select>
+                  <button
+                    id="library-view-toggle"
+                    class="library-view-toggle"
+                    type="button"
+                    aria-label="グリッド表示に切り替え"
+                  >
+                    <i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>
+                  </button>
+                </div>
+                <button id="library-add-kindle" class="app-settings-secondary" type="button" hidden>
+                  Add Kindle book
+                </button>
+                <button id="library-add-custom" class="app-settings-secondary" type="button" hidden>
+                  Add book
+                </button>
+                <label id="tag-direct-filter" class="tag-direct-filter" hidden>
+                  <input id="tag-direct-only" type="checkbox" />
+                  <span>Show only directly tagged files</span>
+                </label>
+              </div>
+              <div id="bulk-action-bar" class="bulk-action-bar" hidden>
+                <span id="bulk-select-count" class="bulk-action-count"></span>
+                <button id="bulk-select-all" class="bulk-action-btn" type="button">
+                  <i class="fa-solid fa-check-double" aria-hidden="true"></i>
+                  Select all
+                </button>
+                <button id="bulk-edit-tags" class="bulk-action-btn" type="button">
+                  <i class="fa-solid fa-tags" aria-hidden="true"></i>
+                  Edit tags
+                </button>
+                <button id="bulk-edit-metadata" class="bulk-action-btn" type="button">
+                  <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>
+                  Edit metadata
+                </button>
+                <button id="bulk-deselect" class="bulk-action-deselect" type="button">
+                  Clear selection
                 </button>
               </div>
-              <button id="library-add-kindle" class="app-settings-secondary" type="button" hidden>
-                Add Kindle book
-              </button>
-              <button id="library-add-custom" class="app-settings-secondary" type="button" hidden>
-                Add book
-              </button>
-              <label id="tag-direct-filter" class="tag-direct-filter" hidden>
-                <input id="tag-direct-only" type="checkbox" />
-                <span>Show only directly tagged files</span>
-              </label>
-            </div>
-            <div id="bulk-action-bar" class="bulk-action-bar" hidden>
-              <span id="bulk-select-count" class="bulk-action-count"></span>
-              <button id="bulk-select-all" class="bulk-action-btn" type="button">
-                <i class="fa-solid fa-check-double" aria-hidden="true"></i>
-                Select all
-              </button>
-              <button id="bulk-edit-tags" class="bulk-action-btn" type="button">
-                <i class="fa-solid fa-tags" aria-hidden="true"></i>
-                Edit tags
-              </button>
-              <button id="bulk-edit-metadata" class="bulk-action-btn" type="button">
-                <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>
-                Edit metadata
-              </button>
-              <button id="bulk-deselect" class="bulk-action-deselect" type="button">
-                Clear selection
-              </button>
-            </div>
-            <section id="fulltext-results" class="fulltext-results" hidden>
-              <header class="fulltext-results-header">
-                <span class="fulltext-results-title">本の中身</span>
-                <span id="fulltext-results-count" class="fulltext-results-count"></span>
-              </header>
-              <div id="fulltext-results-list" class="fulltext-results-list"></div>
+              <section id="fulltext-results" class="fulltext-results" hidden>
+                <header class="fulltext-results-header">
+                  <span class="fulltext-results-title">本の中身</span>
+                  <span id="fulltext-results-count" class="fulltext-results-count"></span>
+                </header>
+                <div id="fulltext-results-list" class="fulltext-results-list"></div>
+              </section>
+              <div id="book-results">
+                <div class="empty-state">Loading...</div>
+              </div>
             </section>
-            <div id="book-results">
-              <div class="empty-state">Loading...</div>
-            </div>
           </section>
         </section>
 
@@ -463,6 +509,13 @@
       </section>
     </main>
 
+    <div id="library-drop-overlay" class="library-drop-overlay" hidden>
+      <div class="library-drop-overlay-card" role="status" aria-live="polite">
+        <i class="fa-regular fa-folder-open" aria-hidden="true"></i>
+        <p id="library-drop-overlay-message" class="library-drop-overlay-message"></p>
+      </div>
+    </div>
+
     <div id="app-settings-modal" class="app-settings-modal" hidden>
       <div id="app-settings-backdrop" class="app-settings-backdrop"></div>
       <section
@@ -496,7 +549,17 @@
             >
               Add folder
             </button>
-            <small>Changes to file watching may require an app restart.</small>
+            <button
+              id="config-library-welcome-open"
+              class="config-library-welcome-open app-settings-secondary app-settings-inline"
+              type="button"
+              data-i18n="settings.openWelcome"
+            >
+              Open welcome screen
+            </button>
+            <small data-i18n="settings.openWelcomeHint"
+              >The welcome screen adds a folder by drag and drop and scans it right away.</small
+            >
           </section>
           <label class="app-settings-field">
             <span>Excluded patterns</span>

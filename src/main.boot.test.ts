@@ -102,6 +102,9 @@ vi.mock("@tauri-apps/api/app", () => ({
 vi.mock("@tauri-apps/api/event", () => ({
   listen: async () => () => {},
 }));
+vi.mock("@tauri-apps/api/webview", () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: async () => () => {} }),
+}));
 vi.mock("@tauri-apps/api/path", () => ({
   homeDir: async () => "/home/test",
 }));

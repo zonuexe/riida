@@ -24,7 +24,7 @@ export type EmptyLibraryStateMessage = {
  *  3. no library roots configured → onboarding message
  *  4. configured roots all missing on disk → ask the user to update
  *  5. no books at all → "Your library is empty." with a hint
- *  6. otherwise → "No PDFs yet." (e.g. scanning in progress)
+ *  6. otherwise → "No books yet." (e.g. scanning in progress)
  */
 export function describeEmptyLibraryState(input: EmptyLibraryStateInput): EmptyLibraryStateMessage {
   if (input.hasFilter) {
@@ -38,7 +38,7 @@ export function describeEmptyLibraryState(input: EmptyLibraryStateInput): EmptyL
   if (input.libraryRoots.length === 0) {
     return {
       message: "No library folders selected yet.",
-      detail: "Open Settings and add at least one library folder.",
+      detail: "Drop a folder of books into this window, or add one in Settings.",
     };
   }
 
@@ -55,12 +55,42 @@ export function describeEmptyLibraryState(input: EmptyLibraryStateInput): EmptyL
       message: "Your library is empty.",
       detail:
         input.missingLibraryRoots.length > 0
-          ? "Some configured folders are missing, and no PDFs were found in the folders that still exist."
-          : "No PDFs were found in the configured library folders.",
+          ? "Some configured folders are missing, and no PDF or EPUB books were found in the folders that still exist."
+          : "No PDF or EPUB books were found in the configured library folders.",
     };
   }
 
-  return { message: "No PDFs yet.", detail: null };
+  return { message: "No books yet.", detail: null };
+}
+
+export type LibraryWelcomeInput = {
+  libraryRoots: string[];
+  /** Every book in the snapshot, before any filter. */
+  totalBookCount: number;
+  hasFilter: boolean;
+  libraryErrorMessage: string | null;
+};
+
+/**
+ * Whether the home view should be replaced by the first-run welcome screen:
+ * nothing has been added yet, and nothing (a filter, an error, external
+ * books such as Kindle entries) gives the regular library view a reason to
+ * show instead.
+ */
+export function shouldShowLibraryWelcome(input: LibraryWelcomeInput): boolean {
+  return (
+    input.libraryRoots.length === 0 &&
+    input.totalBookCount === 0 &&
+    !input.hasFilter &&
+    input.libraryErrorMessage === null
+  );
+}
+
+/** The last segment of a folder path, for short status messages. */
+export function folderDisplayName(path: string): string {
+  const trimmed = path.replace(/[/\\]+$/, "");
+  const segments = trimmed.split(/[/\\]/);
+  return segments[segments.length - 1] || path;
 }
 
 export type DirectoryNode = {

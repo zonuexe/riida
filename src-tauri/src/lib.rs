@@ -63,6 +63,11 @@ static FULLTEXT_SYNCING: std::sync::atomic::AtomicBool = std::sync::atomic::Atom
 // (dev shell) or the bundled Tauri resource dir (release). `None` falls back to
 // a system-installed library inside `bind_pdfium`.
 static PDFIUM_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
+// Bumped by every `start_library_watcher` call. A watcher thread whose
+// generation is no longer current stops, so a config change replaces the
+// watcher instead of leaving the old one rescanning with a stale root list.
+static LIBRARY_WATCHER_GENERATION: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 fn should_allow_internal_navigation(url: &Url) -> bool {
     match url.scheme() {
@@ -797,6 +802,20 @@ fn normalize_gui_config_input(config: AppConfigInput) -> AppConfig {
         pdf_renderer: Some(config.pdf_renderer),
         theme: Some(config.theme),
         enabled_external_sources: Some(config.enabled_external_sources),
+    })
+}
+
+fn save_config_file(config: &AppConfig) -> Result<(), String> {
+    save_config_input_file(&AppConfigInput {
+        library_roots: config
+            .library_roots
+            .iter()
+            .map(|value| collapse_home_path(value))
+            .collect(),
+        excluded_patterns: config.excluded_patterns.clone(),
+        pdf_renderer: config.pdf_renderer.clone(),
+        theme: config.theme.clone(),
+        enabled_external_sources: config.enabled_external_sources.clone(),
     })
 }
 
@@ -2600,7 +2619,15 @@ fn emit_library_snapshot(app: &AppHandle, config: &AppConfig) -> Result<(), Stri
         .map_err(|error| error.to_string())
 }
 
+fn library_watcher_is_current(generation: u64) -> bool {
+    LIBRARY_WATCHER_GENERATION.load(std::sync::atomic::Ordering::SeqCst) == generation
+}
+
 fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String> {
+    // Retire the previous watcher even when this config has nothing to watch.
+    let generation =
+        LIBRARY_WATCHER_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+
     if config
         .library_roots
         .iter()
@@ -2643,7 +2670,18 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
             }
         }
 
-        while let Ok(result) = rx.recv() {
+        loop {
+            let result = match rx.recv_timeout(Duration::from_secs(2)) {
+                Ok(result) => result,
+                Err(mpsc::RecvTimeoutError::Timeout) if library_watcher_is_current(generation) => {
+                    continue
+                }
+                Err(_) => break,
+            };
+            if !library_watcher_is_current(generation) {
+                break;
+            }
+
             match result {
                 Ok(event) if should_rescan(&event, &excluded_patterns) => {
                     thread::sleep(Duration::from_millis(750));
@@ -2741,24 +2779,102 @@ fn save_app_config(
         return Err("at least one library root is required".to_string());
     }
 
-    save_config_input_file(&AppConfigInput {
-        library_roots: next_config
-            .library_roots
-            .iter()
-            .map(|value| collapse_home_path(value))
-            .collect(),
-        excluded_patterns: next_config.excluded_patterns.clone(),
-        pdf_renderer: next_config.pdf_renderer.clone(),
-        theme: next_config.theme.clone(),
-        enabled_external_sources: next_config.enabled_external_sources.clone(),
-    })?;
+    save_config_file(&next_config)?;
 
     {
         let mut config = lock_config(&config_state)?;
         *config = next_config.clone();
     }
 
+    start_library_watcher(app.clone(), next_config.clone())?;
     emit_library_snapshot(&app, &next_config)?;
+    Ok(app_config_to_payload(&next_config))
+}
+
+/// Why a dropped or chosen folder cannot become a library root.
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum LibraryRootRejection {
+    NotADirectory,
+    /// The asset protocol and the `riida-epub:` scheme only serve `$HOME/**`,
+    /// so books outside it would be listed but could not be opened.
+    OutsideHome,
+    AlreadyInLibrary,
+}
+
+/// `add_library_root`'s error, structured so the frontend can word it in the
+/// user's language instead of showing backend text.
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum AddLibraryRootError {
+    Rejected { reason: LibraryRootRejection },
+    Failed { message: String },
+}
+
+impl From<String> for AddLibraryRootError {
+    fn from(message: String) -> Self {
+        Self::Failed { message }
+    }
+}
+
+fn check_library_root_candidate(
+    candidate: &Path,
+    is_dir: bool,
+    home: Option<&Path>,
+    existing_roots: &[String],
+) -> Result<(), LibraryRootRejection> {
+    if !is_dir {
+        return Err(LibraryRootRejection::NotADirectory);
+    }
+    if home.is_some_and(|home| !candidate.starts_with(home)) {
+        return Err(LibraryRootRejection::OutsideHome);
+    }
+    // A folder inside an existing root is already scanned through it.
+    if existing_roots
+        .iter()
+        .any(|root| candidate.starts_with(Path::new(root)))
+    {
+        return Err(LibraryRootRejection::AlreadyInLibrary);
+    }
+    Ok(())
+}
+
+/// Adds one folder to the library and scans it right away, without the
+/// Settings form's save step. Used by the welcome screen and folder drops.
+#[tauri::command]
+async fn add_library_root(
+    app: AppHandle,
+    config_state: State<'_, ConfigState>,
+    path: String,
+) -> Result<AppConfigPayload, AddLibraryRootError> {
+    let candidate = PathBuf::from(expand_home_path(path.trim()));
+    let home = std::env::var("HOME").ok().map(PathBuf::from);
+
+    let next_config = {
+        let mut config = lock_config(&config_state)?;
+        check_library_root_candidate(
+            &candidate,
+            candidate.is_dir(),
+            home.as_deref(),
+            &config.library_roots,
+        )
+        .map_err(|reason| AddLibraryRootError::Rejected { reason })?;
+
+        let mut next_config = config.clone();
+        next_config
+            .library_roots
+            .push(candidate.to_string_lossy().into_owned());
+        save_config_file(&next_config)?;
+        *config = next_config.clone();
+        next_config
+    };
+
+    start_library_watcher(app.clone(), next_config.clone())?;
+    let scan_config = next_config.clone();
+    // A first scan of a large folder takes a while; keep it off the UI thread.
+    tauri::async_runtime::spawn_blocking(move || emit_library_snapshot(&app, &scan_config))
+        .await
+        .map_err(|error| error.to_string())??;
     Ok(app_config_to_payload(&next_config))
 }
 
@@ -4836,6 +4952,7 @@ pub fn run() {
             load_library_snapshot,
             load_app_config,
             save_app_config,
+            add_library_root,
             book_thumbnail,
             load_note,
             save_note,
@@ -5688,6 +5805,107 @@ mod tests {
         );
         assert_eq!(config.pdf_renderer, "native");
         assert_eq!(config.theme, "navy-blue");
+    }
+
+    #[test]
+    fn check_library_root_candidate_accepts_new_folder_under_home() {
+        let roots = vec!["/Users/reader/Documents/Ebooks".to_string()];
+        assert_eq!(
+            check_library_root_candidate(
+                Path::new("/Users/reader/Books"),
+                true,
+                Some(Path::new("/Users/reader")),
+                &roots,
+            ),
+            Ok(())
+        );
+        // A parent of an existing root is a new, wider root, not a duplicate.
+        assert_eq!(
+            check_library_root_candidate(
+                Path::new("/Users/reader/Documents"),
+                true,
+                Some(Path::new("/Users/reader")),
+                &roots,
+            ),
+            Ok(())
+        );
+        // Without a known home there is nothing to confine the folder to.
+        assert_eq!(
+            check_library_root_candidate(Path::new("/Volumes/Books"), true, None, &[]),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn check_library_root_candidate_rejects_unusable_folders() {
+        let home = Some(Path::new("/Users/reader"));
+        let roots = vec!["/Users/reader/Documents/Ebooks/".to_string()];
+
+        assert_eq!(
+            check_library_root_candidate(
+                Path::new("/Users/reader/Books/novel.pdf"),
+                false,
+                home,
+                &roots,
+            ),
+            Err(LibraryRootRejection::NotADirectory)
+        );
+        assert_eq!(
+            check_library_root_candidate(Path::new("/Volumes/Books"), true, home, &roots),
+            Err(LibraryRootRejection::OutsideHome)
+        );
+        // Component-wise: a sibling sharing the home prefix is still outside.
+        assert_eq!(
+            check_library_root_candidate(Path::new("/Users/reader2"), true, home, &roots),
+            Err(LibraryRootRejection::OutsideHome)
+        );
+        assert_eq!(
+            check_library_root_candidate(
+                Path::new("/Users/reader/Documents/Ebooks"),
+                true,
+                home,
+                &roots,
+            ),
+            Err(LibraryRootRejection::AlreadyInLibrary)
+        );
+        assert_eq!(
+            check_library_root_candidate(
+                Path::new("/Users/reader/Documents/Ebooks/Comics"),
+                true,
+                home,
+                &roots,
+            ),
+            Err(LibraryRootRejection::AlreadyInLibrary)
+        );
+    }
+
+    #[test]
+    fn add_library_root_error_serializes_for_the_frontend() {
+        assert_eq!(
+            serde_json::to_value(AddLibraryRootError::Rejected {
+                reason: LibraryRootRejection::NotADirectory,
+            })
+            .unwrap(),
+            serde_json::json!({ "kind": "rejected", "reason": "notADirectory" })
+        );
+        assert_eq!(
+            serde_json::to_value(AddLibraryRootError::Rejected {
+                reason: LibraryRootRejection::OutsideHome,
+            })
+            .unwrap(),
+            serde_json::json!({ "kind": "rejected", "reason": "outsideHome" })
+        );
+        assert_eq!(
+            serde_json::to_value(AddLibraryRootError::Rejected {
+                reason: LibraryRootRejection::AlreadyInLibrary,
+            })
+            .unwrap(),
+            serde_json::json!({ "kind": "rejected", "reason": "alreadyInLibrary" })
+        );
+        assert_eq!(
+            serde_json::to_value(AddLibraryRootError::from("disk full".to_string())).unwrap(),
+            serde_json::json!({ "kind": "failed", "message": "disk full" })
+        );
     }
 
     #[test]

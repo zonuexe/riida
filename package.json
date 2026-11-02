@@ -36,7 +36,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "mutants:frontend": "stryker run",
-    "mutants:frontend:list": "stryker run --dryRun",
+    "mutants:frontend:list": "stryker run --dryRunOnly",
     "build:macos-local": "npm run tauri build && bash scripts/fix-macos-local-build.sh",
     "preview": "vite preview",
     "tauri": "tauri",

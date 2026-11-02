@@ -404,6 +404,35 @@ mod tests {
     }
 
     #[test]
+    fn html_to_text_decodes_named_entities() {
+        let text = html_to_text(b"<p>&lt;&gt;&quot;&apos;a&nbsp;b</p>");
+        assert!(text.contains("<>\"'a b"), "got: {text}");
+    }
+
+    #[test]
+    fn html_to_text_skips_entities_in_skipped_elements() {
+        let text = html_to_text(b"<html><head><style>x&lt;y</style></head><body>z</body></html>");
+        assert!(!text.contains('<'), "got: {text}");
+        assert!(text.contains('z'), "got: {text}");
+    }
+
+    #[test]
+    fn html_to_text_tracks_skip_depth_across_nested_and_stray_end_tags() {
+        let text =
+            html_to_text(b"<html><head><title>t</title></head><body>a</script>b</body></html>");
+        assert!(!text.contains('t'), "got: {text}");
+        assert!(text.contains('a') && text.contains('b'), "got: {text}");
+    }
+
+    #[test]
+    fn html_to_text_stops_at_the_first_parse_error() {
+        // quick-xml can resume after some errors (here an unmatched `</>`);
+        // extraction keeps only the text read before the document went bad.
+        let text = html_to_text(b"<p>a</p></>b");
+        assert!(text.contains('a') && !text.contains('b'), "got: {text}");
+    }
+
+    #[test]
     fn parent_dir_returns_directory_portion() {
         assert_eq!(parent_dir("OEBPS/content.opf"), "OEBPS");
         assert_eq!(parent_dir("a/b/c.opf"), "a/b");

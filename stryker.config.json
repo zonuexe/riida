@@ -1,6 +1,8 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "_comment": "Mutation testing for frontend helper modules. Excludes DOM-driven entry points and large data files. See AGENTS.md > Frontend Mutation Testing.",
+  "_tsconfigFile_comment": "Stryker's tsconfig preprocessor parses tsconfigFile with the TypeScript JS API (ts.parseConfigFileTextToJson), which TypeScript 7 no longer ships, so it crashes before testing anything. The preprocessor only rewrites extends/references paths that point outside the sandbox, and tsconfig.json has none, so it is pointed at a file that does not exist to skip it.",
+  "tsconfigFile": "tsconfig.stryker-skip.json",
   "packageManager": "npm",
   "testRunner": "vitest",
   "reporters": ["html", "clear-text", "progress"],
@@ -10,6 +12,7 @@
     "!src/main.ts",
     "!src/note-editor.ts",
     "!src/cjk-radical-map.ts",
+    "!src/pdf-page-fixtures.ts",
     "!src/vendor/**",
     "!src/vite-env.d.ts"
   ],

@@ -3,7 +3,6 @@
 use crate::{fulltext, fulltext_extract, fulltext_pool};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::HashMap;
-use std::fs;
 
 /// All data needed to index one book, gathered under the DB lock so the slow
 /// extraction can run lock-free afterwards.
@@ -230,7 +229,7 @@ fn is_dataless_blocks(len: u64, blocks: u64) -> bool {
 #[cfg(unix)]
 pub fn is_dataless(path: &str) -> bool {
     use std::os::unix::fs::MetadataExt;
-    match fs::metadata(path) {
+    match std::fs::metadata(path) {
         Ok(meta) => is_dataless_blocks(meta.len(), meta.blocks()),
         // If we cannot stat it, treat it as present and let extraction fail
         // gracefully rather than silently skipping.
@@ -499,8 +498,7 @@ pub fn fulltext_metadata_doc(
 mod tests {
     use super::*;
     use crate::fulltext;
-    use crate::test_support::{chunk_doc, fulltext_book, unique_temp_dir};
-    use std::fs;
+    use crate::test_support::{chunk_doc, fulltext_book};
 
     #[test]
     #[cfg(unix)]
@@ -632,6 +630,8 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn fulltext_chunk_flush_marks_all_books_failed_when_commit_fails() {
+        use crate::test_support::unique_temp_dir;
+        use std::fs;
         use std::os::unix::fs::PermissionsExt;
         // A read-only index directory makes the commit (writer lock) fail.
         let dir = unique_temp_dir("fulltext-chunk-fail");

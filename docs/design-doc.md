@@ -17,7 +17,8 @@ The application is split into a Rust backend and a TypeScript frontend.
 
 ## Top-Level Structure
 
-- Backend: [src-tauri/src/lib.rs](src-tauri/src/lib.rs)
+- Backend core (no Tauri dependency): [src-tauri/crates/riida-core](src-tauri/crates/riida-core)
+- Backend Tauri app (commands, state, watcher): [src-tauri/src/lib.rs](src-tauri/src/lib.rs)
 - Frontend entry: [src/main.ts](src/main.ts)
 - Frontend styles: [src/styles.css](src/styles.css)
 - Frontend helpers: [src/*.ts](src)
@@ -407,7 +408,7 @@ The general pattern is:
 
 Rust uses:
 
-- unit tests in [src-tauri/src/lib.rs](src-tauri/src/lib.rs)
+- unit tests beside the code, mostly in [src-tauri/crates/riida-core](src-tauri/crates/riida-core)
 - property-based tests with `proptest`
 
 Focus areas include:

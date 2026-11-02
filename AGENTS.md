@@ -57,10 +57,26 @@ UI implementation references [DESIGN.md](DESIGN.md) for visual language, color r
 
 `riida` is a Tauri v2 desktop app with:
 
-- Rust backend in [src-tauri/src/lib.rs](src-tauri/src/lib.rs)
+- Rust backend as a Cargo workspace rooted at
+  [src-tauri/Cargo.toml](src-tauri/Cargo.toml):
+  - [src-tauri/crates/riida-core](src-tauri/crates/riida-core) — the
+    frontend-independent core: config, storage layout, SQLite schema, library
+    scanning, tags, metadata, viewer preferences, EPUB parsing, thumbnails, and
+    full-text search. It has no Tauri dependency and no process-wide state;
+    functions take a `&Connection` or explicit paths.
+  - [src-tauri/src/lib.rs](src-tauri/src/lib.rs) — the Tauri app: process-wide
+    state (`DATABASE`, `APP_PATHS`, the full-text index), path resolution,
+    `#[tauri::command]` handlers, events, the library watcher, and background
+    workers. Commands should stay thin wrappers over `riida-core`.
 - Vite/TypeScript frontend in [src/main.ts](src/main.ts)
 - Styling in [src/styles.css](src/styles.css)
 - Nix flake dev environment in [flake.nix](flake.nix)
+
+New logic that does not need Tauri or global state belongs in `riida-core`.
+Keep the workspace root at `src-tauri/`: scripts, CI, `Cargo.lock`, and
+`target/` all assume `--manifest-path src-tauri/Cargo.toml`, and
+`default-members` makes plain cargo commands cover both crates. Both crates
+inherit one version from `[workspace.package]`, so a release bumps it once.
 
 The current app focus is local PDF library management with embedded reading, notes, thumbnails, and viewer preferences.
 
@@ -564,7 +580,7 @@ The backend currently stores at least:
 - reading positions
 - full-text index status (`fulltext_index`: per-file body_modified_at / indexed_at / status)
 
-Schema setup lives in the startup `CREATE TABLE IF NOT EXISTS` block in [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
+Schema setup lives in the `CREATE TABLE IF NOT EXISTS` block of `open_database_at` in [src-tauri/crates/riida-core/src/db.rs](src-tauri/crates/riida-core/src/db.rs), which the app runs once at startup.
 
 If schema semantics change, consider migration behavior early.
 
@@ -590,8 +606,10 @@ and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-s
 - **Code:** [src-tauri/crates/riida-core/src/fulltext.rs](src-tauri/crates/riida-core/src/fulltext.rs) (schema,
   tokenizer, index lifecycle, search + snippets),
   [src-tauri/crates/riida-core/src/fulltext_extract.rs](src-tauri/crates/riida-core/src/fulltext_extract.rs)
-  (PDF/EPUB/metadata/note extraction), and the worker/commands/hooks in
-  [src-tauri/src/lib.rs](src-tauri/src/lib.rs). Frontend:
+  (PDF/EPUB/metadata/note extraction),
+  [src-tauri/crates/riida-core/src/fulltext_books.rs](src-tauri/crates/riida-core/src/fulltext_books.rs)
+  (which books to index, their base docs, chunked commits), and the
+  worker/commands/hooks in [src-tauri/src/lib.rs](src-tauri/src/lib.rs). Frontend:
   [src/fulltext-ui.ts](src/fulltext-ui.ts) (pure helpers, tested) + DOM wiring in
   [src/main.ts](src/main.ts).
 - **Opt-in (important):** indexing consumes disk and is **never** started
@@ -729,7 +747,9 @@ nix --extra-experimental-features 'nix-command flakes' develop --command npm run
 
 Rust logic now uses both example-based unit tests and property-based tests.
 
-- deterministic unit tests live in [src-tauri/src/lib.rs](src-tauri/src/lib.rs)
+- deterministic unit tests live next to the code they cover, mostly in the
+  [riida-core](src-tauri/crates/riida-core/src) modules; shared fixtures are in
+  [test_support.rs](src-tauri/crates/riida-core/src/test_support.rs)
 - property-based tests use `proptest`
 
 Good candidates for future `proptest` coverage:
@@ -864,7 +884,8 @@ mutants in the pure logic that unit tests actually cover (config and
 viewer-preference normalization, validation, NFC migration, EPUB
 parsing, snapshot assembly). When adding a new pure helper, prefer a
 unit test that kills its mutants; when adding a new command handler,
-extend `exclude_re` (or extract a testable `*_with_connection` core).
+extend `exclude_re` (or move the testable part into `riida-core` as a
+function that takes a `&Connection` or explicit paths).
 
 ## Frontend Naming Conventions
 

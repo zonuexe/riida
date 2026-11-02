@@ -1,5 +1,6 @@
-# cargo-mutants reads .cargo/mutants.toml relative to the package being mutated
-# (src-tauri), so this lives here rather than at the repo root.
+# cargo-mutants reads .cargo/mutants.toml relative to the workspace root
+# (src-tauri), so this lives here rather than at the repo root. The patterns
+# apply to both workspace crates (`riida` and `riida-core`).
 #
 # Functions that cannot be unit-tested without a running Tauri app are excluded:
 # app-path / global-state helpers, #[tauri::command] handlers that lock the

@@ -3888,10 +3888,8 @@ name = "riida"
 version = "0.9.3"
 dependencies = [
  "directories",
- "globset",
  "notify",
  "proptest",
- "quick-xml 0.41.0",
  "riida-core",
  "rusqlite",
  "serde",
@@ -3901,7 +3899,6 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "toml 0.8.2",
- "unicode-normalization",
  "walkdir",
  "zip",
 ]
@@ -3910,12 +3907,19 @@ dependencies = [
 name = "riida-core"
 version = "0.9.3"
 dependencies = [
+ "globset",
  "lindera",
+ "notify",
  "pdfium-render",
+ "proptest",
  "quick-xml 0.41.0",
+ "rusqlite",
  "serde",
  "serde_json",
  "tantivy",
+ "toml 0.8.2",
+ "unicode-normalization",
+ "walkdir",
  "zip",
 ]
 

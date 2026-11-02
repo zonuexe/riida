@@ -37,8 +37,11 @@ Update these files together:
 - `src-tauri/tauri.conf.json`
 - `src/main.ts`
 
-`src-tauri/Cargo.lock` follows `src-tauri/Cargo.toml` via
-`cargo update -p riida --manifest-path src-tauri/Cargo.toml`, never by hand.
+The Rust version lives once, in `[workspace.package]` of
+`src-tauri/Cargo.toml`; both `riida` and `riida-core` inherit it.
+`src-tauri/Cargo.lock` follows via
+`cargo update -p riida -p riida-core --manifest-path src-tauri/Cargo.toml`,
+never by hand.
 
 Changelog rules:
 

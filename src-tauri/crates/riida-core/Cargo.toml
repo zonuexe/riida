@@ -8,10 +8,19 @@ license.workspace = true
 publish = false
 
 [dependencies]
+globset = "0.4"
+rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+toml = "0.8"
+unicode-normalization = "0.1"
+notify = "8"
+walkdir = "2"
 quick-xml = "0.41"
 zip = "9.1.2"
 tantivy = { version = "0.27", features = ["zstd-compression"] }
 lindera = { version = "6.2.0", features = ["embed-ipadic"] }
 pdfium-render = { version = "0.9", default-features = false, features = ["thread_safe", "pdfium_7543"] }
+
+[dev-dependencies]
+proptest = "1"

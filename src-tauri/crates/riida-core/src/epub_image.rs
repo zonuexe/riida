@@ -444,13 +444,12 @@ pub(crate) fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     None
 }
 
-// --- IO: command + zip serving (mutation-gate excluded) --------------------
+// --- IO: layout + zip serving (mutation-gate excluded) ---------------------
 
 /// Determine the layout of an EPUB and, when it is an image-sequence
 /// fixed-layout book, the per-page resolved image entries and dimensions.
-#[tauri::command]
-pub fn epub_image_layout(file_path: String) -> Result<EpubImageLayout, String> {
-    let file = fs::File::open(&file_path).map_err(|e| format!("open epub {file_path}: {e}"))?;
+pub fn epub_image_layout(file_path: &str) -> Result<EpubImageLayout, String> {
+    let file = fs::File::open(file_path).map_err(|e| format!("open epub {file_path}: {e}"))?;
     let mut archive = ZipArchive::new(file).map_err(|e| format!("read epub zip: {e}"))?;
     let opf_path = opf_rootfile(&mut archive)?;
     let opf_bytes = zip_bytes(&mut archive, &opf_path)?;
@@ -533,7 +532,7 @@ pub fn epub_image_layout(file_path: String) -> Result<EpubImageLayout, String> {
 
 /// Read a single entry's bytes from an EPUB zip. Used by the `riida-epub` URI
 /// scheme to serve page images without unzipping the whole archive.
-pub(crate) fn read_zip_entry(file_path: &str, entry: &str) -> Result<Vec<u8>, String> {
+pub fn read_zip_entry(file_path: &str, entry: &str) -> Result<Vec<u8>, String> {
     let file = fs::File::open(file_path).map_err(|e| format!("open epub {file_path}: {e}"))?;
     let mut archive = ZipArchive::new(file).map_err(|e| format!("read epub zip: {e}"))?;
     zip_bytes(&mut archive, entry)
@@ -542,7 +541,7 @@ pub(crate) fn read_zip_entry(file_path: &str, entry: &str) -> Result<Vec<u8>, St
 /// Decode a percent-encoded URL component (as produced by JS
 /// `encodeURIComponent`) back into a UTF-8 string. Used to recover the file
 /// path and zip entry from a `riida-epub` request query.
-pub(crate) fn percent_decode(input: &str) -> String {
+pub fn percent_decode(input: &str) -> String {
     let bytes = input.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -563,7 +562,7 @@ pub(crate) fn percent_decode(input: &str) -> String {
 }
 
 /// MIME type for a zip image entry, by extension.
-pub(crate) fn content_type_for(entry: &str) -> &'static str {
+pub fn content_type_for(entry: &str) -> &'static str {
     match entry
         .rsplit('.')
         .next()
@@ -738,7 +737,7 @@ mod tests {
         let Ok(path) = std::env::var("RIIDA_IMAGE_EPUB") else {
             return;
         };
-        let layout = epub_image_layout(path).unwrap();
+        let layout = epub_image_layout(&path).unwrap();
         assert!(layout.is_image_epub);
         assert!(layout.pages.len() > 10);
         assert!(

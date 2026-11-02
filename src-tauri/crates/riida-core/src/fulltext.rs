@@ -252,8 +252,8 @@ impl FullTextIndex {
         Self::finish(index, fields)
     }
 
-    /// Create an in-RAM index (tests).
-    #[cfg(test)]
+    /// Create an in-RAM index. Used by tests here and in the app crate, which
+    /// cannot see this crate's `cfg(test)` items.
     pub fn in_ram() -> Result<Self, String> {
         let (schema, fields) = build_schema();
         let index = Index::create_in_ram(schema);

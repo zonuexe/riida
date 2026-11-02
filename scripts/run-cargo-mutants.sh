@@ -14,4 +14,6 @@ EOF
   exit 1
 fi
 
-exec cargo mutants --manifest-path src-tauri/Cargo.toml "$@"
+# --workspace: without it only the root `riida` package is mutated, and the
+# core crate (crates/riida-core) would silently drop out of the gate.
+exec cargo mutants --manifest-path src-tauri/Cargo.toml --workspace "$@"

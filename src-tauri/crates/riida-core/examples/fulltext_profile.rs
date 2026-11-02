@@ -4,17 +4,17 @@
 //! files, with per-phase timing, so indexing strategies can be compared:
 //!
 //! ```bash
-//! cargo build --profile profiling --example fulltext_profile
-//! target/profiling/examples/fulltext_profile \
+//! cargo build --manifest-path src-tauri/Cargo.toml --profile profiling -p riida-core --example fulltext_profile
+//! src-tauri/target/profiling/examples/fulltext_profile \
 //!   --root ~/Dropbox/EBook --limit 100 --mode per-book
 //! ```
 //!
 //! Online-only (dataless) cloud placeholders are always skipped so profiling
 //! never forces a download. Std-only; no extra dependencies.
 
-use riida_lib::fulltext::{ContentDoc, FullTextIndex};
-use riida_lib::fulltext_extract::{bind_pdfium, extract_epub_body, extract_pdf_body};
-use riida_lib::fulltext_pool::{run_extraction, worker_main, ExtractRequest, WORKER_FLAG};
+use riida_core::fulltext::{ContentDoc, FullTextIndex};
+use riida_core::fulltext_extract::{bind_pdfium, extract_epub_body, extract_pdf_body};
+use riida_core::fulltext_pool::{run_extraction, worker_main, ExtractRequest, WORKER_FLAG};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -264,7 +264,7 @@ fn bench_update(index: &FullTextIndex) {
     for i in 0..10 {
         let doc = ContentDoc {
             file_path: "update-bench.pdf".into(),
-            kind: riida_lib::fulltext::ContentKind::Note,
+            kind: riida_core::fulltext::ContentKind::Note,
             title: "update bench".into(),
             authors: String::new(),
             tags: String::new(),
@@ -287,7 +287,7 @@ fn bench_update(index: &FullTextIndex) {
     for _ in 0..5 {
         let t = Instant::now();
         index
-            .delete_kind("update-bench.pdf", riida_lib::fulltext::ContentKind::Note)
+            .delete_kind("update-bench.pdf", riida_core::fulltext::ContentKind::Note)
             .expect("delete_kind");
         times.push(t.elapsed());
     }

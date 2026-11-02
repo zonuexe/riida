@@ -57,10 +57,26 @@ UI implementation references [DESIGN.md](DESIGN.md) for visual language, color r
 
 `riida` is a Tauri v2 desktop app with:
 
-- Rust backend in [src-tauri/src/lib.rs](src-tauri/src/lib.rs)
+- Rust backend as a Cargo workspace rooted at
+  [src-tauri/Cargo.toml](src-tauri/Cargo.toml):
+  - [src-tauri/crates/riida-core](src-tauri/crates/riida-core) — the
+    frontend-independent core: config, storage layout, SQLite schema, library
+    scanning, tags, metadata, viewer preferences, EPUB parsing, thumbnails, and
+    full-text search. It has no Tauri dependency and no process-wide state;
+    functions take a `&Connection` or explicit paths.
+  - [src-tauri/src/lib.rs](src-tauri/src/lib.rs) — the Tauri app: process-wide
+    state (`DATABASE`, `APP_PATHS`, the full-text index), path resolution,
+    `#[tauri::command]` handlers, events, the library watcher, and background
+    workers. Commands should stay thin wrappers over `riida-core`.
 - Vite/TypeScript frontend in [src/main.ts](src/main.ts)
 - Styling in [src/styles.css](src/styles.css)
 - Nix flake dev environment in [flake.nix](flake.nix)
+
+New logic that does not need Tauri or global state belongs in `riida-core`.
+Keep the workspace root at `src-tauri/`: scripts, CI, `Cargo.lock`, and
+`target/` all assume `--manifest-path src-tauri/Cargo.toml`, and
+`default-members` makes plain cargo commands cover both crates. Both crates
+inherit one version from `[workspace.package]`, so a release bumps it once.
 
 The current app focus is local PDF library management with embedded reading, notes, thumbnails, and viewer preferences.
 
@@ -331,7 +347,7 @@ image viewer. This is far lighter than epub.js for such books: epub.js
 unzips the whole archive in JS and draws nested iframes, while this path
 streams one image at a time straight out of the zip.
 
-- **Detection + layout (Rust):** [src-tauri/src/epub_image.rs](src-tauri/src/epub_image.rs).
+- **Detection + layout (Rust):** [src-tauri/crates/riida-core/src/epub_image.rs](src-tauri/crates/riida-core/src/epub_image.rs).
   The `epub_image_layout` command parses the OPF (reusing the zip/OPF
   helpers in `fulltext_extract.rs`) and returns `is_image_epub`, the
   `page-progression-direction`, and per-page `{ image_entry (resolved zip
@@ -564,7 +580,7 @@ The backend currently stores at least:
 - reading positions
 - full-text index status (`fulltext_index`: per-file body_modified_at / indexed_at / status)
 
-Schema setup lives in the startup `CREATE TABLE IF NOT EXISTS` block in [src-tauri/src/lib.rs](src-tauri/src/lib.rs).
+Schema setup lives in the `CREATE TABLE IF NOT EXISTS` block of `open_database_at` in [src-tauri/crates/riida-core/src/db.rs](src-tauri/crates/riida-core/src/db.rs), which the app runs once at startup.
 
 If schema semantics change, consider migration behavior early.
 
@@ -587,11 +603,13 @@ and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-s
   runtime dynamic binding (no build-time linking). `bind_pdfium` resolves
   libpdfium from `PDFIUM_LIB_DIR` (the Nix dev shell sets it to nixpkgs
   `pdfium-binaries`) or the bundled resource dir, falling back to a system lib.
-- **Code:** [src-tauri/src/fulltext.rs](src-tauri/src/fulltext.rs) (schema,
+- **Code:** [src-tauri/crates/riida-core/src/fulltext.rs](src-tauri/crates/riida-core/src/fulltext.rs) (schema,
   tokenizer, index lifecycle, search + snippets),
-  [src-tauri/src/fulltext_extract.rs](src-tauri/src/fulltext_extract.rs)
-  (PDF/EPUB/metadata/note extraction), and the worker/commands/hooks in
-  [src-tauri/src/lib.rs](src-tauri/src/lib.rs). Frontend:
+  [src-tauri/crates/riida-core/src/fulltext_extract.rs](src-tauri/crates/riida-core/src/fulltext_extract.rs)
+  (PDF/EPUB/metadata/note extraction),
+  [src-tauri/crates/riida-core/src/fulltext_books.rs](src-tauri/crates/riida-core/src/fulltext_books.rs)
+  (which books to index, their base docs, chunked commits), and the
+  worker/commands/hooks in [src-tauri/src/lib.rs](src-tauri/src/lib.rs). Frontend:
   [src/fulltext-ui.ts](src/fulltext-ui.ts) (pure helpers, tested) + DOM wiring in
   [src/main.ts](src/main.ts).
 - **Opt-in (important):** indexing consumes disk and is **never** started
@@ -653,7 +671,7 @@ and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-s
     ~50 MB/s of source PDF per process). `pdfium-render`'s `thread_safe`
     feature serializes all FFI, so parallel *threads* do not help — the bulk
     paths instead extract in parallel worker *processes*
-    ([src-tauri/src/fulltext_pool.rs](src-tauri/src/fulltext_pool.rs)): the
+    ([src-tauri/crates/riida-core/src/fulltext_pool.rs](src-tauri/crates/riida-core/src/fulltext_pool.rs)): the
     same executable relaunched with `--fulltext-extract-worker` (dispatched in
     `main()` before Tauri init), JSON-lines over stdin/stdout, work-stealing
     queue. Scaling measured on real data: 1.97× with 2 workers, 3.74× with 4
@@ -669,13 +687,14 @@ and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-s
     measured 50-hit latency p50 ~55 ms → ~15 ms; `limit: 50` keeps it
     interactive.
 - **Profiling harness:**
-  [src-tauri/examples/fulltext_profile.rs](src-tauri/examples/fulltext_profile.rs)
+  [src-tauri/crates/riida-core/examples/fulltext_profile.rs](src-tauri/crates/riida-core/examples/fulltext_profile.rs)
   drives the same extraction/index/search core against real library files with
   per-phase timing — modes `per-book` / `chunked:N` / `batched`, plus
   `--update-bench` (save-hook cost) and `--search-only`. Build with the
   `profiling` cargo profile (release-grade + debug symbols for `samply`):
-  `cargo build --profile profiling --example fulltext_profile`, then e.g.
-  `target/profiling/examples/fulltext_profile --root ~/Dropbox/EBook
+  `cargo build --manifest-path src-tauri/Cargo.toml --profile profiling -p
+  riida-core --example fulltext_profile`, then e.g.
+  `src-tauri/target/profiling/examples/fulltext_profile --root ~/Dropbox/EBook
   --limit 100 --mode chunked:32`. It always skips online-only (dataless)
   placeholders, so it never triggers cloud downloads.
 - **Release TODO:** bundle the per-platform libpdfium into `bundle.resources`
@@ -728,7 +747,9 @@ nix --extra-experimental-features 'nix-command flakes' develop --command npm run
 
 Rust logic now uses both example-based unit tests and property-based tests.
 
-- deterministic unit tests live in [src-tauri/src/lib.rs](src-tauri/src/lib.rs)
+- deterministic unit tests live next to the code they cover, mostly in the
+  [riida-core](src-tauri/crates/riida-core/src) modules; shared fixtures are in
+  [test_support.rs](src-tauri/crates/riida-core/src/test_support.rs)
 - property-based tests use `proptest`
 
 Good candidates for future `proptest` coverage:
@@ -799,8 +820,9 @@ The per-push CI gate stays fast (`test.yml`, `test-rust.yml`,
 [.github/workflows/nightly.yml](.github/workflows/nightly.yml), which
 fires nightly (`cron`) and on demand (`workflow_dispatch`):
 
-- `rust-mutation` — `npm run mutants:rust` (`cargo-mutants`, scoped to
-  `lib.rs`); uploads `src-tauri/mutants.out/`.
+- `rust-mutation` — `npm run mutants:rust` (`cargo-mutants --workspace`,
+  covering both the `riida` app crate and `riida-core`); uploads
+  `src-tauri/mutants.out/`.
 - `frontend-mutation` — `npm run mutants:frontend` (Stryker, incremental);
   uploads `reports/mutation/`.
 - `rust-coverage` — `npm run cov:rust:html` (`cargo-llvm-cov`); uploads
@@ -862,7 +884,8 @@ mutants in the pure logic that unit tests actually cover (config and
 viewer-preference normalization, validation, NFC migration, EPUB
 parsing, snapshot assembly). When adding a new pure helper, prefer a
 unit test that kills its mutants; when adding a new command handler,
-extend `exclude_re` (or extract a testable `*_with_connection` core).
+extend `exclude_re` (or move the testable part into `riida-core` as a
+function that takes a `&Connection` or explicit paths).
 
 ## Frontend Naming Conventions
 

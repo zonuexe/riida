@@ -3888,6 +3888,25 @@ name = "riida"
 version = "0.9.3"
 dependencies = [
  "directories",
+ "notify",
+ "proptest",
+ "riida-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "toml 0.8.2",
+ "walkdir",
+ "zip",
+]
+
+[[package]]
+name = "riida-core"
+version = "0.9.3"
+dependencies = [
  "globset",
  "lindera",
  "notify",
@@ -3898,10 +3917,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tantivy",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
  "toml 0.8.2",
  "unicode-normalization",
  "walkdir",

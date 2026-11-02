@@ -1,0 +1,17 @@
+[package]
+name = "riida-core"
+version.workspace = true
+description = "Frontend-independent library, storage, and search logic for riida"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+quick-xml = "0.41"
+zip = "9.1.2"
+tantivy = { version = "0.27", features = ["zstd-compression"] }
+lindera = { version = "6.2.0", features = ["embed-ipadic"] }
+pdfium-render = { version = "0.9", default-features = false, features = ["thread_safe", "pdfium_7543"] }

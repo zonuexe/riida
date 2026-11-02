@@ -22,12 +22,7 @@ use unicode_normalization::UnicodeNormalization;
 use walkdir::WalkDir;
 use zip::ZipArchive;
 
-// Public so the profiling harness (`examples/fulltext_profile.rs`) can drive
-// the index/extraction core against real library data.
-pub mod epub_image;
-pub mod fulltext;
-pub mod fulltext_extract;
-pub mod fulltext_pool;
+use riida_core::{epub_image, fulltext, fulltext_extract, fulltext_pool};
 
 const CONFIG_FILE: &str = "riida.toml";
 const DEFAULT_EXCLUDED_PATTERNS: &[&str] = &["**/backup/**", "*.bak.pdf"];
@@ -3168,6 +3163,12 @@ fn delete_tag_globally(tag: String) -> Result<u64, String> {
     delete_book_tag(&connection, &tag)
 }
 
+/// Image-sequence fixed-layout EPUB detection; see `riida_core::epub_image`.
+#[tauri::command]
+fn epub_image_layout(file_path: String) -> Result<epub_image::EpubImageLayout, String> {
+    epub_image::epub_image_layout(&file_path)
+}
+
 #[tauri::command]
 fn extract_epub_metadata(file_path: String) -> Result<EpubMetadataPayload, String> {
     let epub_path = PathBuf::from(&file_path);
@@ -4960,7 +4961,7 @@ pub fn run() {
             rename_tag_globally,
             delete_tag_globally,
             extract_epub_metadata,
-            epub_image::epub_image_layout,
+            epub_image_layout,
             load_book_metadata,
             save_book_metadata,
             delete_book_metadata,

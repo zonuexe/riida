@@ -331,7 +331,7 @@ image viewer. This is far lighter than epub.js for such books: epub.js
 unzips the whole archive in JS and draws nested iframes, while this path
 streams one image at a time straight out of the zip.
 
-- **Detection + layout (Rust):** [src-tauri/src/epub_image.rs](src-tauri/src/epub_image.rs).
+- **Detection + layout (Rust):** [src-tauri/crates/riida-core/src/epub_image.rs](src-tauri/crates/riida-core/src/epub_image.rs).
   The `epub_image_layout` command parses the OPF (reusing the zip/OPF
   helpers in `fulltext_extract.rs`) and returns `is_image_epub`, the
   `page-progression-direction`, and per-page `{ image_entry (resolved zip
@@ -587,9 +587,9 @@ and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-s
   runtime dynamic binding (no build-time linking). `bind_pdfium` resolves
   libpdfium from `PDFIUM_LIB_DIR` (the Nix dev shell sets it to nixpkgs
   `pdfium-binaries`) or the bundled resource dir, falling back to a system lib.
-- **Code:** [src-tauri/src/fulltext.rs](src-tauri/src/fulltext.rs) (schema,
+- **Code:** [src-tauri/crates/riida-core/src/fulltext.rs](src-tauri/crates/riida-core/src/fulltext.rs) (schema,
   tokenizer, index lifecycle, search + snippets),
-  [src-tauri/src/fulltext_extract.rs](src-tauri/src/fulltext_extract.rs)
+  [src-tauri/crates/riida-core/src/fulltext_extract.rs](src-tauri/crates/riida-core/src/fulltext_extract.rs)
   (PDF/EPUB/metadata/note extraction), and the worker/commands/hooks in
   [src-tauri/src/lib.rs](src-tauri/src/lib.rs). Frontend:
   [src/fulltext-ui.ts](src/fulltext-ui.ts) (pure helpers, tested) + DOM wiring in
@@ -653,7 +653,7 @@ and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-s
     ~50 MB/s of source PDF per process). `pdfium-render`'s `thread_safe`
     feature serializes all FFI, so parallel *threads* do not help — the bulk
     paths instead extract in parallel worker *processes*
-    ([src-tauri/src/fulltext_pool.rs](src-tauri/src/fulltext_pool.rs)): the
+    ([src-tauri/crates/riida-core/src/fulltext_pool.rs](src-tauri/crates/riida-core/src/fulltext_pool.rs)): the
     same executable relaunched with `--fulltext-extract-worker` (dispatched in
     `main()` before Tauri init), JSON-lines over stdin/stdout, work-stealing
     queue. Scaling measured on real data: 1.97× with 2 workers, 3.74× with 4
@@ -669,13 +669,14 @@ and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-s
     measured 50-hit latency p50 ~55 ms → ~15 ms; `limit: 50` keeps it
     interactive.
 - **Profiling harness:**
-  [src-tauri/examples/fulltext_profile.rs](src-tauri/examples/fulltext_profile.rs)
+  [src-tauri/crates/riida-core/examples/fulltext_profile.rs](src-tauri/crates/riida-core/examples/fulltext_profile.rs)
   drives the same extraction/index/search core against real library files with
   per-phase timing — modes `per-book` / `chunked:N` / `batched`, plus
   `--update-bench` (save-hook cost) and `--search-only`. Build with the
   `profiling` cargo profile (release-grade + debug symbols for `samply`):
-  `cargo build --profile profiling --example fulltext_profile`, then e.g.
-  `target/profiling/examples/fulltext_profile --root ~/Dropbox/EBook
+  `cargo build --manifest-path src-tauri/Cargo.toml --profile profiling -p
+  riida-core --example fulltext_profile`, then e.g.
+  `src-tauri/target/profiling/examples/fulltext_profile --root ~/Dropbox/EBook
   --limit 100 --mode chunked:32`. It always skips online-only (dataless)
   placeholders, so it never triggers cloud downloads.
 - **Release TODO:** bundle the per-platform libpdfium into `bundle.resources`
@@ -799,8 +800,9 @@ The per-push CI gate stays fast (`test.yml`, `test-rust.yml`,
 [.github/workflows/nightly.yml](.github/workflows/nightly.yml), which
 fires nightly (`cron`) and on demand (`workflow_dispatch`):
 
-- `rust-mutation` — `npm run mutants:rust` (`cargo-mutants`, scoped to
-  `lib.rs`); uploads `src-tauri/mutants.out/`.
+- `rust-mutation` — `npm run mutants:rust` (`cargo-mutants --workspace`,
+  covering both the `riida` app crate and `riida-core`); uploads
+  `src-tauri/mutants.out/`.
 - `frontend-mutation` — `npm run mutants:frontend` (Stryker, incremental);
   uploads `reports/mutation/`.
 - `rust-coverage` — `npm run cov:rust:html` (`cargo-llvm-cov`); uploads

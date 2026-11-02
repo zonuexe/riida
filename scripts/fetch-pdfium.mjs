@@ -8,7 +8,7 @@
 // `tauri build`). CI passes the matrix target triple explicitly.
 //
 // The version is pinned and must be >= the `pdfium_NNNN` feature selected for
-// pdfium-render in src-tauri/Cargo.toml (the crate's bindings reference that
+// pdfium-render in src-tauri/crates/riida-core/Cargo.toml (the crate's bindings reference that
 // build's symbols). Override with PDFIUM_VERSION if needed.
 
 import { execFileSync } from "node:child_process";

@@ -1,10 +1,10 @@
 [package]
 name = "riida"
-version = "0.9.3"
+version.workspace = true
 description = "Tauri-based local PDF library manager for Dropbox-hosted ebooks"
-authors = ["zonuexe"]
-edition = "2021"
-license = "MPL-2.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -33,14 +33,27 @@ globset = "0.4"
 unicode-normalization = "0.1"
 quick-xml = "0.41"
 zip = "9.1.2"
-tantivy = { version = "0.27", features = ["zstd-compression"] }
-lindera = { version = "6.2.0", features = ["embed-ipadic"] }
-pdfium-render = { version = "0.9", default-features = false, features = ["thread_safe", "pdfium_7543"] }
+riida-core = { path = "crates/riida-core" }
 
 [dev-dependencies]
 proptest = "1"
 
-# Profiling builds (`cargo build --profile profiling --example fulltext_profile`):
+# The workspace root stays here so `--manifest-path src-tauri/Cargo.toml`,
+# `src-tauri/Cargo.lock`, and `src-tauri/target` keep working unchanged.
+# `default-members` makes plain cargo commands (test, clippy, check) cover the
+# core crate too, without needing `--workspace`.
+[workspace]
+members = ["crates/riida-core"]
+default-members = [".", "crates/riida-core"]
+
+# One version for the whole workspace: a release bumps it here only.
+[workspace.package]
+version = "0.9.3"
+authors = ["zonuexe"]
+edition = "2021"
+license = "MPL-2.0"
+
+# Profiling builds (`cargo build --profile profiling -p riida-core --example fulltext_profile`):
 # release-grade optimization but with debug symbols for samply/Instruments and
 # faster codegen settings so the measure-tune loop stays quick.
 [profile.profiling]

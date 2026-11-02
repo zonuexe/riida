@@ -475,6 +475,19 @@ mod tests {
     }
 
     #[test]
+    fn collapse_home_path_abbreviates_the_home_directory() {
+        let home = std::env::var("HOME").expect("HOME should exist for tests");
+        assert_eq!(collapse_home_path(&home), "~");
+        assert_eq!(collapse_home_path(&format!("{home}/Books")), "~/Books");
+        // Only a whole path component matches: a sibling with the same prefix stays.
+        assert_eq!(
+            collapse_home_path(&format!("{home}x/Books")),
+            format!("{home}x/Books")
+        );
+        assert_eq!(collapse_home_path("/elsewhere"), "/elsewhere");
+    }
+
+    #[test]
     fn normalize_config_input_expands_home_and_normalizes_patterns() {
         let home = std::env::var("HOME").expect("HOME should exist for tests");
         let config = normalize_config_input(AppConfigFile {

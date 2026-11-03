@@ -56,26 +56,6 @@ import {
   formatReleaseYear,
   shouldShowLibraryWelcome,
 } from "./library-utils";
-import {
-  buildNavigationUrl,
-  navigationStateSignature,
-  parsePdfPageQueryParam,
-} from "./navigation-utils";
-import { isNavigationBackShortcut, isNavigationForwardShortcut } from "./navigation-shortcuts";
-import {
-  EPUB_FONT_SIZE_DEFAULT,
-  isViewerEndShortcut,
-  isViewerHomeShortcut,
-  isViewerNextPageShortcut,
-  isViewerPrevPageShortcut,
-  isViewerZoomInShortcut,
-  isViewerZoomOutShortcut,
-  isViewerZoomResetShortcut,
-  nextEpubFontSizeDown,
-  nextEpubFontSizeUp,
-  nextViewerZoomIn,
-  nextViewerZoomOut,
-} from "./viewer-shortcuts";
 import { suggestTagCompletions } from "./tag-suggestions";
 import {
   applySuggestion,
@@ -97,45 +77,21 @@ import {
   type SidebarSectionKey,
 } from "./sidebar-section-order.ts";
 import { countBooksWithTagOrDescendants, validateTagValue } from "./tag-utils";
-import {
-  applyStatusMessage,
-  finishStartupPhase,
-  isEditableTarget,
-  syncControlValue,
-} from "./app/dom";
-import {
-  activeEpubRendition,
-  applyEpubFontSizeShortcut,
-  currentEpubFontSize,
-  destroyEpubBook,
-  initEpubFocusGuard,
-  isEpubNextPageKey,
-  isEpubPrevPageKey,
-} from "./app/epub-viewer";
+import { applyStatusMessage, finishStartupPhase, syncControlValue } from "./app/dom";
+import { destroyEpubBook, initEpubFocusGuard } from "./app/epub-viewer";
 import { cachedHomeDir, collapseHomePath, primeHomeDirCache } from "./app/home-path";
-import {
-  activeImageEpub,
-  destroyImageEpub,
-  goToImagePage,
-  goToImageSpread,
-} from "./app/image-epub-viewer";
+import { destroyImageEpub } from "./app/image-epub-viewer";
+import { initGlobalShortcuts } from "./app/keyboard";
 import { applyStaticTranslations, t, uiLocale } from "./app/locale";
+import {
+  initHistoryPopstate,
+  initNavigationControls,
+  loadInitialLibraryState,
+  navigateToState,
+} from "./app/navigation";
 import { initNotes, loadNoteForCurrentBook, noteState, syncNoteUi } from "./app/notes";
-import {
-  closePdfSearch,
-  initPdfSearch,
-  isPdfSearchShortcut,
-  openPdfSearch,
-  pdfSearchState,
-} from "./app/pdf-search";
-import {
-  activePdfRenderSession,
-  advancePdfPagedSpread,
-  handlePdfPagedKey,
-  initPdfStageScroll,
-  pdfZoomScale,
-  setPdfZoomScale,
-} from "./app/pdf-viewer";
+import { initPdfSearch } from "./app/pdf-search";
+import { initPdfStageScroll } from "./app/pdf-viewer";
 import { initFlushOnUnload } from "./app/reading-position";
 import { appState, viewerState } from "./app/state";
 import { initTocToggle } from "./app/toc";
@@ -145,18 +101,14 @@ import type {
   BookSummary,
   CustomSource,
   LibrarySnapshot,
-  NavigationState,
   Shelf,
 } from "./app/types";
 import { initViewerSettingsPanel, syncViewerSettingsUi } from "./app/viewer-settings";
 import {
   clearCurrentBookSelection,
-  currentViewerTotalPages,
   initViewerEditorButtons,
   initViewerPageJump,
   initViewerResize,
-  navigateViewerToPage,
-  openBook,
   renderCurrentPage,
   syncViewerPageJumpUi,
   viewerNeedsRender,
@@ -221,7 +173,7 @@ type ListSortKey =
   | "added-asc";
 let currentListSort: ListSortKey = "default";
 
-function resetListSort() {
+export function resetListSort() {
   currentListSort = "default";
   const el = document.querySelector<HTMLSelectElement>("#library-sort");
   if (el) el.value = "default";
@@ -253,10 +205,6 @@ const thumbnailUrls = new Map<string, string>();
 let thumbnailObserver: IntersectionObserver | null = null;
 const thumbnailBookByImage = new WeakMap<HTMLImageElement, BookSummary>();
 
-let suppressHistoryUpdates = false;
-let navigationHistoryIndex = 0;
-let navigationHistoryMax = 0;
-let navigationEntries: NavigationState[] = [];
 // Monotonic token so stale async full-text results from a superseded query are
 // ignored when they resolve out of order.
 let fulltextQueryToken = 0;
@@ -273,7 +221,7 @@ export function currentAppTheme(): AppTheme {
 
 let isTagEditorComposing = false;
 
-const tagEditorState: TagEditorState = {
+export const tagEditorState: TagEditorState = {
   isOpen: false,
   filePath: null,
   books: null,
@@ -314,7 +262,7 @@ const bookMetadataEditorState: BookMetadataEditorState = {
   loadToken: 0,
 };
 
-const bulkSelectState = {
+export const bulkSelectState = {
   selectedFilePaths: new Set<string>(),
 };
 
@@ -498,7 +446,7 @@ function ensureThumbnailObserver() {
   return thumbnailObserver;
 }
 
-function ensureExpandedPath(path: string | null) {
+export function ensureExpandedPath(path: string | null) {
   if (!path) {
     return;
   }
@@ -528,7 +476,7 @@ function parentTagId(tagId: string) {
   return separator >= 0 ? tagId.slice(0, separator) : null;
 }
 
-function ensureExpandedTag(tagId: string | null) {
+export function ensureExpandedTag(tagId: string | null) {
   if (!tagId) {
     return;
   }
@@ -1735,7 +1683,7 @@ function openNewCustomBookEditor(source: CustomSource) {
   syncBookMetadataEditorUi();
 }
 
-function syncBulkActionBar() {
+export function syncBulkActionBar() {
   const barEl = document.querySelector<HTMLElement>("#bulk-action-bar");
   const countEl = document.querySelector<HTMLElement>("#bulk-select-count");
   const shelfEl = document.querySelector<HTMLElement>("#book-results");
@@ -1860,7 +1808,7 @@ export async function openBookMetadataEditor(book: BookSummary) {
   }
 }
 
-function closeTagEditor() {
+export function closeTagEditor() {
   tagEditorState.isOpen = false;
   tagEditorState.filePath = null;
   tagEditorState.books = null;
@@ -2541,226 +2489,6 @@ function describeCurrentEmptyLibraryState(snapshot: LibrarySnapshot, books: Book
     bookCount: books.length,
     hasFilter: hasActiveLibraryFilter(),
     libraryErrorMessage: viewerState.libraryErrorMessage,
-  });
-}
-
-function currentNavigationState(): NavigationState {
-  const currentBook = viewerState.currentBook;
-  const isPdf = currentBook?.sourceType === "pdf";
-  return {
-    historyIndex: navigationHistoryIndex,
-    bookFilePath: currentBook?.filePath ?? null,
-    epubCfi: appState.activeReadingPosition?.cfi ?? null,
-    // pdfPage carries the page number for any paged viewer (PDF or image EPUB).
-    pdfPage: isPdf || activeImageEpub ? (appState.activeReadingPosition?.pageNumber ?? null) : null,
-    activeDirectory: viewerState.activeDirectory,
-    activeTag: viewerState.activeTag,
-    activeExternalSource: viewerState.activeExternalSource,
-    activeShelf: viewerState.activeShelf,
-    activeTagDirectOnly: viewerState.activeTagDirectOnly,
-    searchQuery: viewerState.searchQuery,
-  };
-}
-
-export function syncNavigationHistory(mode: "push" | "replace") {
-  if (suppressHistoryUpdates) {
-    return;
-  }
-
-  syncNavigationHistoryState(currentNavigationState(), mode);
-}
-
-function syncNavigationHistoryState(state: NavigationState, mode: "push" | "replace") {
-  if (suppressHistoryUpdates) {
-    return;
-  }
-
-  const normalizedState = {
-    ...state,
-    historyIndex: navigationHistoryIndex,
-  };
-
-  if (mode === "push") {
-    const currentState = navigationEntries[navigationHistoryIndex];
-    if (
-      currentState &&
-      navigationStateSignature(currentState) === navigationStateSignature(normalizedState)
-    ) {
-      syncNavigationControlsUi();
-      return;
-    }
-
-    navigationEntries = navigationEntries.slice(0, navigationHistoryIndex + 1);
-    navigationEntries.push({
-      ...normalizedState,
-      historyIndex: navigationHistoryIndex + 1,
-    });
-    navigationHistoryIndex = navigationEntries.length - 1;
-  } else if (navigationEntries.length === 0) {
-    navigationEntries = [{ ...normalizedState, historyIndex: 0 }];
-    navigationHistoryIndex = 0;
-  } else {
-    navigationEntries[navigationHistoryIndex] = {
-      ...normalizedState,
-      historyIndex: navigationHistoryIndex,
-    };
-  }
-
-  navigationHistoryMax = Math.max(0, navigationEntries.length - 1);
-  const historyState = navigationEntries[navigationHistoryIndex];
-  if (!historyState) return;
-  const url = buildNavigationUrl(historyState);
-
-  if (mode === "push") {
-    window.history.pushState(historyState, "", url);
-  } else {
-    window.history.replaceState(historyState, "", url);
-  }
-
-  syncNavigationControlsUi();
-}
-
-async function navigateToState(
-  state: Omit<NavigationState, "historyIndex">,
-  mode: "push" | "replace",
-) {
-  const nextState: NavigationState = {
-    historyIndex: navigationHistoryIndex,
-    ...state,
-  };
-
-  syncNavigationHistoryState(nextState, mode);
-  await applyNavigationState({
-    ...nextState,
-    historyIndex: navigationHistoryIndex,
-  });
-}
-
-async function applyNavigationState(state: NavigationState) {
-  const snapshot = appState.lastSnapshot;
-
-  if (!snapshot) {
-    return;
-  }
-
-  const prevDirectory = viewerState.activeDirectory;
-  const prevTag = viewerState.activeTag;
-  const prevExternalSource = viewerState.activeExternalSource;
-  const prevShelf = viewerState.activeShelf;
-
-  viewerState.searchQuery = state.searchQuery;
-  viewerState.activeDirectory = state.activeDirectory;
-  viewerState.activeTag = state.activeTag;
-  viewerState.activeExternalSource = state.activeExternalSource;
-  viewerState.activeShelf = state.activeShelf;
-  viewerState.activeTagDirectOnly = state.activeTagDirectOnly;
-
-  if (
-    prevDirectory !== viewerState.activeDirectory ||
-    prevTag !== viewerState.activeTag ||
-    prevExternalSource !== viewerState.activeExternalSource ||
-    prevShelf !== viewerState.activeShelf
-  ) {
-    resetListSort();
-    bulkSelectState.selectedFilePaths.clear();
-    syncBulkActionBar();
-  }
-
-  const nextBook = state.bookFilePath
-    ? (snapshot.books.find((book) => book.filePath === state.bookFilePath) ?? null)
-    : null;
-
-  ensureExpandedPath(state.activeDirectory);
-  ensureExpandedTag(state.activeTag);
-
-  // A non-openable (external) book has nothing to render; never hand its
-  // synthetic `kindle:` path to the PDF or EPUB viewer.
-  if (nextBook?.isOpenable) {
-    // Fast path: same EPUB book already rendered — jump directly via CFI
-    // to avoid destroying and re-creating the rendition.
-    if (
-      state.epubCfi &&
-      nextBook.filePath === viewerState.currentBook?.filePath &&
-      nextBook.sourceType === "epub" &&
-      activeEpubRendition
-    ) {
-      await activeEpubRendition.display(state.epubCfi);
-      return;
-    }
-
-    // Fast path: same PDF book already rendered — jump directly to the page
-    // without rebuilding the render session.
-    if (
-      state.pdfPage &&
-      nextBook.filePath === viewerState.currentBook?.filePath &&
-      nextBook.sourceType === "pdf" &&
-      activePdfRenderSession
-    ) {
-      navigateViewerToPage(state.pdfPage, { pushHistory: false });
-      return;
-    }
-
-    // Fast path: same image EPUB already rendered — jump directly to the page.
-    if (
-      state.pdfPage &&
-      nextBook.filePath === viewerState.currentBook?.filePath &&
-      nextBook.sourceType === "epub" &&
-      activeImageEpub
-    ) {
-      goToImagePage(state.pdfPage, { pushHistory: false });
-      return;
-    }
-
-    await openBook(nextBook, { updateHistory: "none" });
-    return;
-  }
-
-  await clearCurrentBookSelection();
-  renderApp();
-}
-
-function syncNavigationControlsUi() {
-  const backButtonEl = document.querySelector<HTMLButtonElement>("#nav-back");
-  const forwardButtonEl = document.querySelector<HTMLButtonElement>("#nav-forward");
-
-  if (backButtonEl) {
-    backButtonEl.disabled = navigationHistoryIndex <= 0;
-  }
-
-  if (forwardButtonEl) {
-    forwardButtonEl.disabled = navigationHistoryIndex >= navigationHistoryMax;
-  }
-}
-
-export function navigateBack() {
-  if (navigationHistoryIndex <= 0) {
-    return;
-  }
-
-  navigationHistoryIndex -= 1;
-  const nextState = navigationEntries[navigationHistoryIndex];
-  if (!nextState) return;
-  window.history.replaceState(nextState, "", buildNavigationUrl(nextState));
-  syncNavigationControlsUi();
-  suppressHistoryUpdates = true;
-  void applyNavigationState(nextState).finally(() => {
-    suppressHistoryUpdates = false;
-  });
-}
-
-function navigateForward() {
-  if (navigationHistoryIndex >= navigationHistoryMax) {
-    return;
-  }
-
-  navigationHistoryIndex += 1;
-  const nextState = navigationEntries[navigationHistoryIndex];
-  if (!nextState) return;
-  window.history.replaceState(nextState, "", buildNavigationUrl(nextState));
-  syncNavigationControlsUi();
-  suppressHistoryUpdates = true;
-  void applyNavigationState(nextState).finally(() => {
-    suppressHistoryUpdates = false;
   });
 }
 
@@ -4327,19 +4055,6 @@ function initLibrarySearch() {
   });
 }
 
-function initNavigationControls() {
-  const navBackEl = document.querySelector<HTMLButtonElement>("#nav-back");
-  const navForwardEl = document.querySelector<HTMLButtonElement>("#nav-forward");
-
-  navBackEl?.addEventListener("click", () => {
-    navigateBack();
-  });
-
-  navForwardEl?.addEventListener("click", () => {
-    navigateForward();
-  });
-}
-
 function initShellControls() {
   const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
   const sidebarHomeOpenEl = document.querySelector<HTMLButtonElement>("#sidebar-home-open");
@@ -4499,12 +4214,12 @@ function initSidebarControls() {
   });
 }
 
-const closeAppSettings = () => {
+export const closeAppSettings = () => {
   viewerState.isAppSettingsOpen = false;
   setAppSettingsStatus("");
   syncAppSettingsUi();
 };
-const closeAbout = () => {
+export const closeAbout = () => {
   viewerState.isAboutOpen = false;
   syncAboutUi();
 };
@@ -4901,179 +4616,6 @@ function initBookMetadataEditor() {
   });
 }
 
-function initGlobalShortcuts() {
-  window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && tagEditorState.isOpen) {
-      closeTagEditor();
-      return;
-    }
-
-    if (event.key === "Escape" && viewerState.isAboutOpen) {
-      closeAbout();
-      return;
-    }
-
-    if (event.key === "Escape" && viewerState.isAppSettingsOpen) {
-      closeAppSettings();
-      return;
-    }
-
-    if (event.key === "Escape" && pdfSearchState.isOpen) {
-      closePdfSearch();
-      return;
-    }
-
-    if (
-      isPdfSearchShortcut(event) &&
-      appState.lastSnapshot?.pdfRenderer === "pdfjs" &&
-      viewerState.currentBook
-    ) {
-      event.preventDefault();
-      openPdfSearch();
-      return;
-    }
-
-    if (isEditableTarget(event.target)) {
-      return;
-    }
-
-    const shortcutInput = {
-      platform: navigator.platform,
-      key: event.key,
-      code: event.code,
-      metaKey: event.metaKey,
-      altKey: event.altKey,
-      ctrlKey: event.ctrlKey,
-      shiftKey: event.shiftKey,
-    };
-    const wantsBack = isNavigationBackShortcut(shortcutInput);
-    const wantsForward = isNavigationForwardShortcut(shortcutInput);
-
-    if (wantsBack) {
-      event.preventDefault();
-      navigateBack();
-      return;
-    }
-
-    if (wantsForward) {
-      event.preventDefault();
-      navigateForward();
-      return;
-    }
-
-    if (viewerState.currentBook) {
-      const isPdfBook = viewerState.currentBook.sourceType === "pdf";
-      const isEpubBook = viewerState.currentBook.sourceType === "epub";
-      const pdfActive = isPdfBook && appState.lastSnapshot?.pdfRenderer === "pdfjs";
-      const epubActive = isEpubBook && Boolean(activeEpubRendition);
-      const imgEpubActive = isEpubBook && activeImageEpub !== null;
-
-      if (pdfActive || epubActive || imgEpubActive) {
-        if (isViewerZoomResetShortcut(shortcutInput)) {
-          event.preventDefault();
-          if (pdfActive) {
-            setPdfZoomScale(1);
-          } else if (epubActive) {
-            applyEpubFontSizeShortcut(EPUB_FONT_SIZE_DEFAULT);
-          }
-          return;
-        }
-
-        if (isViewerZoomInShortcut(shortcutInput)) {
-          event.preventDefault();
-          if (pdfActive) {
-            setPdfZoomScale(nextViewerZoomIn(pdfZoomScale));
-          } else if (epubActive) {
-            applyEpubFontSizeShortcut(nextEpubFontSizeUp(currentEpubFontSize()));
-          }
-          return;
-        }
-
-        if (isViewerZoomOutShortcut(shortcutInput)) {
-          event.preventDefault();
-          if (pdfActive) {
-            setPdfZoomScale(nextViewerZoomOut(pdfZoomScale));
-          } else if (epubActive) {
-            applyEpubFontSizeShortcut(nextEpubFontSizeDown(currentEpubFontSize()));
-          }
-          return;
-        }
-
-        if (isViewerHomeShortcut(shortcutInput)) {
-          event.preventDefault();
-          navigateViewerToPage(1);
-          return;
-        }
-
-        if (isViewerEndShortcut(shortcutInput)) {
-          event.preventDefault();
-          const totalPages = currentViewerTotalPages();
-          if (totalPages && totalPages >= 1) {
-            navigateViewerToPage(totalPages);
-          }
-          return;
-        }
-
-        if (isViewerNextPageShortcut(shortcutInput)) {
-          event.preventDefault();
-          if (imgEpubActive) {
-            goToImageSpread(1);
-          } else if (epubActive && activeEpubRendition) {
-            void activeEpubRendition.next();
-          } else if (pdfActive) {
-            advancePdfPagedSpread(1);
-          }
-          return;
-        }
-
-        if (isViewerPrevPageShortcut(shortcutInput)) {
-          event.preventDefault();
-          if (imgEpubActive) {
-            goToImageSpread(-1);
-          } else if (epubActive && activeEpubRendition) {
-            void activeEpubRendition.prev();
-          } else if (pdfActive) {
-            advancePdfPagedSpread(-1);
-          }
-          return;
-        }
-      }
-    }
-
-    if (handlePdfPagedKey(event)) {
-      return;
-    }
-
-    if (
-      viewerState.currentBook?.sourceType === "epub" &&
-      (activeEpubRendition || activeImageEpub)
-    ) {
-      // DPFJ guide §ページ進行方向の遵守: in rtl books ArrowLeft advances reading order.
-      const wantsNext = appState.activeEpubIsRtl
-        ? isEpubPrevPageKey(event)
-        : isEpubNextPageKey(event);
-      const wantsPrev = appState.activeEpubIsRtl
-        ? isEpubNextPageKey(event)
-        : isEpubPrevPageKey(event);
-      if (wantsNext) {
-        event.preventDefault();
-        if (activeImageEpub) {
-          goToImageSpread(1);
-        } else {
-          void activeEpubRendition?.next();
-        }
-      } else if (wantsPrev) {
-        event.preventDefault();
-        if (activeImageEpub) {
-          goToImageSpread(-1);
-        } else {
-          void activeEpubRendition?.prev();
-        }
-      }
-    }
-  });
-}
-
 async function registerLibraryEvents() {
   await listen<LibrarySnapshot>("library-updated", (event) => {
     appState.lastSnapshot = event.payload;
@@ -5149,76 +4691,6 @@ async function registerFulltextEvents() {
   // Learn whether a prior session already built the index (so search calls and
   // the results group are enabled) without triggering any indexing.
   void refreshFulltextStatus();
-}
-
-function initHistoryPopstate() {
-  window.addEventListener("popstate", (event) => {
-    const state = event.state as NavigationState | null;
-    const fallbackParams = new URLSearchParams(window.location.search);
-    const nextState: NavigationState = state ?? {
-      historyIndex: 0,
-      bookFilePath: fallbackParams.get("book"),
-      pdfPage: parsePdfPageQueryParam(fallbackParams.get("page")),
-      activeDirectory: fallbackParams.get("dir"),
-      activeTag: fallbackParams.get("tag"),
-      activeExternalSource: fallbackParams.get("source"),
-      activeShelf: fallbackParams.get("shelf"),
-      activeTagDirectOnly: fallbackParams.get("tagMode") === "direct",
-      searchQuery: fallbackParams.get("q") ?? "",
-    };
-
-    if (navigationEntries.length === 0) {
-      navigationEntries = [{ ...nextState, historyIndex: 0 }];
-    }
-
-    navigationHistoryIndex = Math.max(
-      0,
-      Math.min(nextState.historyIndex ?? 0, navigationEntries.length - 1),
-    );
-    navigationHistoryMax = Math.max(0, navigationEntries.length - 1);
-    syncNavigationControlsUi();
-
-    suppressHistoryUpdates = true;
-    void applyNavigationState(nextState).finally(() => {
-      suppressHistoryUpdates = false;
-    });
-  });
-}
-
-function loadInitialLibraryState() {
-  invoke<LibrarySnapshot>("library_snapshot")
-    .then((snapshot) => {
-      appState.lastSnapshot = snapshot;
-      viewerState.libraryErrorMessage = null;
-      viewerState.books = snapshot.books;
-      const params = new URLSearchParams(window.location.search);
-      const initialState: NavigationState = {
-        historyIndex: 0,
-        bookFilePath: params.get("book"),
-        pdfPage: parsePdfPageQueryParam(params.get("page")),
-        activeDirectory: params.get("dir"),
-        activeTag: params.get("tag"),
-        activeExternalSource: params.get("source"),
-        activeShelf: params.get("shelf"),
-        activeTagDirectOnly: params.get("tagMode") === "direct",
-        searchQuery: params.get("q") ?? "",
-      };
-
-      navigationEntries = [{ ...initialState, historyIndex: 0 }];
-      navigationHistoryIndex = 0;
-      navigationHistoryMax = 0;
-      syncNavigationControlsUi();
-      suppressHistoryUpdates = true;
-      void applyNavigationState(initialState).finally(() => {
-        suppressHistoryUpdates = false;
-        syncNavigationHistory("replace");
-      });
-    })
-    .catch((error) => {
-      viewerState.libraryErrorMessage = "Failed to load the library.";
-      renderApp();
-      console.error("failed to load library snapshot", error);
-    });
 }
 
 async function loadAppMetadata() {

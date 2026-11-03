@@ -14,11 +14,12 @@ import {
 } from "../epub-image-layout-utils";
 import { viewerColorPaletteForMode } from "../viewer-settings-utils";
 import { destroyEpubBook } from "./epub-viewer";
+import { syncNavigationHistory } from "./navigation";
 import { releaseActivePdfDocument } from "./pdf-viewer";
 import { cacheReadingPosition, scheduleEpubPositionSave } from "./reading-position";
 import { appState, viewerSettings, viewerState } from "./state";
 import { syncViewerPageJumpUi } from "./viewer";
-import { currentAppTheme, syncNavigationHistory } from "../main";
+import { currentAppTheme } from "../main";
 
 // Raw payload from the `epub_image_layout` Rust command.
 export type EpubImageLayoutPayload = {

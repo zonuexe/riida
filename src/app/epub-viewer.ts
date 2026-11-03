@@ -20,6 +20,7 @@ import {
   imageEpubLayoutCache,
   renderImageEpub,
 } from "./image-epub-viewer";
+import { syncNavigationHistory } from "./navigation";
 import { releaseActivePdfDocument } from "./pdf-viewer";
 import { scheduleEpubPositionSave } from "./reading-position";
 import { appState, viewerSettings, viewerState } from "./state";
@@ -33,7 +34,7 @@ import {
   syncViewerSettingsUi,
 } from "./viewer-settings";
 import { syncViewerPageJumpUi } from "./viewer";
-import { currentAppTheme, syncNavigationHistory } from "../main";
+import { currentAppTheme } from "../main";
 
 let epubRenderToken = 0;
 export let activeEpubBook: import("epubjs").Book | null = null;

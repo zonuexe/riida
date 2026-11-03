@@ -14,6 +14,7 @@ import { buildPageGroups, getVisualPageOrder } from "../viewer-layout-utils";
 import { buildPdfRenderWindowPlan } from "../pdf-render-window-utils";
 import { planPagedKeyAction } from "../pdf-paged-nav-utils";
 import { applyEpubViewerColors } from "./epub-viewer";
+import { navigateBack } from "./navigation";
 import { applyPdfSearchHighlights, closePdfSearch, pdfSearchState } from "./pdf-search";
 import {
   restoreReadingPositionAttempt,
@@ -25,7 +26,6 @@ import { buildPdfToc, syncTocUi } from "./toc";
 import type { PdfOutlineNode } from "./types";
 import { applyPdfViewerBackground, applyViewerVerticalGapMode } from "./viewer-settings";
 import { currentViewerStage, navigateViewerToPage, renderCurrentPage } from "./viewer";
-import { navigateBack } from "../main";
 
 type PdfRenderPlan = {
   groupIndex: number;

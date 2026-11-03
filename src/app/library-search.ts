@@ -7,8 +7,8 @@ import {
   type SearchSuggestion,
 } from "../search-suggestions";
 import { navigateToState } from "./navigation";
+import { openShelfEditor } from "./shelf-editor";
 import { appState, viewerState } from "./state";
-import { openShelfEditor } from "../main";
 
 export function initLibrarySearch() {
   const searchInput = document.querySelector<HTMLInputElement>("#library-search");

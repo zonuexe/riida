@@ -12,12 +12,13 @@ import { destroyEpubBook } from "./epub-viewer";
 import { renderFulltextResults } from "./fulltext";
 import { destroyImageEpub } from "./image-epub-viewer";
 import { hasActiveLibraryFilter, renderApp, visibleBooks } from "./library";
+import { openBookMetadataEditorForBooks } from "./metadata-editor";
 import { loadNoteForCurrentBook, noteState, syncNoteUi } from "./notes";
 import { appState, viewerState } from "./state";
+import { openTagEditorForBooks } from "./tag-editor";
 import type { BookSummary, LibrarySnapshot } from "./types";
 import { syncViewerSettingsUi } from "./viewer-settings";
 import { renderCurrentPage, syncViewerPageJumpUi, viewerNeedsRender } from "./viewer";
-import { openBookMetadataEditorForBooks, openTagEditorForBooks } from "../main";
 
 type ListSortKey =
   | "default"

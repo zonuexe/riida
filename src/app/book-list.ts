@@ -14,10 +14,11 @@ import {
 import { cachedHomeDir } from "./home-path";
 import { bulkSelectState, syncBulkActionBar } from "./library-view";
 import { describeCurrentEmptyLibraryState } from "./library";
+import { openBookMetadataEditor } from "./metadata-editor";
 import { navigateToState } from "./navigation";
 import { appState, viewerState } from "./state";
+import { openTagEditor } from "./tag-editor";
 import type { BookSummary } from "./types";
-import { openBookMetadataEditor, openTagEditor } from "../main";
 
 const thumbnailUrls = new Map<string, string>();
 let thumbnailObserver: IntersectionObserver | null = null;

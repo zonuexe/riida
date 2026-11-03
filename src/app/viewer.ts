@@ -22,6 +22,7 @@ import {
   goToImagePage,
 } from "./image-epub-viewer";
 import { renderApp } from "./library";
+import { openBookMetadataEditor } from "./metadata-editor";
 import { syncNavigationHistory } from "./navigation";
 import {
   clampNoteWindow,
@@ -49,6 +50,7 @@ import {
   scheduleReadingPositionRestore,
 } from "./reading-position";
 import { appState, viewerSettings, viewerState } from "./state";
+import { openTagEditor } from "./tag-editor";
 import type { BookSummary, LibrarySnapshot } from "./types";
 import {
   applyPdfViewerBackground,
@@ -56,7 +58,6 @@ import {
   loadViewerSettingsForCurrentBook,
   syncViewerSettingsUi,
 } from "./viewer-settings";
-import { openBookMetadataEditor, openTagEditor } from "../main";
 
 type ViewerPageJumpState = {
   input: string;

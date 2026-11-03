@@ -13,9 +13,9 @@ import {
   jumpTargetForHit,
   locationLabel,
 } from "../fulltext-ui";
+import { openBookMetadataEditor } from "./metadata-editor";
 import { navigateToState } from "./navigation";
 import { appState, viewerState } from "./state";
-import { openBookMetadataEditor } from "../main";
 
 // Monotonic token so stale async full-text results from a superseded query are
 // ignored when they resolve out of order.

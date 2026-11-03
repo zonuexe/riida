@@ -5,11 +5,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { describeEmptyLibraryState, filterVisibleBooks } from "../library-utils";
 import { renderMain, sortBooks } from "./library-view";
+import { syncBookMetadataEditorUi } from "./metadata-editor";
 import { renderSidebar } from "./sidebar";
 import { appState, viewerState } from "./state";
+import { syncTagEditorUi } from "./tag-editor";
 import type { BookSummary, LibrarySnapshot, Shelf } from "./types";
 import { clearCurrentBookSelection } from "./viewer";
-import { syncBookMetadataEditorUi, syncTagEditorUi } from "../main";
 
 export function updateBookTagsInState(filePath: string, tags: string[]) {
   const apply = (book: BookSummary) =>

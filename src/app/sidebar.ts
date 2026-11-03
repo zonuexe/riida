@@ -12,9 +12,10 @@ import {
 import { openCustomSourceEditor } from "./custom-sources";
 import { refreshShelves, renderApp } from "./library";
 import { navigateToState } from "./navigation";
+import { openShelfEditor } from "./shelf-editor";
 import { appState, viewerState } from "./state";
+import { openTagManager } from "./tag-editor";
 import type { LibrarySnapshot } from "./types";
-import { openShelfEditor, openTagManager } from "../main";
 
 export function ensureExpandedPath(path: string | null) {
   if (!path) {

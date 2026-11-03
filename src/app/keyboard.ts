@@ -35,8 +35,8 @@ import {
 } from "./pdf-viewer";
 import { closeAppSettings } from "./settings";
 import { appState, viewerState } from "./state";
+import { closeTagEditor, tagEditorState } from "./tag-editor";
 import { currentViewerTotalPages, navigateViewerToPage } from "./viewer";
-import { closeTagEditor, tagEditorState } from "../main";
 
 export function initGlobalShortcuts() {
   window.addEventListener("keydown", (event) => {

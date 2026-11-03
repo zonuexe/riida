@@ -469,7 +469,34 @@ const viewerSettings: ViewerSettingsState = {
   sourceType: "pdf",
 };
 
-let lastSnapshot: LibrarySnapshot | null = null;
+// Mutable state that more than one feature reassigns. State only one feature
+// writes stays with that feature; these are the values shared across them.
+type AppState = {
+  lastSnapshot: LibrarySnapshot | null;
+  lastAppConfig: AppConfigPayload | null;
+  activeReadingPosition: ReadingPosition | null;
+  // One-shot jump target consumed by openBook when a full-text hit opens a book
+  // at a specific location instead of its saved reading position.
+  pendingViewerJump: { filePath: string; page?: number; cfi?: string } | null;
+  activePdfOutline: PdfOutlineNode[] | null;
+  tocPanelOpen: boolean;
+  activeEpubTotalPages: number | null;
+  // True when the active EPUB's spine page-progression-direction is "rtl".
+  // DPFJ guide §ページ進行方向の遵守: page direction is governed by OPF spine, not writing-mode.
+  // In rtl books, ArrowLeft advances the reading order (next page) while ArrowRight goes back.
+  activeEpubIsRtl: boolean;
+};
+
+const appState: AppState = {
+  lastSnapshot: null,
+  lastAppConfig: null,
+  activeReadingPosition: null,
+  pendingViewerJump: null,
+  activePdfOutline: null,
+  tocPanelOpen: false,
+  activeEpubTotalPages: null,
+  activeEpubIsRtl: false,
+};
 
 type ListSortKey =
   | "default"
@@ -535,11 +562,6 @@ let epubRenderToken = 0;
 let activeEpubBook: import("epubjs").Book | null = null;
 let activeEpubRendition: import("epubjs").Rendition | null = null;
 let activeEpubLinkMessageHandler: ((event: MessageEvent) => void) | null = null;
-let activeEpubTotalPages: number | null = null;
-// True when the active EPUB's spine page-progression-direction is "rtl".
-// DPFJ guide §ページ進行方向の遵守: page direction is governed by OPF spine, not writing-mode.
-// In rtl books, ArrowLeft advances the reading order (next page) while ArrowRight goes back.
-let activeEpubIsRtl = false;
 // Raw payload from the `epub_image_layout` Rust command.
 type EpubImageLayoutPayload = {
   is_image_epub: boolean;
@@ -567,8 +589,6 @@ let activeImageEpub: ImageEpubSession | null = null;
 // Per-file cache of the parsed layout so detection does not re-parse the zip on
 // every renderCurrentPage (settings changes, re-renders).
 const imageEpubLayoutCache = new Map<string, EpubImageLayoutPayload>();
-let tocPanelOpen = false;
-let activePdfOutline: PdfOutlineNode[] | null = null;
 let viewerSettingsLoadToken = 0;
 const pdfSearchState: {
   isOpen: boolean;
@@ -590,15 +610,10 @@ let suppressHistoryUpdates = false;
 let navigationHistoryIndex = 0;
 let navigationHistoryMax = 0;
 let navigationEntries: NavigationState[] = [];
-let activeReadingPosition: ReadingPosition | null = null;
-// One-shot jump target consumed by openBook when a full-text hit opens a book
-// at a specific location instead of its saved reading position.
-let pendingViewerJump: { filePath: string; page?: number; cfi?: string } | null = null;
 // Monotonic token so stale async full-text results from a superseded query are
 // ignored when they resolve out of order.
 let fulltextQueryToken = 0;
 let pdfZoomScale = 1;
-let lastAppConfig: AppConfigPayload | null = null;
 let cachedHomeDir: string | null = null;
 let cachedAppName = "riida";
 let cachedAppVersion = "0.9.3";
@@ -607,7 +622,7 @@ let cachedLicenseText = "Loading license text...";
 let cachedThirdPartyRustText = "Loading Rust notices...";
 let cachedThirdPartyJsText = "Loading JavaScript notices...";
 function currentAppTheme(): AppTheme {
-  return normalizeAppTheme(lastAppConfig?.theme ?? "default");
+  return normalizeAppTheme(appState.lastAppConfig?.theme ?? "default");
 }
 
 function currentViewerSettingsSourceType(): ViewerSourceType | null {
@@ -823,7 +838,7 @@ function syncViewerBackgroundControls(
 
 function syncImmediatePdfBackgroundPreview() {
   const sourceType = currentViewerSettingsSourceType();
-  if (sourceType === "pdf" && lastSnapshot?.pdfRenderer === "pdfjs") {
+  if (sourceType === "pdf" && appState.lastSnapshot?.pdfRenderer === "pdfjs") {
     applyPdfViewerBackground(currentViewerPreferences().backgroundMode);
     return;
   }
@@ -1330,10 +1345,10 @@ function currentViewerPageNumber() {
   }
 
   if (viewerState.currentBook.sourceType === "epub") {
-    return activeReadingPosition?.pageNumber ?? (activeEpubTotalPages ? 1 : null);
+    return appState.activeReadingPosition?.pageNumber ?? (appState.activeEpubTotalPages ? 1 : null);
   }
 
-  return activeReadingPosition?.pageNumber ?? 1;
+  return appState.activeReadingPosition?.pageNumber ?? 1;
 }
 
 function currentViewerTotalPages() {
@@ -1343,7 +1358,7 @@ function currentViewerTotalPages() {
   }
 
   if (currentBook.sourceType === "epub") {
-    return activeEpubTotalPages;
+    return appState.activeEpubTotalPages;
   }
 
   return activePdfRenderSession?.pdfDocument.numPages ?? null;
@@ -1389,7 +1404,10 @@ function setPdfZoomScale(nextScale: number) {
     return;
   }
   pdfZoomScale = nextScale;
-  if (lastSnapshot?.pdfRenderer === "pdfjs" && viewerState.currentBook?.sourceType === "pdf") {
+  if (
+    appState.lastSnapshot?.pdfRenderer === "pdfjs" &&
+    viewerState.currentBook?.sourceType === "pdf"
+  ) {
     void renderCurrentPage();
   }
 }
@@ -1449,13 +1467,13 @@ function navigateViewerToPage(pageNumber: number, options: { pushHistory?: boole
       void flushReadingPositionSave();
       return;
     }
-    if (!activeEpubBook || !activeEpubRendition || !activeEpubTotalPages) {
+    if (!activeEpubBook || !activeEpubRendition || !appState.activeEpubTotalPages) {
       return;
     }
 
-    const boundedPageNumber = clampEpubPageNumber(pageNumber, activeEpubTotalPages);
+    const boundedPageNumber = clampEpubPageNumber(pageNumber, appState.activeEpubTotalPages);
     const cfi = activeEpubBook.locations.cfiFromLocation(
-      epubLocationIndexFromPageNumber(boundedPageNumber, activeEpubTotalPages),
+      epubLocationIndexFromPageNumber(boundedPageNumber, appState.activeEpubTotalPages),
     );
     if (!cfi) {
       return;
@@ -1466,14 +1484,14 @@ function navigateViewerToPage(pageNumber: number, options: { pushHistory?: boole
       syncNavigationHistory("replace");
     }
 
-    activeReadingPosition = {
+    appState.activeReadingPosition = {
       filePath: currentBook.filePath,
       pageNumber: boundedPageNumber,
       pageOffsetRatio: 0,
       cfi,
-      updatedAt: activeReadingPosition?.updatedAt ?? null,
+      updatedAt: appState.activeReadingPosition?.updatedAt ?? null,
     };
-    cacheReadingPosition(activeReadingPosition);
+    cacheReadingPosition(appState.activeReadingPosition);
 
     if (pushHistory) {
       syncNavigationHistory("push");
@@ -1491,18 +1509,18 @@ function navigateViewerToPage(pageNumber: number, options: { pushHistory?: boole
   if (pushHistory) {
     const capturedPosition = captureReadingPositionFromViewer();
     if (capturedPosition) {
-      activeReadingPosition = capturedPosition;
+      appState.activeReadingPosition = capturedPosition;
     }
     syncNavigationHistory("replace");
   }
 
-  activeReadingPosition = {
+  appState.activeReadingPosition = {
     filePath: currentBook.filePath,
     pageNumber: boundedPageNumber,
     pageOffsetRatio: 0,
-    updatedAt: activeReadingPosition?.updatedAt ?? null,
+    updatedAt: appState.activeReadingPosition?.updatedAt ?? null,
   };
-  cacheReadingPosition(activeReadingPosition);
+  cacheReadingPosition(appState.activeReadingPosition);
 
   if (pushHistory) {
     syncNavigationHistory("push");
@@ -1510,7 +1528,7 @@ function navigateViewerToPage(pageNumber: number, options: { pushHistory?: boole
 
   syncViewerPageJumpUi();
 
-  if (lastSnapshot?.pdfRenderer === "pdfjs" && activePdfRenderSession) {
+  if (appState.lastSnapshot?.pdfRenderer === "pdfjs" && activePdfRenderSession) {
     activePdfRenderSession.restoreTargetPage = boundedPageNumber;
     const groupIndex = findPdfRenderGroupIndexForPage(activePdfRenderSession, boundedPageNumber);
     schedulePdfRenderWindowUpdate(activePdfRenderSession, groupIndex >= 0 ? groupIndex : undefined);
@@ -1888,7 +1906,7 @@ function renderLibraryRootsList() {
   }
 
   listEl.innerHTML = "";
-  const roots = lastAppConfig?.libraryRoots ?? [];
+  const roots = appState.lastAppConfig?.libraryRoots ?? [];
 
   if (roots.length === 0) {
     const emptyEl = document.createElement("div");
@@ -1911,18 +1929,18 @@ function renderLibraryRootsList() {
     removeEl.textContent = "Remove";
     removeEl.disabled = roots.length <= 1;
     removeEl.addEventListener("click", () => {
-      if (!lastAppConfig) {
+      if (!appState.lastAppConfig) {
         return;
       }
 
-      if (lastAppConfig.libraryRoots.length <= 1) {
+      if (appState.lastAppConfig.libraryRoots.length <= 1) {
         setAppSettingsStatus("At least one library root is required.", "error");
         return;
       }
 
-      lastAppConfig = {
-        ...lastAppConfig,
-        libraryRoots: lastAppConfig.libraryRoots.filter(
+      appState.lastAppConfig = {
+        ...appState.lastAppConfig,
+        libraryRoots: appState.lastAppConfig.libraryRoots.filter(
           (_, candidateIndex) => candidateIndex !== index,
         ),
       };
@@ -1959,21 +1977,21 @@ function syncAppSettingsUi() {
     modalEl.hidden = !viewerState.isAppSettingsOpen;
   }
 
-  if (lastAppConfig) {
+  if (appState.lastAppConfig) {
     if (excludedPatternsEl) {
-      excludedPatternsEl.value = lastAppConfig.excludedPatterns.join("\n");
+      excludedPatternsEl.value = appState.lastAppConfig.excludedPatterns.join("\n");
     }
     if (pdfRendererEl) {
-      pdfRendererEl.value = lastAppConfig.pdfRenderer;
+      pdfRendererEl.value = appState.lastAppConfig.pdfRenderer;
     }
     if (themeEl) {
-      themeEl.value = lastAppConfig.theme;
+      themeEl.value = appState.lastAppConfig.theme;
     }
     if (configPathEl) {
-      configPathEl.innerHTML = `Config file: <code>${lastAppConfig.configPath}</code>`;
+      configPathEl.innerHTML = `Config file: <code>${appState.lastAppConfig.configPath}</code>`;
     }
     if (kindleEnabledEl) {
-      kindleEnabledEl.checked = lastAppConfig.enabledExternalSources.includes("kindle");
+      kindleEnabledEl.checked = appState.lastAppConfig.enabledExternalSources.includes("kindle");
     }
   } else if (configPathEl) {
     configPathEl.textContent = "";
@@ -1989,7 +2007,7 @@ function renderCustomSourcesList() {
     return;
   }
   listEl.innerHTML = "";
-  const sources = lastSnapshot?.customSources ?? [];
+  const sources = appState.lastSnapshot?.customSources ?? [];
   if (sources.length === 0) {
     const emptyEl = document.createElement("p");
     emptyEl.className = "config-custom-sources-empty";
@@ -2124,7 +2142,7 @@ async function saveCustomSource() {
       icon: customSourceEditorState.icon,
     });
     const snapshot = await invoke<LibrarySnapshot>("load_library_snapshot");
-    lastSnapshot = snapshot;
+    appState.lastSnapshot = snapshot;
     viewerState.books = snapshot.books;
     renderApp();
     closeCustomSourceEditor();
@@ -2147,7 +2165,7 @@ async function deleteCustomSource(source: CustomSource) {
   try {
     await invoke("delete_custom_source", { id: source.id });
     const snapshot = await invoke<LibrarySnapshot>("load_library_snapshot");
-    lastSnapshot = snapshot;
+    appState.lastSnapshot = snapshot;
     viewerState.books = snapshot.books;
     if (viewerState.activeExternalSource === source.id) {
       viewerState.activeExternalSource = null;
@@ -2321,20 +2339,20 @@ function renderShelfConditionRows() {
 }
 
 function getShelfFieldSuggestionCandidates(field: ShelfFieldKey): string[] {
-  if (!lastSnapshot) return [];
+  if (!appState.lastSnapshot) return [];
   if (field === "tag") {
-    return deriveTags(lastSnapshot.books)
+    return deriveTags(appState.lastSnapshot.books)
       .filter((tag) => tag.explicit)
       .map((tag) => tag.id);
   }
   if (field === "publisher") {
-    return derivePublishers(lastSnapshot.books);
+    return derivePublishers(appState.lastSnapshot.books);
   }
   if (field === "lang") {
-    return deriveLanguages(lastSnapshot.books);
+    return deriveLanguages(appState.lastSnapshot.books);
   }
   if (field === "source") {
-    return deriveSources(lastSnapshot.books);
+    return deriveSources(appState.lastSnapshot.books);
   }
   return [];
 }
@@ -2342,7 +2360,7 @@ function getShelfFieldSuggestionCandidates(field: ShelfFieldKey): string[] {
 function updateShelfPreview() {
   const previewEl = document.querySelector<HTMLElement>("#shelf-editor-preview");
   if (!previewEl) return;
-  if (!shelfEditorState.isOpen || !lastSnapshot) {
+  if (!shelfEditorState.isOpen || !appState.lastSnapshot) {
     previewEl.hidden = true;
     return;
   }
@@ -2351,7 +2369,7 @@ function updateShelfPreview() {
     previewEl.hidden = true;
     return;
   }
-  const matched = filterVisibleBooks(lastSnapshot.books, null, null, null, false, query);
+  const matched = filterVisibleBooks(appState.lastSnapshot.books, null, null, null, false, query);
   previewEl.hidden = false;
   previewEl.dataset.tone = "info";
   previewEl.textContent = `Preview: ${matched.length} book${matched.length === 1 ? "" : "s"} match`;
@@ -2588,7 +2606,7 @@ function syncTagEditorUi() {
 
   if (suggestionsEl) {
     suggestionsEl.innerHTML = "";
-    const explicitTags = deriveTags(lastSnapshot?.books ?? viewerState.books)
+    const explicitTags = deriveTags(appState.lastSnapshot?.books ?? viewerState.books)
       .filter((tag) => tag.explicit)
       .map((tag) => tag.id);
     const suggestions = suggestTagCompletions(
@@ -2649,7 +2667,7 @@ function syncTagEditorUi() {
 }
 
 function openTagManager(tagId: string) {
-  const books = lastSnapshot?.books ?? viewerState.books;
+  const books = appState.lastSnapshot?.books ?? viewerState.books;
   const stats = countBooksWithTagOrDescendants(books, tagId);
   tagManagerState.isOpen = true;
   tagManagerState.tagId = tagId;
@@ -2979,10 +2997,10 @@ function updateBookTagsInState(filePath: string, tags: string[]) {
     book.filePath === filePath ? { ...book, tags: [...tags] } : book;
 
   viewerState.books = viewerState.books.map(apply);
-  if (lastSnapshot) {
-    lastSnapshot = {
-      ...lastSnapshot,
-      books: lastSnapshot.books.map(apply),
+  if (appState.lastSnapshot) {
+    appState.lastSnapshot = {
+      ...appState.lastSnapshot,
+      books: appState.lastSnapshot.books.map(apply),
     };
   }
   if (viewerState.currentBook?.filePath === filePath) {
@@ -2992,7 +3010,7 @@ function updateBookTagsInState(filePath: string, tags: string[]) {
 
 function bookSourceDisplayName(sourceType: string): string {
   if (sourceType === "kindle") return "Kindle";
-  const custom = lastSnapshot?.customSources.find((s) => s.id === sourceType);
+  const custom = appState.lastSnapshot?.customSources.find((s) => s.id === sourceType);
   return custom?.name ?? sourceType;
 }
 
@@ -3109,7 +3127,7 @@ function syncBulkActionBar() {
   if (countEl) countEl.textContent = `${n} book${n === 1 ? "" : "s"} selected`;
   shelfEl?.classList.toggle("has-selection", n > 0);
   if (selectAllEl) {
-    const visible = lastSnapshot ? visibleBooks(lastSnapshot) : [];
+    const visible = appState.lastSnapshot ? visibleBooks(appState.lastSnapshot) : [];
     selectAllEl.hidden = visible.every((b) => bulkSelectState.selectedFilePaths.has(b.filePath));
   }
 }
@@ -3345,7 +3363,7 @@ function buildBookMetadataDraftForSave():
 
 async function refreshSnapshot() {
   const snapshot = await invoke<LibrarySnapshot>("load_library_snapshot");
-  lastSnapshot = snapshot;
+  appState.lastSnapshot = snapshot;
   viewerState.books = snapshot.books;
   viewerState.libraryErrorMessage = null;
   renderApp();
@@ -3533,7 +3551,9 @@ async function saveBookMetadataChanges() {
       },
     });
     const customSource = isCustom
-      ? lastSnapshot?.customSources.find((s) => s.id === bookMetadataEditorState.sourceType)
+      ? appState.lastSnapshot?.customSources.find(
+          (s) => s.id === bookMetadataEditorState.sourceType,
+        )
       : null;
     const sourceBook =
       viewerState.currentBook?.filePath === payload.filePath
@@ -3670,8 +3690,8 @@ async function loadThirdPartyLicenses() {
 }
 
 async function loadAppConfig() {
-  lastAppConfig = await invoke<AppConfigPayload>("load_app_config");
-  const theme = normalizeAppTheme(lastAppConfig.theme);
+  appState.lastAppConfig = await invoke<AppConfigPayload>("load_app_config");
+  const theme = normalizeAppTheme(appState.lastAppConfig.theme);
   applyAppTheme(theme);
   persistAppTheme(theme);
   syncAppSettingsUi();
@@ -3778,7 +3798,7 @@ async function addLibraryRoots(paths: string[]) {
       const name = folderDisplayName(path);
       reportLibraryAddStatus(t("status.scanning", { name }), "neutral");
       try {
-        lastAppConfig = await invoke<AppConfigPayload>("add_library_root", { path });
+        appState.lastAppConfig = await invoke<AppConfigPayload>("add_library_root", { path });
         added.push(path);
       } catch (error) {
         errors.push(describeAddLibraryRootError(uiLocale, error, name));
@@ -3845,7 +3865,7 @@ async function saveAppSettingsFromForm() {
   const themeEl = document.querySelector<HTMLSelectElement>("#config-theme");
   const kindleEnabledEl = document.querySelector<HTMLInputElement>("#config-kindle-enabled");
 
-  const libraryRoots = [...(lastAppConfig?.libraryRoots ?? [])];
+  const libraryRoots = [...(appState.lastAppConfig?.libraryRoots ?? [])];
 
   if (libraryRoots.length === 0) {
     setAppSettingsStatus("At least one library root is required.", "error");
@@ -3867,11 +3887,11 @@ async function saveAppSettingsFromForm() {
       },
     });
 
-    lastAppConfig = payload;
+    appState.lastAppConfig = payload;
     applyAppTheme(payload.theme);
     persistAppTheme(payload.theme);
     const snapshot = await invoke<LibrarySnapshot>("load_library_snapshot");
-    lastSnapshot = snapshot;
+    appState.lastSnapshot = snapshot;
     viewerState.books = snapshot.books;
     renderApp();
     viewerState.isAppSettingsOpen = false;
@@ -3898,7 +3918,7 @@ function buildEpubToc() {
       btn.dataset.depth = String(depth);
       btn.textContent = item.label.trim();
       btn.addEventListener("click", () => {
-        tocPanelOpen = false;
+        appState.tocPanelOpen = false;
         syncTocUi();
         if (activeEpubRendition) {
           void activeEpubRendition.display(item.href);
@@ -3919,7 +3939,7 @@ function buildPdfToc() {
   if (!listEl) return;
   listEl.innerHTML = "";
 
-  const outline = activePdfOutline;
+  const outline = appState.activePdfOutline;
   if (!outline || outline.length === 0) return;
 
   const session = activePdfRenderSession;
@@ -3932,7 +3952,7 @@ function buildPdfToc() {
       btn.dataset.depth = String(depth);
       btn.textContent = item.title;
       btn.addEventListener("click", () => {
-        tocPanelOpen = false;
+        appState.tocPanelOpen = false;
         syncTocUi();
         if (!session || item.dest === null) return;
         const resolver = session.pdfDocument;
@@ -3972,16 +3992,16 @@ function syncTocUi() {
   const isEpub = sourceType === "epub";
   const isPdf =
     sourceType === "pdf" &&
-    lastSnapshot?.pdfRenderer === "pdfjs" &&
-    activePdfOutline !== null &&
-    activePdfOutline.length > 0;
+    appState.lastSnapshot?.pdfRenderer === "pdfjs" &&
+    appState.activePdfOutline !== null &&
+    appState.activePdfOutline.length > 0;
   const hasToc = isEpub || isPdf;
   if (toggleEl) {
     toggleEl.hidden = !hasToc;
-    toggleEl.setAttribute("aria-expanded", String(tocPanelOpen));
+    toggleEl.setAttribute("aria-expanded", String(appState.tocPanelOpen));
   }
   if (panelEl) {
-    panelEl.hidden = !hasToc || !tocPanelOpen;
+    panelEl.hidden = !hasToc || !appState.tocPanelOpen;
   }
 }
 
@@ -4009,7 +4029,7 @@ function syncViewerSettingsUi() {
   );
   const sourceType = currentViewerSettingsSourceType();
   const isPdfViewerSettingsAvailable =
-    sourceType === "pdf" && lastSnapshot?.pdfRenderer === "pdfjs";
+    sourceType === "pdf" && appState.lastSnapshot?.pdfRenderer === "pdfjs";
   const isEpubViewerSettingsAvailable = sourceType === "epub";
   const isViewerSettingsAvailable = isPdfViewerSettingsAvailable || isEpubViewerSettingsAvailable;
   const editingPreferences =
@@ -4316,7 +4336,7 @@ async function loadNoteForCurrentBook() {
 }
 
 async function clearCurrentBookSelection() {
-  activeReadingPosition = captureReadingPositionFromViewer();
+  appState.activeReadingPosition = captureReadingPositionFromViewer();
   await flushReadingPositionSave();
   await flushPendingNoteSave();
   await destroyNoteEditor();
@@ -4474,9 +4494,9 @@ function currentNavigationState(): NavigationState {
   return {
     historyIndex: navigationHistoryIndex,
     bookFilePath: currentBook?.filePath ?? null,
-    epubCfi: activeReadingPosition?.cfi ?? null,
+    epubCfi: appState.activeReadingPosition?.cfi ?? null,
     // pdfPage carries the page number for any paged viewer (PDF or image EPUB).
-    pdfPage: isPdf || activeImageEpub ? (activeReadingPosition?.pageNumber ?? null) : null,
+    pdfPage: isPdf || activeImageEpub ? (appState.activeReadingPosition?.pageNumber ?? null) : null,
     activeDirectory: viewerState.activeDirectory,
     activeTag: viewerState.activeTag,
     activeExternalSource: viewerState.activeExternalSource,
@@ -4561,7 +4581,7 @@ async function navigateToState(
 }
 
 async function applyNavigationState(state: NavigationState) {
-  const snapshot = lastSnapshot;
+  const snapshot = appState.lastSnapshot;
 
   if (!snapshot) {
     return;
@@ -4704,7 +4724,7 @@ function advancePdfPagedSpread(direction: 1 | -1) {
   if (viewerState.currentBook?.sourceType !== "pdf") {
     return;
   }
-  if (lastSnapshot?.pdfRenderer !== "pdfjs") {
+  if (appState.lastSnapshot?.pdfRenderer !== "pdfjs") {
     return;
   }
   const stageEl = currentViewerStage();
@@ -4737,7 +4757,7 @@ function handlePdfPagedKey(event: KeyboardEvent): boolean {
   if (viewerState.currentBook?.sourceType !== "pdf") {
     return false;
   }
-  if (lastSnapshot?.pdfRenderer !== "pdfjs") {
+  if (appState.lastSnapshot?.pdfRenderer !== "pdfjs") {
     return false;
   }
   const stageEl = currentViewerStage();
@@ -4850,7 +4870,7 @@ async function executePdfSearch(query: string) {
   pdfSearchState.matches = matches;
   pdfSearchState.currentMatchIndex = pickInitialMatchIndex(
     matches,
-    activeReadingPosition?.pageNumber ?? 1,
+    appState.activeReadingPosition?.pageNumber ?? 1,
   );
 
   applyPdfSearchHighlights();
@@ -5053,10 +5073,10 @@ function captureReadingPositionFromViewer(): ReadingPosition | null {
     !currentBook ||
     !stageEl ||
     !pdfjsViewerEl ||
-    lastSnapshot?.pdfRenderer !== "pdfjs" ||
+    appState.lastSnapshot?.pdfRenderer !== "pdfjs" ||
     pdfjsViewerEl.dataset.filePath !== currentBook.filePath
   ) {
-    return activeReadingPosition;
+    return appState.activeReadingPosition;
   }
 
   const pageEls = Array.from(
@@ -5064,7 +5084,7 @@ function captureReadingPositionFromViewer(): ReadingPosition | null {
   );
 
   if (pageEls.length === 0) {
-    return activeReadingPosition;
+    return appState.activeReadingPosition;
   }
 
   const anchorLine = stageEl.scrollTop + 24;
@@ -5099,7 +5119,7 @@ function captureReadingPositionFromViewer(): ReadingPosition | null {
     filePath: currentBook.filePath,
     pageNumber,
     pageOffsetRatio,
-    updatedAt: activeReadingPosition?.updatedAt ?? null,
+    updatedAt: appState.activeReadingPosition?.updatedAt ?? null,
   };
 }
 
@@ -5121,8 +5141,8 @@ async function flushReadingPositionSave() {
   }
 
   if (
-    !activeReadingPosition ||
-    activeReadingPosition.filePath !== viewerState.currentBook?.filePath
+    !appState.activeReadingPosition ||
+    appState.activeReadingPosition.filePath !== viewerState.currentBook?.filePath
   ) {
     return;
   }
@@ -5132,21 +5152,21 @@ async function flushReadingPositionSave() {
   try {
     if (sourceType === "epub" && activeImageEpub) {
       // Image EPUBs have no CFI; persist the page number like a PDF.
-      activeReadingPosition = await invoke<ReadingPosition>("save_reading_position", {
-        filePath: activeReadingPosition.filePath,
-        pageNumber: activeReadingPosition.pageNumber,
-        pageOffsetRatio: activeReadingPosition.pageOffsetRatio,
+      appState.activeReadingPosition = await invoke<ReadingPosition>("save_reading_position", {
+        filePath: appState.activeReadingPosition.filePath,
+        pageNumber: appState.activeReadingPosition.pageNumber,
+        pageOffsetRatio: appState.activeReadingPosition.pageOffsetRatio,
       });
-    } else if (sourceType === "epub" && activeReadingPosition.cfi) {
+    } else if (sourceType === "epub" && appState.activeReadingPosition.cfi) {
       await invoke("save_epub_position", {
-        filePath: activeReadingPosition.filePath,
-        cfi: activeReadingPosition.cfi,
+        filePath: appState.activeReadingPosition.filePath,
+        cfi: appState.activeReadingPosition.cfi,
       });
     } else if (sourceType !== "epub") {
-      activeReadingPosition = await invoke<ReadingPosition>("save_reading_position", {
-        filePath: activeReadingPosition.filePath,
-        pageNumber: activeReadingPosition.pageNumber,
-        pageOffsetRatio: activeReadingPosition.pageOffsetRatio,
+      appState.activeReadingPosition = await invoke<ReadingPosition>("save_reading_position", {
+        filePath: appState.activeReadingPosition.filePath,
+        pageNumber: appState.activeReadingPosition.pageNumber,
+        pageOffsetRatio: appState.activeReadingPosition.pageOffsetRatio,
       });
     }
   } catch (error) {
@@ -5167,13 +5187,13 @@ function scheduleReadingPositionSave() {
   if (pdfRenderInProgress) {
     return;
   }
-  activeReadingPosition = captureReadingPositionFromViewer();
+  appState.activeReadingPosition = captureReadingPositionFromViewer();
 
-  if (!activeReadingPosition) {
+  if (!appState.activeReadingPosition) {
     return;
   }
 
-  cacheReadingPosition(activeReadingPosition);
+  cacheReadingPosition(appState.activeReadingPosition);
   syncViewerPageJumpUi();
 
   if (readingPositionSaveTimer !== null) {
@@ -5189,21 +5209,21 @@ async function loadReadingPositionForCurrentBook() {
   const currentBook = viewerState.currentBook;
 
   if (!currentBook) {
-    activeReadingPosition = null;
+    appState.activeReadingPosition = null;
     syncViewerPageJumpUi();
     return;
   }
 
   try {
-    activeReadingPosition =
+    appState.activeReadingPosition =
       loadCachedReadingPosition(currentBook.filePath) ??
       (await invoke<ReadingPosition | null>("load_reading_position", {
         filePath: currentBook.filePath,
       }));
-    cacheReadingPosition(activeReadingPosition);
+    cacheReadingPosition(appState.activeReadingPosition);
     syncViewerPageJumpUi();
   } catch (error) {
-    activeReadingPosition = loadCachedReadingPosition(currentBook.filePath);
+    appState.activeReadingPosition = loadCachedReadingPosition(currentBook.filePath);
     syncViewerPageJumpUi();
     console.error("Failed to load reading position:", error);
   }
@@ -5213,16 +5233,16 @@ function restoreReadingPositionAttempt() {
   const currentBook = viewerState.currentBook;
   const stageEl = currentViewerStage();
 
-  if (!currentBook || !stageEl || !activeReadingPosition) {
+  if (!currentBook || !stageEl || !appState.activeReadingPosition) {
     return false;
   }
 
-  if (activeReadingPosition.filePath !== currentBook.filePath) {
+  if (appState.activeReadingPosition.filePath !== currentBook.filePath) {
     return false;
   }
 
   const pageEl = document.querySelector<HTMLElement>(
-    `.pdfjs-page[data-page-number="${activeReadingPosition.pageNumber}"]`,
+    `.pdfjs-page[data-page-number="${appState.activeReadingPosition.pageNumber}"]`,
   );
 
   if (!pageEl) {
@@ -5231,7 +5251,9 @@ function restoreReadingPositionAttempt() {
 
   const stageRect = stageEl.getBoundingClientRect();
   const pageRect = pageEl.getBoundingClientRect();
-  const pageOffsetRatio = clampReadingPositionOffsetRatio(activeReadingPosition.pageOffsetRatio);
+  const pageOffsetRatio = clampReadingPositionOffsetRatio(
+    appState.activeReadingPosition.pageOffsetRatio,
+  );
   const pageTopInStage = stageEl.scrollTop + (pageRect.top - stageRect.top);
   const targetTop = pageTopInStage + pageEl.offsetHeight * pageOffsetRatio;
 
@@ -5300,10 +5322,10 @@ function destroyEpubBook() {
     window.removeEventListener("message", activeEpubLinkMessageHandler);
     activeEpubLinkMessageHandler = null;
   }
-  activeEpubTotalPages = null;
+  appState.activeEpubTotalPages = null;
   activeEpubRendition = null;
-  activeEpubIsRtl = false;
-  tocPanelOpen = false;
+  appState.activeEpubIsRtl = false;
+  appState.tocPanelOpen = false;
   if (activeEpubBook) {
     activeEpubBook.destroy();
     activeEpubBook = null;
@@ -5441,14 +5463,14 @@ function showImageSpread(
   if (pushHistory) {
     syncNavigationHistory("replace");
   }
-  activeReadingPosition = {
+  appState.activeReadingPosition = {
     filePath: session.filePath,
     pageNumber,
     pageOffsetRatio: 0,
     cfi: null,
-    updatedAt: activeReadingPosition?.updatedAt ?? null,
+    updatedAt: appState.activeReadingPosition?.updatedAt ?? null,
   };
-  cacheReadingPosition(activeReadingPosition);
+  cacheReadingPosition(appState.activeReadingPosition);
   if (pushHistory) {
     syncNavigationHistory("push");
   }
@@ -5470,7 +5492,7 @@ function rebuildImageEpub() {
     const palette = viewerColorPaletteForMode(viewerSettings.backgroundMode, currentAppTheme());
     el.style.backgroundColor = palette.background;
   }
-  const currentPage = activeReadingPosition?.pageNumber ?? 1;
+  const currentPage = appState.activeReadingPosition?.pageNumber ?? 1;
   session.spreads = buildImageSpreads(session.pages, session.progression, viewerSettings.pageMode);
   goToImagePage(currentPage, { pushHistory: false });
 }
@@ -5500,7 +5522,7 @@ function renderImageEpub(payload: EpubImageLayoutPayload) {
   // Tear down any epub.js / PDF viewer state and switch containers.
   destroyEpubBook();
   releaseActivePdfDocument();
-  activePdfOutline = null;
+  appState.activePdfOutline = null;
   const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
   if (frame) {
     frame.hidden = true;
@@ -5518,8 +5540,8 @@ function renderImageEpub(payload: EpubImageLayoutPayload) {
   const pages = normalizeImagePages(payload.pages);
   const spreads = buildImageSpreads(pages, progression, viewerSettings.pageMode);
 
-  activeEpubTotalPages = Math.max(pages.length, 1);
-  activeEpubIsRtl = progression === "rtl";
+  appState.activeEpubTotalPages = Math.max(pages.length, 1);
+  appState.activeEpubIsRtl = progression === "rtl";
 
   const session: ImageEpubSession = {
     filePath: currentBook.filePath,
@@ -5538,7 +5560,7 @@ function renderImageEpub(payload: EpubImageLayoutPayload) {
 
   // Restore to the saved page (or page 1). Stale CFI-only positions saved by the
   // old epub.js path have page_number 0, so clamp up to 1.
-  const restorePage = Math.max(activeReadingPosition?.pageNumber ?? 1, 1);
+  const restorePage = Math.max(appState.activeReadingPosition?.pageNumber ?? 1, 1);
   goToImagePage(restorePage, { pushHistory: false });
   // Persist the normalized page-based position for this opening.
   scheduleEpubPositionSave();
@@ -5579,8 +5601,8 @@ function captureEpubCfiForHistory(rendition: import("epubjs").Rendition) {
   try {
     const loc = rendition.location as { start?: { cfi?: string } } | null;
     const cfi = loc?.start?.cfi;
-    if (cfi && activeReadingPosition) {
-      activeReadingPosition = { ...activeReadingPosition, cfi };
+    if (cfi && appState.activeReadingPosition) {
+      appState.activeReadingPosition = { ...appState.activeReadingPosition, cfi };
     }
   } catch {
     // rendition may not have a location yet; skip silently
@@ -5689,7 +5711,7 @@ async function renderCurrentPage() {
   const viewerStageEl = currentViewerStage();
   const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
   const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
-  const snapshot = lastSnapshot;
+  const snapshot = appState.lastSnapshot;
 
   if (
     !frame ||
@@ -5704,7 +5726,7 @@ async function renderCurrentPage() {
 
   const previousFilePath = pdfjsViewerEl.dataset.filePath;
   if (previousFilePath && previousFilePath === viewerState.currentBook.filePath) {
-    activeReadingPosition = captureReadingPositionFromViewer();
+    appState.activeReadingPosition = captureReadingPositionFromViewer();
   }
 
   const sourceUrl = convertFileSrc(viewerState.currentBook.filePath);
@@ -5724,7 +5746,7 @@ async function renderCurrentPage() {
 
   closePdfSearch();
   releaseActivePdfDocument();
-  activePdfOutline = null;
+  appState.activePdfOutline = null;
   applyEpubViewerColors("inherit-theme");
   applyPdfViewerBackground("inherit-theme");
   pdfjsViewerEl.hidden = true;
@@ -5732,8 +5754,8 @@ async function renderCurrentPage() {
   pdfjsViewerEl.dataset.filePath = "";
   frame.hidden = false;
   frame.dataset.filePath = viewerState.currentBook.filePath;
-  frame.src = activeReadingPosition?.pageNumber
-    ? `${sourceUrl}#page=${activeReadingPosition.pageNumber}`
+  frame.src = appState.activeReadingPosition?.pageNumber
+    ? `${sourceUrl}#page=${appState.activeReadingPosition.pageNumber}`
     : sourceUrl;
 }
 
@@ -5774,7 +5796,7 @@ async function renderEpubBook(
   await maybeShowEpubPreviewNotice();
   destroyEpubBook();
   releaseActivePdfDocument();
-  activePdfOutline = null;
+  appState.activePdfOutline = null;
   frame.hidden = true;
   frame.src = "about:blank";
   frame.dataset.filePath = "";
@@ -5808,7 +5830,7 @@ async function renderEpubBook(
     await book.ready;
     if (currentToken !== epubRenderToken) return;
 
-    tocPanelOpen = false;
+    appState.tocPanelOpen = false;
     buildEpubToc();
     syncTocUi();
 
@@ -5821,7 +5843,7 @@ async function renderEpubBook(
     if (cachedLocations) {
       try {
         book.locations.load(cachedLocations);
-        activeEpubTotalPages = Math.max(book.locations.length(), 1);
+        appState.activeEpubTotalPages = Math.max(book.locations.length(), 1);
         locationsReady = true;
       } catch (err) {
         console.warn("[riida] failed to load cached EPUB locations:", err);
@@ -5839,7 +5861,7 @@ async function renderEpubBook(
     };
     const spineDirection =
       bookInternal.spine?.direction ?? bookInternal.package?.metadata?.direction ?? "ltr";
-    activeEpubIsRtl = spineDirection === "rtl";
+    appState.activeEpubIsRtl = spineDirection === "rtl";
 
     // Detect fixed-layout vs. reflow from OPF metadata.
     // DPFJ guide §固定レイアウト: pre-paginated books use SVG-wrapped images and
@@ -5962,7 +5984,7 @@ async function renderEpubBook(
     };
     window.addEventListener("message", activeEpubLinkMessageHandler);
 
-    const restoreCfi = activeReadingPosition?.cfi ?? undefined;
+    const restoreCfi = appState.activeReadingPosition?.cfi ?? undefined;
     await rendition.display(restoreCfi);
     if (currentToken !== epubRenderToken) return;
 
@@ -5999,7 +6021,7 @@ async function renderEpubBook(
         try {
           await book.locations.generate(1200);
           if (currentToken !== epubRenderToken) return;
-          activeEpubTotalPages = Math.max(book.locations.length(), 1);
+          appState.activeEpubTotalPages = Math.max(book.locations.length(), 1);
           saveCachedEpubLocations(locationsFilePath, locationsFileSize, book.locations.save());
           syncViewerPageJumpUi();
         } catch (err) {
@@ -6012,14 +6034,14 @@ async function renderEpubBook(
       const cfi = location.start.cfi;
       const currentBook = viewerState.currentBook;
       if (!cfi || !currentBook || currentBook.sourceType !== "epub") return;
-      const totalPages = activeEpubTotalPages ?? Math.max(book.locations.length(), 1);
+      const totalPages = appState.activeEpubTotalPages ?? Math.max(book.locations.length(), 1);
       const currentPageNumber = epubPageNumberFromLocation(location.start.location, totalPages);
-      activeReadingPosition = {
+      appState.activeReadingPosition = {
         filePath: currentBook.filePath,
         pageNumber: currentPageNumber,
         pageOffsetRatio: 0,
         cfi,
-        updatedAt: activeReadingPosition?.updatedAt ?? null,
+        updatedAt: appState.activeReadingPosition?.updatedAt ?? null,
       };
       syncEpubLinkOverlays(rendition, book, epubViewerEl);
       syncViewerPageJumpUi();
@@ -6054,7 +6076,7 @@ async function renderPdfJsBook(
   applyPdfViewerBackground(viewerSettings.backgroundMode);
   syncImmediatePdfScrollMode();
   releaseActivePdfDocument();
-  activePdfOutline = null;
+  appState.activePdfOutline = null;
   frame.hidden = true;
   frame.src = "about:blank";
   frame.dataset.filePath = "";
@@ -6192,7 +6214,7 @@ async function renderPdfJsBook(
       treatFirstPageAsCover: viewerSettings.treatFirstPageAsCover,
     };
     const pageGroups = buildPageGroups(pdfDocument.numPages, layoutSettings);
-    const restoreTargetPage = activeReadingPosition?.pageNumber ?? null;
+    const restoreTargetPage = appState.activeReadingPosition?.pageNumber ?? null;
     const pageGap = viewerSettings.pageMode === "spread" ? 6 : 0;
     const viewerWidth = Math.max(pdfjsViewerEl.clientWidth, 720);
     const viewerHeight = Math.max(pdfjsViewerEl.clientHeight, 600);
@@ -6310,13 +6332,13 @@ async function renderPdfJsBook(
     schedulePdfRenderWindowUpdate(session, targetGroupIndex);
 
     // Load PDF outline (TOC) asynchronously so it does not block rendering.
-    tocPanelOpen = false;
-    activePdfOutline = null;
+    appState.tocPanelOpen = false;
+    appState.activePdfOutline = null;
     syncTocUi();
     if (pdfDocument.getOutline) {
       void pdfDocument.getOutline().then((outline) => {
         if (activePdfRenderSession?.token !== currentToken) return;
-        activePdfOutline = outline ?? null;
+        appState.activePdfOutline = outline ?? null;
         buildPdfToc();
         syncTocUi();
       });
@@ -6386,7 +6408,7 @@ async function openBook(
   const { updateHistory = "none" } = options;
 
   if (viewerState.currentBook?.filePath !== book.filePath) {
-    activeReadingPosition = captureReadingPositionFromViewer();
+    appState.activeReadingPosition = captureReadingPositionFromViewer();
     await flushReadingPositionSave();
     await flushPendingNoteSave();
     await destroyNoteEditor();
@@ -6409,13 +6431,13 @@ async function openBook(
 // When a full-text hit opens a book, override the just-restored reading position
 // so the viewer lands on the matched page (PDF) or section (EPUB) instead.
 function applyPendingViewerJump(book: BookSummary) {
-  if (!pendingViewerJump || pendingViewerJump.filePath !== book.filePath) {
+  if (!appState.pendingViewerJump || appState.pendingViewerJump.filePath !== book.filePath) {
     return;
   }
-  const jump = pendingViewerJump;
-  pendingViewerJump = null;
+  const jump = appState.pendingViewerJump;
+  appState.pendingViewerJump = null;
   if (book.sourceType === "epub" && jump.cfi) {
-    activeReadingPosition = {
+    appState.activeReadingPosition = {
       filePath: book.filePath,
       pageNumber: 1,
       pageOffsetRatio: 0,
@@ -6423,7 +6445,7 @@ function applyPendingViewerJump(book: BookSummary) {
       updatedAt: null,
     };
   } else if (typeof jump.page === "number") {
-    activeReadingPosition = {
+    appState.activeReadingPosition = {
       filePath: book.filePath,
       pageNumber: jump.page,
       pageOffsetRatio: 0,
@@ -6678,7 +6700,7 @@ function populateTagsSection(sectionEl: HTMLElement, snapshot: LibrarySnapshot) 
 }
 
 function populateExternalSection(sectionEl: HTMLElement, snapshot: LibrarySnapshot) {
-  const enabledExternalSources = lastAppConfig?.enabledExternalSources ?? [];
+  const enabledExternalSources = appState.lastAppConfig?.enabledExternalSources ?? [];
   const kindleEnabled = enabledExternalSources.includes("kindle");
   const externalBooks = snapshot.books.filter((book) => book.sourceType !== "pdf");
   const kindleCount = externalBooks.filter((book) => book.sourceType === "kindle").length;
@@ -7114,7 +7136,7 @@ function renderBookList(books: BookSummary[], container: HTMLElement) {
   container.innerHTML = "";
 
   if (books.length === 0) {
-    const snapshot = lastSnapshot;
+    const snapshot = appState.lastSnapshot;
     const emptyEl = document.createElement("div");
     emptyEl.className = "empty-state";
     const state = snapshot
@@ -7457,13 +7479,13 @@ function openFulltextHit(
 ) {
   // External books (Kindle) have no viewer; activate them the way the library
   // list does, by opening the metadata editor instead of navigating.
-  const book = lastSnapshot?.books.find((candidate) => candidate.filePath === filePath);
+  const book = appState.lastSnapshot?.books.find((candidate) => candidate.filePath === filePath);
   if (book && !book.isOpenable) {
     void openBookMetadataEditor(book);
     return;
   }
   const target = jumpTargetForHit(location);
-  pendingViewerJump = target ? { filePath, page: target.page, cfi: target.cfi } : null;
+  appState.pendingViewerJump = target ? { filePath, page: target.page, cfi: target.cfi } : null;
   void navigateToState(
     {
       bookFilePath: filePath,
@@ -7681,7 +7703,7 @@ function renderMain(snapshot: LibrarySnapshot) {
   if (libraryAddCustomEl) {
     const activeCustomSource =
       viewerState.activeExternalSource && viewerState.activeExternalSource !== "kindle"
-        ? ((lastSnapshot?.customSources ?? []).find(
+        ? ((appState.lastSnapshot?.customSources ?? []).find(
             (s) => s.id === viewerState.activeExternalSource,
           ) ?? null)
         : null;
@@ -7759,12 +7781,12 @@ function renderMain(snapshot: LibrarySnapshot) {
 }
 
 function renderApp() {
-  if (!lastSnapshot) {
+  if (!appState.lastSnapshot) {
     return;
   }
 
-  renderSidebar(lastSnapshot);
-  renderMain(lastSnapshot);
+  renderSidebar(appState.lastSnapshot);
+  renderMain(appState.lastSnapshot);
   syncTagEditorUi();
   syncBookMetadataEditorUi();
 }
@@ -7776,7 +7798,7 @@ function initBulkSelection() {
   const bulkDeselectEl = document.querySelector<HTMLButtonElement>("#bulk-deselect");
 
   bulkSelectAllEl?.addEventListener("click", () => {
-    const visible = lastSnapshot ? visibleBooks(lastSnapshot) : [];
+    const visible = appState.lastSnapshot ? visibleBooks(appState.lastSnapshot) : [];
     for (const book of visible) {
       bulkSelectState.selectedFilePaths.add(book.filePath);
     }
@@ -7817,7 +7839,7 @@ function initLibrarySearch() {
   function renderSearchSuggestions() {
     if (!searchInput || !searchSuggestionsEl) return;
     const cursor = searchInput.selectionStart ?? searchInput.value.length;
-    const valueSource = buildValueSource(lastSnapshot?.books ?? []);
+    const valueSource = buildValueSource(appState.lastSnapshot?.books ?? []);
     currentSuggestions = computeSuggestions(searchInput.value, cursor, valueSource);
     activeSuggestionIndex = -1;
 
@@ -8103,7 +8125,7 @@ function initPdfStageScroll() {
   viewerStageEl?.addEventListener(
     "scroll",
     () => {
-      if (lastSnapshot?.pdfRenderer !== "pdfjs" || !viewerState.currentBook) {
+      if (appState.lastSnapshot?.pdfRenderer !== "pdfjs" || !viewerState.currentBook) {
         return;
       }
       if (pdfRenderInProgress) {
@@ -8125,7 +8147,7 @@ function initLibraryViewControls() {
   if (librarySortEl) {
     librarySortEl.addEventListener("change", () => {
       currentListSort = (librarySortEl.value as ListSortKey) ?? "default";
-      if (lastSnapshot) {
+      if (appState.lastSnapshot) {
         renderApp();
       }
     });
@@ -8149,7 +8171,7 @@ function initLibraryViewControls() {
       setLibraryViewMode(next);
       updateToggleState();
       hideBookGridPopup(true);
-      if (lastSnapshot) {
+      if (appState.lastSnapshot) {
         renderApp();
       }
     });
@@ -8166,7 +8188,9 @@ function initLibraryAddButtons() {
   libraryAddCustomEl2?.addEventListener("click", () => {
     const source =
       viewerState.activeExternalSource && viewerState.activeExternalSource !== "kindle"
-        ? (lastSnapshot?.customSources ?? []).find((s) => s.id === viewerState.activeExternalSource)
+        ? (appState.lastSnapshot?.customSources ?? []).find(
+            (s) => s.id === viewerState.activeExternalSource,
+          )
         : undefined;
     if (source) {
       openNewCustomBookEditor(source);
@@ -8271,7 +8295,8 @@ function initAppSettings() {
   });
 
   appSettingsAddRootEl?.addEventListener("click", async () => {
-    const defaultPath = lastAppConfig?.libraryRoots[lastAppConfig.libraryRoots.length - 1] ?? "~/";
+    const defaultPath =
+      appState.lastAppConfig?.libraryRoots[appState.lastAppConfig.libraryRoots.length - 1] ?? "~/";
 
     try {
       const selected = await open({
@@ -8291,15 +8316,18 @@ function initAppSettings() {
       }
 
       const collapsedSelection = await collapseHomePath(normalizedSelection);
-      const currentRoots = addLibraryRoot(lastAppConfig?.libraryRoots ?? [], collapsedSelection);
-      lastAppConfig = {
-        configPath: lastAppConfig?.configPath ?? "",
-        configExists: lastAppConfig?.configExists ?? false,
+      const currentRoots = addLibraryRoot(
+        appState.lastAppConfig?.libraryRoots ?? [],
+        collapsedSelection,
+      );
+      appState.lastAppConfig = {
+        configPath: appState.lastAppConfig?.configPath ?? "",
+        configExists: appState.lastAppConfig?.configExists ?? false,
         libraryRoots: currentRoots,
-        excludedPatterns: lastAppConfig?.excludedPatterns ?? [],
-        pdfRenderer: lastAppConfig?.pdfRenderer ?? "native",
-        theme: lastAppConfig?.theme ?? "default",
-        enabledExternalSources: lastAppConfig?.enabledExternalSources ?? ["kindle"],
+        excludedPatterns: appState.lastAppConfig?.excludedPatterns ?? [],
+        pdfRenderer: appState.lastAppConfig?.pdfRenderer ?? "native",
+        theme: appState.lastAppConfig?.theme ?? "default",
+        enabledExternalSources: appState.lastAppConfig?.enabledExternalSources ?? ["kindle"],
       };
       syncAppSettingsUi();
     } catch (error) {
@@ -8688,7 +8716,11 @@ function initViewerSettingsPanel() {
   const rerenderPdfJs = () => {
     const sourceType = currentViewerSettingsSourceType();
     syncViewerSettingsUi();
-    if (sourceType === "pdf" && lastSnapshot?.pdfRenderer === "pdfjs" && viewerState.currentBook) {
+    if (
+      sourceType === "pdf" &&
+      appState.lastSnapshot?.pdfRenderer === "pdfjs" &&
+      viewerState.currentBook
+    ) {
       void renderCurrentPage();
     }
   };
@@ -8896,7 +8928,7 @@ function initViewerSettingsPanel() {
 
 function initTocToggle() {
   document.querySelector<HTMLButtonElement>("#epub-toc-toggle")?.addEventListener("click", () => {
-    tocPanelOpen = !tocPanelOpen;
+    appState.tocPanelOpen = !appState.tocPanelOpen;
     syncTocUi();
   });
 }
@@ -9001,7 +9033,7 @@ function initGlobalShortcuts() {
 
     if (
       isPdfSearchShortcut(event) &&
-      lastSnapshot?.pdfRenderer === "pdfjs" &&
+      appState.lastSnapshot?.pdfRenderer === "pdfjs" &&
       viewerState.currentBook
     ) {
       event.preventDefault();
@@ -9040,7 +9072,7 @@ function initGlobalShortcuts() {
     if (viewerState.currentBook) {
       const isPdfBook = viewerState.currentBook.sourceType === "pdf";
       const isEpubBook = viewerState.currentBook.sourceType === "epub";
-      const pdfActive = isPdfBook && lastSnapshot?.pdfRenderer === "pdfjs";
+      const pdfActive = isPdfBook && appState.lastSnapshot?.pdfRenderer === "pdfjs";
       const epubActive = isEpubBook && Boolean(activeEpubRendition);
       const imgEpubActive = isEpubBook && activeImageEpub !== null;
 
@@ -9125,8 +9157,12 @@ function initGlobalShortcuts() {
       (activeEpubRendition || activeImageEpub)
     ) {
       // DPFJ guide §ページ進行方向の遵守: in rtl books ArrowLeft advances reading order.
-      const wantsNext = activeEpubIsRtl ? isEpubPrevPageKey(event) : isEpubNextPageKey(event);
-      const wantsPrev = activeEpubIsRtl ? isEpubNextPageKey(event) : isEpubPrevPageKey(event);
+      const wantsNext = appState.activeEpubIsRtl
+        ? isEpubPrevPageKey(event)
+        : isEpubNextPageKey(event);
+      const wantsPrev = appState.activeEpubIsRtl
+        ? isEpubNextPageKey(event)
+        : isEpubPrevPageKey(event);
       if (wantsNext) {
         event.preventDefault();
         if (activeImageEpub) {
@@ -9188,7 +9224,7 @@ function initViewerResize() {
       window.clearTimeout(pdfRenderResizeTimer);
     }
 
-    if (lastSnapshot?.pdfRenderer === "pdfjs" && viewerState.currentBook) {
+    if (appState.lastSnapshot?.pdfRenderer === "pdfjs" && viewerState.currentBook) {
       pdfRenderResizeTimer = window.setTimeout(() => {
         void renderCurrentPage();
       }, 120);
@@ -9211,7 +9247,7 @@ function initViewerResize() {
 
 function initFlushOnUnload() {
   window.addEventListener("beforeunload", () => {
-    activeReadingPosition = captureReadingPositionFromViewer();
+    appState.activeReadingPosition = captureReadingPositionFromViewer();
     void flushReadingPositionSave();
     if (noteSaveTimer !== null) {
       window.clearTimeout(noteSaveTimer);
@@ -9221,7 +9257,7 @@ function initFlushOnUnload() {
 
 async function registerLibraryEvents() {
   await listen<LibrarySnapshot>("library-updated", (event) => {
-    lastSnapshot = event.payload;
+    appState.lastSnapshot = event.payload;
     viewerState.libraryErrorMessage = null;
     viewerState.books = event.payload.books;
     if (
@@ -9333,7 +9369,7 @@ function initHistoryPopstate() {
 function loadInitialLibraryState() {
   invoke<LibrarySnapshot>("library_snapshot")
     .then((snapshot) => {
-      lastSnapshot = snapshot;
+      appState.lastSnapshot = snapshot;
       viewerState.libraryErrorMessage = null;
       viewerState.books = snapshot.books;
       const params = new URLSearchParams(window.location.search);

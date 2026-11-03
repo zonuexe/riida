@@ -441,7 +441,7 @@ Current helper-level coverage includes:
 
 ## Known Architectural Characteristics
 
-- orchestration is split across `src/app/` feature modules that call each other directly
+- orchestration is split across layered `src/app/` feature modules; calls up the layers go through a small app shell that `main.ts` installs
 - frontend state is centralized and mutable rather than store-library-driven
 - SQLite acts as both index and user-data store
 - local PDFs and external books are intentionally presented through one merged list model

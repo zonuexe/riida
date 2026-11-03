@@ -2,25 +2,16 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import {
-  addLibraryRoot,
-  type AppTheme,
-  buildAppConfigDraft,
-  normalizeAppTheme,
-} from "../app-config-utils";
+import { addLibraryRoot, buildAppConfigDraft, normalizeAppTheme } from "../app-config-utils";
 import { applyAppTheme, persistAppTheme } from "../app-theme";
 import type { StatusTone } from "../dom-form-utils";
 import { deleteCustomSource, openCustomSourceEditor } from "./custom-sources";
 import { applyStatusMessage } from "./dom";
 import { refreshFulltextStatus } from "./fulltext";
 import { collapseHomePath } from "./home-path";
-import { renderApp } from "./library";
+import { renderApp } from "./shell";
 import { appState, viewerState } from "./state";
 import type { AppConfigPayload, LibrarySnapshot } from "./types";
-
-export function currentAppTheme(): AppTheme {
-  return normalizeAppTheme(appState.lastAppConfig?.theme ?? "default");
-}
 
 function renderLibraryRootsList() {
   const listEl = document.querySelector<HTMLElement>("#config-library-roots-list");

@@ -1,13 +1,12 @@
 // Native viewer for image-sequence fixed-layout EPUBs (comics, scans).
 
+import { invoke } from "@tauri-apps/api/core";
 import { clampEpubPageNumber } from "../epub-page-utils";
 import {
   buildImageSpreads,
   computeImageFit,
   firstPageNumberOfSpread,
-  type ImagePage,
   type Progression as ImageProgression,
-  type ImageSpread,
   normalizeImagePages,
   spreadIndexForPage,
   visualSpreadOrder,
@@ -15,11 +14,11 @@ import {
 import { viewerColorPaletteForMode } from "../viewer-settings-utils";
 import { destroyEpubBook } from "./epub-viewer";
 import { syncNavigationHistory } from "./navigation";
+import { syncViewerPageJumpUi } from "./page-jump";
 import { releaseActivePdfDocument } from "./pdf-viewer";
 import { cacheReadingPosition, scheduleEpubPositionSave } from "./reading-position";
-import { currentAppTheme } from "./settings";
-import { appState, viewerSettings, viewerState } from "./state";
-import { syncViewerPageJumpUi } from "./viewer";
+import { appState, viewerSettings, viewerState, currentAppTheme } from "./state";
+import type { ImageEpubSession } from "./types";
 
 // Raw payload from the `epub_image_layout` Rust command.
 export type EpubImageLayoutPayload = {
@@ -33,21 +32,25 @@ export type EpubImageLayoutPayload = {
     height: number;
   }>;
 };
-// Active image-sequence fixed-layout EPUB session (rendered natively, not via
-// epub.js). Null for reflowable / non-image EPUBs and all other source types.
-type ImageEpubSession = {
-  filePath: string;
-  pages: ImagePage[];
-  spreads: ImageSpread[];
-  progression: ImageProgression;
-  spreadIndex: number;
-  /** Rendered <img> elements of the current spread, in on-screen order. */
-  imgEls: HTMLImageElement[];
-};
-export let activeImageEpub: ImageEpubSession | null = null;
 // Per-file cache of the parsed layout so detection does not re-parse the zip on
 // every renderCurrentPage (settings changes, re-renders).
-export const imageEpubLayoutCache = new Map<string, EpubImageLayoutPayload>();
+const imageEpubLayoutCache = new Map<string, EpubImageLayoutPayload>();
+
+/** The book's image layout, or undefined when the backend could not parse it. */
+export async function loadImageEpubLayout(
+  filePath: string,
+): Promise<EpubImageLayoutPayload | undefined> {
+  let imageLayout = imageEpubLayoutCache.get(filePath);
+  if (!imageLayout) {
+    try {
+      imageLayout = await invoke<EpubImageLayoutPayload>("epub_image_layout", { filePath });
+      imageEpubLayoutCache.set(filePath, imageLayout);
+    } catch (error) {
+      console.warn("[riida] epub_image_layout failed:", error);
+    }
+  }
+  return imageLayout;
+}
 
 // --- image-sequence fixed-layout EPUB viewer -------------------------------
 
@@ -68,7 +71,7 @@ function imageEntryUrl(filePath: string, entry: string): string {
 }
 
 export function destroyImageEpub() {
-  activeImageEpub = null;
+  appState.activeImageEpub = null;
   const el = imageEpubViewerElement();
   if (el) {
     el.innerHTML = "";
@@ -80,7 +83,7 @@ export function destroyImageEpub() {
 /** Size the current spread's <img> elements so the whole spread is contained
     in the stage and (for a two-page spread) both pages share height. */
 export function fitImageEpubSpread() {
-  const session = activeImageEpub;
+  const session = appState.activeImageEpub;
   const el = imageEpubViewerElement();
   if (!session || !el || session.imgEls.length === 0) {
     return;
@@ -144,7 +147,7 @@ function renderImageSpreadDom(session: ImageEpubSession) {
     }
     // Re-fit once natural dimensions are known (covers pages with no OPF dims).
     img.addEventListener("load", () => {
-      if (activeImageEpub === session) {
+      if (appState.activeImageEpub === session) {
         fitImageEpubSpread();
       }
     });
@@ -195,7 +198,7 @@ function showImageSpread(
     re-apply the viewer background, keeping the reader on the current page.
     Called when viewer settings change. No-op unless an image EPUB is active. */
 export function rebuildImageEpub() {
-  const session = activeImageEpub;
+  const session = appState.activeImageEpub;
   if (!session) return;
   const el = imageEpubViewerElement();
   if (el) {
@@ -209,14 +212,14 @@ export function rebuildImageEpub() {
 
 /** Advance the active image EPUB by `delta` spreads (reading order). */
 export function goToImageSpread(delta: number) {
-  const session = activeImageEpub;
+  const session = appState.activeImageEpub;
   if (!session) return;
   showImageSpread(session, session.spreadIndex + delta);
 }
 
 /** Jump the active image EPUB to the spread containing a 1-based page number. */
 export function goToImagePage(pageNumber: number, options: { pushHistory?: boolean } = {}) {
-  const session = activeImageEpub;
+  const session = appState.activeImageEpub;
   if (!session) return;
   const pageIndex = clampEpubPageNumber(pageNumber, session.pages.length) - 1;
   const index = spreadIndexForPage(session.spreads, pageIndex);
@@ -261,7 +264,7 @@ export function renderImageEpub(payload: EpubImageLayoutPayload) {
     spreadIndex: 0,
     imgEls: [],
   };
-  activeImageEpub = session;
+  appState.activeImageEpub = session;
 
   el.hidden = false;
   el.dataset.filePath = currentBook.filePath;

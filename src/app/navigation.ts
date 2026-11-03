@@ -1,4 +1,5 @@
-// App-level navigation stack mirrored into window history.
+// App-level navigation stack mirrored into window history. Applying an entry
+// is navigation-apply.ts's job; this module reaches it through the app shell.
 
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -6,15 +7,9 @@ import {
   navigationStateSignature,
   parsePdfPageQueryParam,
 } from "../navigation-utils";
-import { activeEpubRendition } from "./epub-viewer";
-import { activeImageEpub, goToImagePage } from "./image-epub-viewer";
-import { bulkSelectState, resetListSort, syncBulkActionBar } from "./library-view";
-import { renderApp } from "./library";
-import { activePdfRenderSession } from "./pdf-viewer";
-import { ensureExpandedPath, ensureExpandedTag } from "./sidebar";
+import { applyNavigationState, renderApp } from "./shell";
 import { appState, viewerState } from "./state";
 import type { LibrarySnapshot, NavigationState } from "./types";
-import { clearCurrentBookSelection, navigateViewerToPage, openBook } from "./viewer";
 
 let suppressHistoryUpdates = false;
 let navigationHistoryIndex = 0;
@@ -29,7 +24,10 @@ function currentNavigationState(): NavigationState {
     bookFilePath: currentBook?.filePath ?? null,
     epubCfi: appState.activeReadingPosition?.cfi ?? null,
     // pdfPage carries the page number for any paged viewer (PDF or image EPUB).
-    pdfPage: isPdf || activeImageEpub ? (appState.activeReadingPosition?.pageNumber ?? null) : null,
+    pdfPage:
+      isPdf || appState.activeImageEpub
+        ? (appState.activeReadingPosition?.pageNumber ?? null)
+        : null,
     activeDirectory: viewerState.activeDirectory,
     activeTag: viewerState.activeTag,
     activeExternalSource: viewerState.activeExternalSource,
@@ -111,89 +109,6 @@ export async function navigateToState(
     ...nextState,
     historyIndex: navigationHistoryIndex,
   });
-}
-
-async function applyNavigationState(state: NavigationState) {
-  const snapshot = appState.lastSnapshot;
-
-  if (!snapshot) {
-    return;
-  }
-
-  const prevDirectory = viewerState.activeDirectory;
-  const prevTag = viewerState.activeTag;
-  const prevExternalSource = viewerState.activeExternalSource;
-  const prevShelf = viewerState.activeShelf;
-
-  viewerState.searchQuery = state.searchQuery;
-  viewerState.activeDirectory = state.activeDirectory;
-  viewerState.activeTag = state.activeTag;
-  viewerState.activeExternalSource = state.activeExternalSource;
-  viewerState.activeShelf = state.activeShelf;
-  viewerState.activeTagDirectOnly = state.activeTagDirectOnly;
-
-  if (
-    prevDirectory !== viewerState.activeDirectory ||
-    prevTag !== viewerState.activeTag ||
-    prevExternalSource !== viewerState.activeExternalSource ||
-    prevShelf !== viewerState.activeShelf
-  ) {
-    resetListSort();
-    bulkSelectState.selectedFilePaths.clear();
-    syncBulkActionBar();
-  }
-
-  const nextBook = state.bookFilePath
-    ? (snapshot.books.find((book) => book.filePath === state.bookFilePath) ?? null)
-    : null;
-
-  ensureExpandedPath(state.activeDirectory);
-  ensureExpandedTag(state.activeTag);
-
-  // A non-openable (external) book has nothing to render; never hand its
-  // synthetic `kindle:` path to the PDF or EPUB viewer.
-  if (nextBook?.isOpenable) {
-    // Fast path: same EPUB book already rendered — jump directly via CFI
-    // to avoid destroying and re-creating the rendition.
-    if (
-      state.epubCfi &&
-      nextBook.filePath === viewerState.currentBook?.filePath &&
-      nextBook.sourceType === "epub" &&
-      activeEpubRendition
-    ) {
-      await activeEpubRendition.display(state.epubCfi);
-      return;
-    }
-
-    // Fast path: same PDF book already rendered — jump directly to the page
-    // without rebuilding the render session.
-    if (
-      state.pdfPage &&
-      nextBook.filePath === viewerState.currentBook?.filePath &&
-      nextBook.sourceType === "pdf" &&
-      activePdfRenderSession
-    ) {
-      navigateViewerToPage(state.pdfPage, { pushHistory: false });
-      return;
-    }
-
-    // Fast path: same image EPUB already rendered — jump directly to the page.
-    if (
-      state.pdfPage &&
-      nextBook.filePath === viewerState.currentBook?.filePath &&
-      nextBook.sourceType === "epub" &&
-      activeImageEpub
-    ) {
-      goToImagePage(state.pdfPage, { pushHistory: false });
-      return;
-    }
-
-    await openBook(nextBook, { updateHistory: "none" });
-    return;
-  }
-
-  await clearCurrentBookSelection();
-  renderApp();
 }
 
 function syncNavigationControlsUi() {

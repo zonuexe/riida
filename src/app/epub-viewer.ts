@@ -8,53 +8,33 @@ import { loadCachedEpubLocations, saveCachedEpubLocations } from "../epub-locati
 import { loadEpubJs } from "../epub-runtime";
 import { resolveEpubLinkAction } from "../epub-link-routing";
 import { clampEpubFontSize } from "../viewer-shortcuts";
-import {
-  type ViewerBackgroundMode,
-  type ViewerColorPalette,
-  viewerColorPaletteForMode,
-  type ViewerSettingsPayload,
-} from "../viewer-settings-utils";
-import {
-  destroyImageEpub,
-  type EpubImageLayoutPayload,
-  imageEpubLayoutCache,
-  renderImageEpub,
-} from "./image-epub-viewer";
+import { viewerColorPaletteForMode, type ViewerSettingsPayload } from "../viewer-settings-utils";
 import { syncNavigationHistory } from "./navigation";
+import { syncViewerPageJumpUi } from "./page-jump";
 import { releaseActivePdfDocument } from "./pdf-viewer";
 import { scheduleEpubPositionSave } from "./reading-position";
-import { currentAppTheme } from "./settings";
-import { appState, viewerSettings, viewerState } from "./state";
+import {
+  appState,
+  viewerSettings,
+  viewerState,
+  currentAppTheme,
+  currentViewerSettingsSourceType,
+} from "./state";
 import { buildEpubToc, syncTocUi } from "./toc";
 import {
+  applyEpubColorsToDocument,
+  applyEpubFontSize,
+  applyEpubViewerColors,
   applyViewerSettingsPayload,
   applyViewerVerticalGapMode,
   currentViewerPreferences,
-  currentViewerSettingsSourceType,
+  resizeEpubRendition,
   setViewerDraft,
   syncViewerSettingsUi,
 } from "./viewer-settings";
-import { syncViewerPageJumpUi } from "./viewer";
 
 let epubRenderToken = 0;
-export let activeEpubBook: import("epubjs").Book | null = null;
-export let activeEpubRendition: import("epubjs").Rendition | null = null;
 let activeEpubLinkMessageHandler: ((event: MessageEvent) => void) | null = null;
-
-function applyEpubColorsToDocument(doc: Document, palette: ViewerColorPalette) {
-  const root = doc.documentElement;
-  const body = doc.body;
-
-  root?.style.setProperty("background-color", palette.background, "important");
-  root?.style.setProperty("color", palette.foreground, "important");
-  body?.style.setProperty("background-color", palette.background, "important");
-  body?.style.setProperty("color", palette.foreground, "important");
-
-  const linkEls = doc.querySelectorAll<HTMLAnchorElement>("a[href]");
-  for (const linkEl of linkEls) {
-    linkEl.style.setProperty("color", palette.link, "important");
-  }
-}
 
 // WKWebView does not recognize the -epub-writing-mode vendor prefix, so
 // vertical-text EPUBs render horizontally. Scan each section's stylesheets and
@@ -146,38 +126,6 @@ function syncEpubCoverOverlay(epubViewerEl: HTMLElement) {
   overlay.alt = coverAlt;
 }
 
-export function applyEpubViewerColors(backgroundMode: ViewerBackgroundMode) {
-  const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
-  const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
-  const palette = viewerColorPaletteForMode(backgroundMode, currentAppTheme());
-
-  if (backgroundMode === "inherit-theme") {
-    mainPaneEl?.style.removeProperty("background-color");
-    epubViewerEl?.style.removeProperty("background-color");
-  } else {
-    if (mainPaneEl) {
-      mainPaneEl.style.backgroundColor = palette.background;
-    }
-    if (epubViewerEl) {
-      epubViewerEl.style.backgroundColor = palette.background;
-    }
-  }
-
-  const contentsList = activeEpubRendition
-    ? ((activeEpubRendition.getContents() as unknown as import("epubjs").Contents[]) ?? [])
-    : [];
-  for (const contents of contentsList) {
-    if (contents.document) {
-      applyEpubColorsToDocument(contents.document, palette);
-    }
-  }
-}
-
-export function applyEpubFontSize(fontSize: number) {
-  if (!activeEpubRendition) return;
-  activeEpubRendition.themes.fontSize(`${fontSize}%`);
-}
-
 const EPUB_PREVIEW_NOTICE_STORAGE_KEY = "riida.epub.previewNoticeShown";
 
 async function maybeShowEpubPreviewNotice(): Promise<void> {
@@ -253,25 +201,18 @@ export function applyEpubFontSizeShortcut(nextSize: number) {
   })();
 }
 
-export function resizeEpubRendition() {
-  if (!activeEpubRendition) return;
-  const el = document.querySelector<HTMLElement>("#epub-viewer");
-  if (!el) return;
-  activeEpubRendition.resize(el.clientWidth, el.clientHeight);
-}
-
 export function destroyEpubBook() {
   if (activeEpubLinkMessageHandler) {
     window.removeEventListener("message", activeEpubLinkMessageHandler);
     activeEpubLinkMessageHandler = null;
   }
   appState.activeEpubTotalPages = null;
-  activeEpubRendition = null;
+  appState.activeEpubRendition = null;
   appState.activeEpubIsRtl = false;
   appState.tocPanelOpen = false;
-  if (activeEpubBook) {
-    activeEpubBook.destroy();
-    activeEpubBook = null;
+  if (appState.activeEpubBook) {
+    appState.activeEpubBook.destroy();
+    appState.activeEpubBook = null;
   }
   epubRenderToken += 1;
   const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
@@ -432,29 +373,6 @@ export async function renderEpubBook(
     return;
   }
 
-  // Image-sequence fixed-layout EPUBs (comics / scans: every page a single
-  // image) get the lightweight native image viewer instead of epub.js.
-  const epubFilePath = viewerState.currentBook.filePath;
-  let imageLayout = imageEpubLayoutCache.get(epubFilePath);
-  if (!imageLayout) {
-    try {
-      imageLayout = await invoke<EpubImageLayoutPayload>("epub_image_layout", {
-        filePath: epubFilePath,
-      });
-      imageEpubLayoutCache.set(epubFilePath, imageLayout);
-    } catch (error) {
-      console.warn("[riida] epub_image_layout failed:", error);
-    }
-  }
-  if (viewerState.currentBook?.filePath !== epubFilePath) {
-    return;
-  }
-  if (imageLayout?.is_image_epub) {
-    renderImageEpub(imageLayout);
-    return;
-  }
-  destroyImageEpub();
-
   applyEpubViewerColors(viewerSettings.backgroundMode);
   await maybeShowEpubPreviewNotice();
   destroyEpubBook();
@@ -489,7 +407,7 @@ export async function renderEpubBook(
 
     const Epub = EpubModule.default;
     const book = Epub(sourceUrl);
-    activeEpubBook = book;
+    appState.activeEpubBook = book;
     await book.ready;
     if (currentToken !== epubRenderToken) return;
 
@@ -651,7 +569,7 @@ export async function renderEpubBook(
     await rendition.display(restoreCfi);
     if (currentToken !== epubRenderToken) return;
 
-    activeEpubRendition = rendition;
+    appState.activeEpubRendition = rendition;
     applyViewerVerticalGapMode(viewerSettings.verticalGapMode);
     applyEpubViewerColors(viewerSettings.backgroundMode);
     applyEpubFontSize(viewerSettings.epubFontSize);
@@ -734,12 +652,12 @@ export function initEpubFocusGuard() {
   // sequence (mousedown → mouseup → click) completes — otherwise stealing
   // focus during mousedown would suppress the click event in the iframe.
   window.addEventListener("blur", () => {
-    if (!activeEpubRendition) return;
+    if (!appState.activeEpubRendition) return;
     const epubViewerEl = document.querySelector("#epub-viewer");
     const active = document.activeElement;
     if (active instanceof HTMLIFrameElement && epubViewerEl?.contains(active)) {
       setTimeout(() => {
-        if (activeEpubRendition) window.focus();
+        if (appState.activeEpubRendition) window.focus();
       }, 0);
     }
   });

@@ -9,12 +9,11 @@ import {
   selectAnchorPageIndex,
   selectHeadSidePageInSpread,
 } from "../reading-position-utils";
-import { activeImageEpub } from "./image-epub-viewer";
+import { currentViewerStage } from "./dom";
 import { noteSaveTimer } from "./notes";
-import { pdfRenderInProgress } from "./pdf-viewer";
+import { syncViewerPageJumpUi } from "./page-jump";
 import { appState, viewerState } from "./state";
 import type { ReadingPosition } from "./types";
-import { currentViewerStage, syncViewerPageJumpUi } from "./viewer";
 
 let readingPositionSaveTimer: number | null = null;
 
@@ -104,7 +103,7 @@ export async function flushReadingPositionSave() {
   const sourceType = viewerState.currentBook?.sourceType;
 
   try {
-    if (sourceType === "epub" && activeImageEpub) {
+    if (sourceType === "epub" && appState.activeImageEpub) {
       // Image EPUBs have no CFI; persist the page number like a PDF.
       appState.activeReadingPosition = await invoke<ReadingPosition>("save_reading_position", {
         filePath: appState.activeReadingPosition.filePath,
@@ -138,7 +137,7 @@ export function scheduleEpubPositionSave() {
 }
 
 export function scheduleReadingPositionSave() {
-  if (pdfRenderInProgress) {
+  if (appState.pdfRenderInProgress) {
     return;
   }
   appState.activeReadingPosition = captureReadingPositionFromViewer();

@@ -54,3 +54,7 @@ export function isEditableTarget(target: EventTarget | null) {
     element.closest('input, textarea, select, [contenteditable="true"], .ProseMirror, .milkdown'),
   );
 }
+
+export function currentViewerStage() {
+  return document.querySelector<HTMLElement>(".viewer-stage");
+}

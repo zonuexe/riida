@@ -1,13 +1,13 @@
-// Viewer settings panel and the global/per-file viewer preferences.
+// Global and per-file viewer preferences: loading them, the drafts the settings
+// panel edits, syncing the panel's controls, and applying them to the viewers.
 
 import { invoke } from "@tauri-apps/api/core";
 import {
   applyViewerSettingsPayloadToState,
   DEFAULT_VIEWER_SETTINGS,
-  normalizeViewerSourceType,
   preferredExplicitViewerBackgroundMode,
-  switchViewerSettingsScopeInState,
   type ViewerBackgroundMode,
+  type ViewerColorPalette,
   viewerColorPaletteForMode,
   viewerExtraVerticalGap,
   type ViewerSettings,
@@ -15,29 +15,17 @@ import {
   type ViewerSettingsScope,
   type ViewerSourceType,
 } from "../viewer-settings-utils";
+import { currentViewerStage } from "./dom";
 import {
-  activeEpubRendition,
-  applyEpubFontSize,
-  applyEpubViewerColors,
-  resizeEpubRendition,
-} from "./epub-viewer";
-import { rebuildImageEpub } from "./image-epub-viewer";
-import { syncImmediatePdfScrollMode } from "./pdf-viewer";
-import { currentAppTheme } from "./settings";
-import { appState, viewerSettings, viewerState } from "./state";
+  appState,
+  currentAppTheme,
+  currentViewerSettingsSourceType,
+  viewerSettings,
+  viewerState,
+} from "./state";
 import { syncTocUi } from "./toc";
-import { renderCurrentPage } from "./viewer";
 
 let viewerSettingsLoadToken = 0;
-
-export function currentViewerSettingsSourceType(): ViewerSourceType | null {
-  const currentBook = viewerState.currentBook;
-  if (!currentBook) {
-    return null;
-  }
-
-  return normalizeViewerSourceType(currentBook.sourceType);
-}
 
 export function applyPdfViewerBackground(backgroundMode: ViewerBackgroundMode) {
   const palette = viewerColorPaletteForMode(backgroundMode, currentAppTheme());
@@ -71,7 +59,7 @@ export function applyViewerVerticalGapMode(mode: ViewerSettings["verticalGapMode
   if (epubViewerEl) {
     epubViewerEl.dataset.verticalGap = mode;
     epubViewerEl.style.setProperty("--epub-vertical-gap", `${extraGap}px`);
-    if (activeEpubRendition) {
+    if (appState.activeEpubRendition) {
       requestAnimationFrame(() => resizeEpubRendition());
     }
   }
@@ -102,42 +90,6 @@ function syncViewerBackgroundControls(
 
   setCheckedViewerBackgroundOption(groupName, explicitMode);
   group?.classList.toggle("is-disabled", isInherited);
-}
-
-function syncImmediatePdfBackgroundPreview() {
-  const sourceType = currentViewerSettingsSourceType();
-  if (sourceType === "pdf" && appState.lastSnapshot?.pdfRenderer === "pdfjs") {
-    applyPdfViewerBackground(currentViewerPreferences().backgroundMode);
-    return;
-  }
-
-  if (sourceType === "epub") {
-    applyEpubViewerColors(currentViewerPreferences().backgroundMode);
-    return;
-  }
-}
-
-function syncImmediateViewerLayoutPreview() {
-  const sourceType = currentViewerSettingsSourceType();
-  if (sourceType !== "pdf" && sourceType !== "epub") {
-    return;
-  }
-
-  applyViewerVerticalGapMode(currentViewerPreferences().verticalGapMode);
-}
-
-function bindViewerBackgroundOptionGroup(
-  groupName: string,
-  onChange: (value: ViewerBackgroundMode) => void,
-) {
-  const inputs = document.querySelectorAll<HTMLInputElement>(`input[name="${groupName}"]`);
-  for (const input of inputs) {
-    input.addEventListener("change", () => {
-      if (input.checked) {
-        onChange(input.value as ViewerBackgroundMode);
-      }
-    });
-  }
 }
 
 export function syncViewerSettingsUi() {
@@ -343,253 +295,67 @@ export async function loadViewerSettingsForCurrentBook() {
   }
 }
 
-export function initViewerSettingsPanel() {
-  const viewerSettingsToggleEl =
-    document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
-  const viewerSettingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
-  const viewerSettingsScopeGlobalEl = document.querySelector<HTMLButtonElement>(
-    "#viewer-settings-scope-global",
-  );
-  const viewerSettingsScopeFileEl = document.querySelector<HTMLButtonElement>(
-    "#viewer-settings-scope-file",
-  );
-  const viewerPageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
-  const viewerBindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
-  const viewerZoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
-  const viewerAlignModeEl = document.querySelector<HTMLSelectElement>("#viewer-align-mode");
-  const viewerVerticalGapModeEl = document.querySelector<HTMLSelectElement>(
-    "#viewer-vertical-gap-mode",
-  );
-  const viewerScrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
-  const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
-  const viewerDeskewModeEl = document.querySelector<HTMLInputElement>("#viewer-deskew-mode");
-  const viewerTrimModeEl = document.querySelector<HTMLInputElement>("#viewer-trim-mode");
-  const viewerEpubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
-  const viewerEpubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
-    "#viewer-epub-font-size-output",
-  );
-  const viewerBackgroundInheritEl = document.querySelector<HTMLInputElement>(
-    "#viewer-background-inherit",
-  );
+// Applying preferences to the live epub.js rendition and PDF stage. The
+// engines call these while they render, so they sit here below the engines.
 
-  viewerSettingsToggleEl?.addEventListener("click", () => {
-    const isOpening = !viewerSettings.isSettingsOpen;
-    viewerSettings.isSettingsOpen = isOpening;
-    if (isOpening) {
-      viewerSettings.scope = "file";
+export function applyEpubColorsToDocument(doc: Document, palette: ViewerColorPalette) {
+  const root = doc.documentElement;
+  const body = doc.body;
+
+  root?.style.setProperty("background-color", palette.background, "important");
+  root?.style.setProperty("color", palette.foreground, "important");
+  body?.style.setProperty("background-color", palette.background, "important");
+  body?.style.setProperty("color", palette.foreground, "important");
+
+  const linkEls = doc.querySelectorAll<HTMLAnchorElement>("a[href]");
+  for (const linkEl of linkEls) {
+    linkEl.style.setProperty("color", palette.link, "important");
+  }
+}
+
+export function applyEpubViewerColors(backgroundMode: ViewerBackgroundMode) {
+  const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
+  const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
+  const palette = viewerColorPaletteForMode(backgroundMode, currentAppTheme());
+
+  if (backgroundMode === "inherit-theme") {
+    mainPaneEl?.style.removeProperty("background-color");
+    epubViewerEl?.style.removeProperty("background-color");
+  } else {
+    if (mainPaneEl) {
+      mainPaneEl.style.backgroundColor = palette.background;
     }
-    syncViewerSettingsUi();
-  });
-
-  const rerenderPdfJs = () => {
-    const sourceType = currentViewerSettingsSourceType();
-    syncViewerSettingsUi();
-    if (
-      sourceType === "pdf" &&
-      appState.lastSnapshot?.pdfRenderer === "pdfjs" &&
-      viewerState.currentBook
-    ) {
-      void renderCurrentPage();
+    if (epubViewerEl) {
+      epubViewerEl.style.backgroundColor = palette.background;
     }
-  };
+  }
 
-  const persistViewerSettings = async () => {
-    const currentFilePath = viewerState.currentBook?.filePath ?? null;
-    const sourceType = currentViewerSettingsSourceType() ?? viewerSettings.sourceType;
-
-    if (viewerSettings.scope === "file" && currentFilePath) {
-      const payload = await invoke<ViewerSettingsPayload>("save_file_viewer_preferences", {
-        filePath: currentFilePath,
-        sourceType,
-        preferences: currentViewerPreferences(),
-      });
-      applyViewerSettingsPayload(payload, sourceType, "file");
-      return;
+  const contentsList = appState.activeEpubRendition
+    ? ((appState.activeEpubRendition.getContents() as unknown as import("epubjs").Contents[]) ?? [])
+    : [];
+  for (const contents of contentsList) {
+    if (contents.document) {
+      applyEpubColorsToDocument(contents.document, palette);
     }
+  }
+}
 
-    const payload = await invoke<ViewerSettingsPayload>("save_default_viewer_preferences", {
-      currentFilePath,
-      sourceType,
-      preferences: currentViewerPreferences(),
-    });
-    applyViewerSettingsPayload(payload, sourceType, "global");
-  };
+export function applyEpubFontSize(fontSize: number) {
+  if (!appState.activeEpubRendition) return;
+  appState.activeEpubRendition.themes.fontSize(`${fontSize}%`);
+}
 
-  const updateViewerSettings = (mutate: () => void, options: { rerenderPdf?: boolean } = {}) => {
-    const { rerenderPdf = true } = options;
-    mutate();
-    syncViewerSettingsUi();
-    syncImmediatePdfBackgroundPreview();
-    void persistViewerSettings()
-      .catch((error) => {
-        console.error("Failed to save viewer preferences:", error);
-      })
-      .finally(() => {
-        if (rerenderPdf) {
-          rerenderPdfJs();
-        }
-        rebuildImageEpub();
-      });
-  };
+export function resizeEpubRendition() {
+  if (!appState.activeEpubRendition) return;
+  const el = document.querySelector<HTMLElement>("#epub-viewer");
+  if (!el) return;
+  appState.activeEpubRendition.resize(el.clientWidth, el.clientHeight);
+}
 
-  const switchViewerSettingsScope = (requestedScope: ViewerSettingsScope) => {
-    const nextState = switchViewerSettingsScopeInState(viewerSettings, requestedScope);
-    viewerSettings.scope = nextState.scope;
-    viewerSettings.fileDraft = nextState.fileDraft;
-    syncViewerSettingsUi();
-  };
-
-  const mutateEditingViewerSettings = (mutate: (preferences: ViewerSettings) => void) => {
-    const nextPreferences = { ...currentViewerPreferences() };
-    mutate(nextPreferences);
-    setViewerDraft(viewerSettings.scope, nextPreferences);
-  };
-
-  viewerSettingsScopeGlobalEl?.addEventListener("click", () => {
-    switchViewerSettingsScope("global");
-  });
-
-  viewerSettingsScopeFileEl?.addEventListener("click", () => {
-    switchViewerSettingsScope("file");
-  });
-
-  viewerPageModeEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.pageMode = viewerPageModeEl.value as ViewerSettings["pageMode"];
-      });
-    });
-  });
-
-  viewerBindingEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.bindingDirection = viewerBindingEl.value as ViewerSettings["bindingDirection"];
-      });
-    });
-  });
-
-  viewerZoomModeEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.zoomMode = viewerZoomModeEl.value as ViewerSettings["zoomMode"];
-      });
-    });
-  });
-
-  viewerAlignModeEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.alignMode = viewerAlignModeEl.value as ViewerSettings["alignMode"];
-      });
-    });
-  });
-
-  viewerVerticalGapModeEl?.addEventListener("change", () => {
-    updateViewerSettings(
-      () => {
-        mutateEditingViewerSettings((preferences) => {
-          preferences.verticalGapMode =
-            viewerVerticalGapModeEl.value as ViewerSettings["verticalGapMode"];
-        });
-        syncImmediateViewerLayoutPreview();
-      },
-      { rerenderPdf: false },
-    );
-  });
-
-  viewerCoverModeEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.treatFirstPageAsCover = viewerCoverModeEl.checked;
-      });
-    });
-  });
-
-  viewerDeskewModeEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.deskewMode = viewerDeskewModeEl.checked ? "auto" : "off";
-      });
-    });
-  });
-
-  viewerTrimModeEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.trimMode = viewerTrimModeEl.checked ? "auto" : "off";
-      });
-    });
-  });
-
-  viewerScrollModeEl?.addEventListener("change", () => {
-    updateViewerSettings(
-      () => {
-        mutateEditingViewerSettings((preferences) => {
-          preferences.scrollMode = viewerScrollModeEl.value as ViewerSettings["scrollMode"];
-        });
-        syncImmediatePdfScrollMode();
-      },
-      { rerenderPdf: false },
-    );
-  });
-
-  viewerEpubFontSizeEl?.addEventListener("input", () => {
-    const fontSize = Number(viewerEpubFontSizeEl.value);
-    if (viewerEpubFontSizeOutputEl) {
-      viewerEpubFontSizeOutputEl.value = `${fontSize}%`;
-    }
-    mutateEditingViewerSettings((preferences) => {
-      preferences.epubFontSize = fontSize;
-    });
-    applyEpubFontSize(fontSize);
-  });
-
-  viewerEpubFontSizeEl?.addEventListener("change", () => {
-    updateViewerSettings(
-      () => {
-        mutateEditingViewerSettings((preferences) => {
-          preferences.epubFontSize = Number(viewerEpubFontSizeEl.value);
-        });
-      },
-      { rerenderPdf: false },
-    );
-  });
-
-  bindViewerBackgroundOptionGroup("viewer-background-mode", (value) => {
-    updateViewerSettings(
-      () => {
-        mutateEditingViewerSettings((preferences) => {
-          preferences.backgroundMode = value;
-        });
-      },
-      { rerenderPdf: false },
-    );
-  });
-
-  viewerBackgroundInheritEl?.addEventListener("change", () => {
-    updateViewerSettings(
-      () => {
-        mutateEditingViewerSettings((preferences) => {
-          preferences.backgroundMode = viewerBackgroundInheritEl.checked
-            ? "inherit-theme"
-            : preferredExplicitViewerBackgroundMode(preferences.backgroundMode, currentAppTheme());
-        });
-      },
-      { rerenderPdf: false },
-    );
-  });
-
-  window.addEventListener("click", (event) => {
-    const target = event.target as Node | null;
-    if (
-      viewerSettings.isSettingsOpen &&
-      target &&
-      !viewerSettingsPanelEl?.contains(target) &&
-      !viewerSettingsToggleEl?.contains(target)
-    ) {
-      viewerSettings.isSettingsOpen = false;
-      syncViewerSettingsUi();
-    }
-  });
+export function syncImmediatePdfScrollMode() {
+  const stageEl = currentViewerStage();
+  if (!stageEl) {
+    return;
+  }
+  stageEl.dataset.scrollMode = viewerSettings.scrollMode;
 }

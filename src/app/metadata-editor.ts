@@ -17,7 +17,7 @@ import {
 } from "../book-metadata-utils";
 import type { StatusTone } from "../dom-form-utils";
 import { applyStatusMessage, syncControlValue } from "./dom";
-import { refreshSnapshot } from "./library";
+import { refreshSnapshot } from "./library-data";
 import { appState, viewerState } from "./state";
 import type { BookMetadataPayload, BookSummary, CustomSource } from "./types";
 

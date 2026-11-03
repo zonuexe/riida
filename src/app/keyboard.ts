@@ -18,15 +18,16 @@ import {
 import { closeAbout } from "./about";
 import { isEditableTarget } from "./dom";
 import {
-  activeEpubRendition,
   applyEpubFontSizeShortcut,
   currentEpubFontSize,
   isEpubNextPageKey,
   isEpubPrevPageKey,
 } from "./epub-viewer";
-import { activeImageEpub, goToImageSpread } from "./image-epub-viewer";
+import { goToImageSpread } from "./image-epub-viewer";
 import { navigateBack, navigateForward } from "./navigation";
-import { closePdfSearch, isPdfSearchShortcut, openPdfSearch, pdfSearchState } from "./pdf-search";
+import { currentViewerTotalPages } from "./page-jump";
+import { closePdfSearch, pdfSearchState } from "./pdf-search-highlights";
+import { isPdfSearchShortcut, openPdfSearch } from "./pdf-search";
 import {
   advancePdfPagedSpread,
   handlePdfPagedKey,
@@ -36,7 +37,7 @@ import {
 import { closeAppSettings } from "./settings";
 import { appState, viewerState } from "./state";
 import { closeTagEditor, tagEditorState } from "./tag-editor";
-import { currentViewerTotalPages, navigateViewerToPage } from "./viewer";
+import { navigateViewerToPage } from "./viewer";
 
 export function initGlobalShortcuts() {
   window.addEventListener("keydown", (event) => {
@@ -102,8 +103,8 @@ export function initGlobalShortcuts() {
       const isPdfBook = viewerState.currentBook.sourceType === "pdf";
       const isEpubBook = viewerState.currentBook.sourceType === "epub";
       const pdfActive = isPdfBook && appState.lastSnapshot?.pdfRenderer === "pdfjs";
-      const epubActive = isEpubBook && Boolean(activeEpubRendition);
-      const imgEpubActive = isEpubBook && activeImageEpub !== null;
+      const epubActive = isEpubBook && Boolean(appState.activeEpubRendition);
+      const imgEpubActive = isEpubBook && appState.activeImageEpub !== null;
 
       if (pdfActive || epubActive || imgEpubActive) {
         if (isViewerZoomResetShortcut(shortcutInput)) {
@@ -155,8 +156,8 @@ export function initGlobalShortcuts() {
           event.preventDefault();
           if (imgEpubActive) {
             goToImageSpread(1);
-          } else if (epubActive && activeEpubRendition) {
-            void activeEpubRendition.next();
+          } else if (epubActive && appState.activeEpubRendition) {
+            void appState.activeEpubRendition.next();
           } else if (pdfActive) {
             advancePdfPagedSpread(1);
           }
@@ -167,8 +168,8 @@ export function initGlobalShortcuts() {
           event.preventDefault();
           if (imgEpubActive) {
             goToImageSpread(-1);
-          } else if (epubActive && activeEpubRendition) {
-            void activeEpubRendition.prev();
+          } else if (epubActive && appState.activeEpubRendition) {
+            void appState.activeEpubRendition.prev();
           } else if (pdfActive) {
             advancePdfPagedSpread(-1);
           }
@@ -183,7 +184,7 @@ export function initGlobalShortcuts() {
 
     if (
       viewerState.currentBook?.sourceType === "epub" &&
-      (activeEpubRendition || activeImageEpub)
+      (appState.activeEpubRendition || appState.activeImageEpub)
     ) {
       // DPFJ guide §ページ進行方向の遵守: in rtl books ArrowLeft advances reading order.
       const wantsNext = appState.activeEpubIsRtl
@@ -194,17 +195,17 @@ export function initGlobalShortcuts() {
         : isEpubPrevPageKey(event);
       if (wantsNext) {
         event.preventDefault();
-        if (activeImageEpub) {
+        if (appState.activeImageEpub) {
           goToImageSpread(1);
         } else {
-          void activeEpubRendition?.next();
+          void appState.activeEpubRendition?.next();
         }
       } else if (wantsPrev) {
         event.preventDefault();
-        if (activeImageEpub) {
+        if (appState.activeImageEpub) {
           goToImageSpread(-1);
         } else {
-          void activeEpubRendition?.prev();
+          void appState.activeEpubRendition?.prev();
         }
       }
     }

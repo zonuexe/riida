@@ -13,61 +13,24 @@ import { cropRectForPage, type TrimBoxes, trimmedPageSize } from "../pdf-trim";
 import { buildPageGroups, getVisualPageOrder } from "../viewer-layout-utils";
 import { buildPdfRenderWindowPlan } from "../pdf-render-window-utils";
 import { planPagedKeyAction } from "../pdf-paged-nav-utils";
-import { applyEpubViewerColors } from "./epub-viewer";
+import { currentViewerStage } from "./dom";
 import { navigateBack } from "./navigation";
-import { applyPdfSearchHighlights, closePdfSearch, pdfSearchState } from "./pdf-search";
+import { applyPdfSearchHighlights, closePdfSearch, pdfSearchState } from "./pdf-search-highlights";
 import {
   restoreReadingPositionAttempt,
   scheduleReadingPositionRestore,
   scheduleReadingPositionSave,
 } from "./reading-position";
+import { navigateViewerToPage, renderCurrentPage } from "./shell";
 import { appState, viewerSettings, viewerState } from "./state";
 import { buildPdfToc, syncTocUi } from "./toc";
-import type { PdfOutlineNode } from "./types";
-import { applyPdfViewerBackground, applyViewerVerticalGapMode } from "./viewer-settings";
-import { currentViewerStage, navigateViewerToPage, renderCurrentPage } from "./viewer";
-
-type PdfRenderPlan = {
-  groupIndex: number;
-  visualOrder: number[];
-  spreadEl: HTMLElement;
-  pageSlots: Map<number, HTMLElement>;
-  baseScale: number;
-  /**
-   * Page proxies of the pages painted into this group. PDF.js holds a page's
-   * decoded images in `page.objs` until `page.cleanup()` is called — for a
-   * 300dpi book scan that is ~16MB per page, retained for every page the
-   * reader has passed — so the release path needs the proxies back.
-   */
-  renderedPages: Map<number, PdfPageProxyLike>;
-};
-
-/** The part of PDF.js's `PDFPageProxy` the release path needs. */
-type PdfPageProxyLike = {
-  cleanup: (resetStats?: boolean) => boolean;
-};
-
-type PdfRenderSession = {
-  token: number;
-  pdfDocument: {
-    numPages: number;
-    getPage: (pageNumber: number) => Promise<any>;
-    getDestination?: (destinationId: string) => Promise<unknown>;
-    getPageIndex?: (pageRef: any) => Promise<number>;
-    getOutline?: () => Promise<PdfOutlineNode[] | null>;
-  };
-  viewerEl: HTMLElement;
-  stageEl: HTMLElement;
-  plans: PdfRenderPlan[];
-  restoreTargetPage: number | null;
-  updateScheduled: boolean;
-  isUpdating: boolean;
-  pendingFocusGroupIndex: number | null;
-  resolvedBindingDirection: "left" | "right";
-  filePath: string;
-  /** Crop boxes when margin trimming is on (viewer setting "trimMode"). */
-  trimBoxes: TrimBoxes | null;
-};
+import type { PdfRenderPlan, PdfRenderSession } from "./types";
+import {
+  applyEpubViewerColors,
+  applyPdfViewerBackground,
+  applyViewerVerticalGapMode,
+  syncImmediatePdfScrollMode,
+} from "./viewer-settings";
 
 // Scan analysis for deskew and margin trimming (viewer settings "deskewMode"
 // and "trimMode"). One scratch canvas serves every page; `willReadFrequently`
@@ -81,8 +44,6 @@ const pdfPageAnalyzer = new PdfPageAnalyzer((): PageSampleSurface | null => {
 
 let pdfRenderToken = 0;
 
-export let pdfRenderInProgress = false;
-export let activePdfRenderSession: PdfRenderSession | null = null;
 // The open document's PDF.js loading task. Destroying it is the only way to
 // give back the worker, the file bytes it holds and every decoded page image;
 // without it each book opened in a session stays resident for the session's
@@ -251,7 +212,7 @@ async function renderPdfJsLinks(
  */
 export function releaseActivePdfDocument() {
   pdfRenderToken += 1;
-  activePdfRenderSession = null;
+  appState.activePdfRenderSession = null;
   const task = activePdfLoadingTask;
   activePdfLoadingTask = null;
   // destroy() rejects pending page requests; those rejections belong to work
@@ -481,14 +442,6 @@ export function schedulePdfRenderWindowUpdate(session: PdfRenderSession, focusGr
   });
 }
 
-export function syncImmediatePdfScrollMode() {
-  const stageEl = currentViewerStage();
-  if (!stageEl) {
-    return;
-  }
-  stageEl.dataset.scrollMode = viewerSettings.scrollMode;
-}
-
 function getPdfPageEls(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>(".pdfjs-spread"));
 }
@@ -583,7 +536,7 @@ export function handlePdfPagedKey(event: KeyboardEvent): boolean {
       pageHeight: activeEl.offsetHeight,
       pageWidth: activeEl.offsetWidth,
     },
-    activePdfRenderSession?.resolvedBindingDirection ?? "left",
+    appState.activePdfRenderSession?.resolvedBindingDirection ?? "left",
   );
 
   event.preventDefault();
@@ -626,7 +579,7 @@ export async function renderPdfJsBook(
   applyViewerVerticalGapMode(viewerSettings.verticalGapMode);
 
   closePdfSearch();
-  pdfRenderInProgress = true;
+  appState.pdfRenderInProgress = true;
   const currentToken = pdfRenderToken;
   const loadingEl = document.createElement("div");
   loadingEl.className = "pdfjs-loading";
@@ -860,7 +813,7 @@ export async function renderPdfJsBook(
       filePath: viewerState.currentBook?.filePath ?? "",
       trimBoxes,
     };
-    activePdfRenderSession = session;
+    appState.activePdfRenderSession = session;
     // Restore scroll position immediately using placeholder dimensions so
     // the user's view is preserved before async page rendering begins.
     // Without this, scroll-snap or stray scroll events during rebuild can
@@ -876,7 +829,7 @@ export async function renderPdfJsBook(
     syncTocUi();
     if (pdfDocument.getOutline) {
       void pdfDocument.getOutline().then((outline) => {
-        if (activePdfRenderSession?.token !== currentToken) return;
+        if (appState.activePdfRenderSession?.token !== currentToken) return;
         appState.activePdfOutline = outline ?? null;
         buildPdfToc();
         syncTocUi();
@@ -906,7 +859,7 @@ export async function renderPdfJsBook(
     pdfjsViewerEl.appendChild(errorEl);
   } finally {
     if (currentToken === pdfRenderToken) {
-      pdfRenderInProgress = false;
+      appState.pdfRenderInProgress = false;
     }
   }
 }
@@ -920,13 +873,13 @@ export function initPdfStageScroll() {
       if (appState.lastSnapshot?.pdfRenderer !== "pdfjs" || !viewerState.currentBook) {
         return;
       }
-      if (pdfRenderInProgress) {
+      if (appState.pdfRenderInProgress) {
         return;
       }
 
       scheduleReadingPositionSave();
-      if (activePdfRenderSession) {
-        schedulePdfRenderWindowUpdate(activePdfRenderSession);
+      if (appState.activePdfRenderSession) {
+        schedulePdfRenderWindowUpdate(appState.activePdfRenderSession);
       }
     },
     { passive: true },

@@ -333,7 +333,7 @@ that the layout may break. The notice is gated by the
 Rendering is done with [epub.js](https://github.com/futurepress/epub.js)
 in paginated flow. Reading position is persisted via CFI
 (`ReadingPosition.cfi`). Keyboard navigation is wired through a
-top-level `window` `keydown` listener that checks `activeEpubRendition`
+top-level `window` `keydown` listener that checks `appState.activeEpubRendition`
 and calls `rendition.next()` / `rendition.prev()`. Keyboard focus
 inside the iframe is handled by a `window.blur` → `setTimeout(0)` →
 `window.focus()` refocus trick so that key events always reach the
@@ -373,8 +373,11 @@ streams one image at a time straight out of the zip.
   pairs with the following second side; lone recto when unpaired; missing
   sides alternate; no metadata → first-as-cover sequential). `computeImageFit`
   contain-fits a spread to the stage with a shared height.
-- **Wiring (frontend):** `renderImageEpub` / `goToImageSpread` /
-  `goToImagePage` in [src/app/image-epub-viewer.ts](src/app/image-epub-viewer.ts), rendering into
+- **Wiring (frontend):** `renderCurrentPage` in
+  [src/app/viewer.ts](src/app/viewer.ts) asks `loadImageEpubLayout` whether an
+  EPUB is an image book and hands it to `renderImageEpub` instead of epub.js's
+  `renderEpubBook`. `renderImageEpub` / `goToImageSpread` / `goToImagePage` in
+  [src/app/image-epub-viewer.ts](src/app/image-epub-viewer.ts) render into
   `#epub-image-viewer`. Page count is the image-page count (no epub.js
   `locations.generate`), reading position persists by page number via
   `save_reading_position` (no CFI; stale CFI-only positions clamp to page 1),
@@ -915,41 +918,80 @@ The library shell is split into DOM-driven feature modules under
 [src/app/](src/app); pure, tested helpers stay flat in `src/` (`*-utils.ts`,
 `pdf-*.ts`, `search-*.ts`, ...).
 
-- [src/main.ts](src/main.ts) — entry point. On `DOMContentLoaded` it calls each
-  feature's `init*()` (synchronous listener wiring) and `register*()` (async
-  Tauri event subscriptions), then loads config, shelves, the library snapshot
-  and app metadata. The call order is the original registration order; keep
-  `window` listeners of the same event type in their relative order when
-  rearranging.
-- Foundation, imported by everything and importing no feature module:
-  `types.ts` (payload/state shapes), `state.ts` (`viewerState`,
-  `viewerSettings`, `appState`), `dom.ts`, `locale.ts`, `home-path.ts`.
-- Library: `library.ts` (snapshot refresh, `renderApp`), `library-view.ts`,
-  `book-list.ts`, `sidebar.ts`, `library-search.ts`, `fulltext.ts`.
-- Viewer: `viewer.ts` (`openBook`, `renderCurrentPage` dispatch, page jump,
-  resize), `pdf-viewer.ts`, `pdf-search.ts`, `epub-viewer.ts`,
-  `image-epub-viewer.ts`, `toc.ts`, `viewer-settings.ts`,
-  `reading-position.ts`, `notes.ts`, `navigation.ts`, `keyboard.ts`.
-- Dialogs and editors: `settings.ts`, `about.ts`, `welcome.ts`,
-  `custom-sources.ts`, `shelf-editor.ts`, `tag-editor.ts`,
-  `metadata-editor.ts`.
+- [src/main.ts](src/main.ts) — entry point. It installs the app shell (see
+  below), then on `DOMContentLoaded` calls each feature's `init*()`
+  (synchronous listener wiring) and `register*()` (async Tauri event
+  subscriptions), then loads config, shelves, the library snapshot and app
+  metadata. The call order is the original registration order; keep `window`
+  listeners of the same event type in their relative order when rearranging.
+
+### Layering
+
+The value imports among `src/app/` modules form no cycle: a module imports
+only modules below it. [src/app-layering.test.ts](src/app-layering.test.ts)
+enforces this and prints the cycle when one appears. Type-only imports
+(`import type`) are erased at build time and may point anywhere.
+
+From the bottom up (a module imports only rows above it in this list, or
+earlier modules in its own row):
+
+1. Foundation: `types.ts`, `state.ts` (`viewerState`, `viewerSettings`,
+   `appState`, and derived reads such as `currentAppTheme`), `dom.ts`,
+   `locale.ts`, `home-path.ts`, `shell.ts`.
+2. Library data and history: `library-data.ts` (snapshot and shelf refresh,
+   `visibleBooks`, sorting), `navigation.ts` (history stack, URL mirroring,
+   back/forward).
+3. Editors and small panels: `notes.ts`, `page-jump.ts`, `custom-sources.ts`,
+   `tag-editor.ts`, `metadata-editor.ts`, `shelf-editor.ts`, `about.ts`.
+4. Viewer helpers: `toc.ts`, `pdf-search-highlights.ts`,
+   `reading-position.ts`, `viewer-settings.ts` (preference model, panel
+   sync, and the appliers the engines call: colors, font size, gaps,
+   resize).
+5. Engines: `pdf-viewer.ts`, then `pdf-search.ts` and `epub-viewer.ts`,
+   then `image-epub-viewer.ts`.
+6. `viewer.ts`: `openBook`, the `renderCurrentPage` dispatch (including the
+   image-EPUB check), `navigateViewerToPage`.
+7. Library views: `bulk-selection.ts`, `sidebar.ts`, `fulltext.ts`,
+   `library-search.ts`, `settings.ts`, `book-list.ts`, `library-view.ts`,
+   `viewer-settings-panel.ts`, `keyboard.ts`.
+8. `library.ts` (`renderApp`, library events), then
+   `navigation-apply.ts` (`applyNavigationState`) and `welcome.ts`.
+
+When a lower module needs something from a higher one, prefer real layering:
+
+- State that a lower module reads but a higher one writes moves to `appState`
+  (the viewer session handles `appState.activePdfRenderSession`,
+  `appState.activeEpubRendition`, `appState.activeImageEpub`, ... are written
+  only by their engine and read by toc, reading-position and navigation).
+- A query that only reads state or the DOM moves into `state.ts` or `dom.ts`.
+- A function the engines call but that lives in a higher module moves down
+  with the code it serves, or the module splits along that line
+  (`viewer-settings.ts` / `viewer-settings-panel.ts`, `navigation.ts` /
+  `navigation-apply.ts`, `pdf-search-highlights.ts` / `pdf-search.ts`).
+
+Only a request that really travels up the layers goes through
+[src/app/shell.ts](src/app/shell.ts), whose implementations `main.ts`
+installs at startup: `renderApp`, `renderCurrentPage`,
+`navigateViewerToPage`, `applyNavigationState` and `syncAppSettingsUi`.
+Modules below the owner import these forwarding functions from `./shell`;
+modules above it import the real function. Add a slot only for a repaint,
+re-render or navigation request that cannot move down; it is not an event bus.
 
 State rules:
 
 - State one feature reassigns is a module-level `let` in that feature's
   module; other modules read it through the live import binding.
 - ES module imports are read-only, so a value that more than one module
-  reassigns lives on `appState` in [src/app/state.ts](src/app/state.ts)
-  (`appState.lastSnapshot`, `appState.activeReadingPosition`, ...). Add a
-  field there rather than exporting a setter or importing a writer back.
+  reassigns, or that a module below its writer reads, lives on `appState` in
+  [src/app/state.ts](src/app/state.ts) (`appState.lastSnapshot`,
+  `appState.activeReadingPosition`, ...). Add a field there rather than
+  exporting a setter or importing a writer back.
 - Mutable objects shared across features (`viewerState`, `viewerSettings`)
   also live in `state.ts`.
 
-Feature modules call each other's functions directly, so the feature modules
-form import cycles at the function level. That is safe only because no
-module does work at evaluation time beyond initializing its own constants:
-do not add top-level calls into another feature module, and keep listener
-wiring inside `init*()` functions that `main.ts` calls.
+No module does work at evaluation time beyond initializing its own constants;
+keep listener wiring inside `init*()` functions that `main.ts` calls. The
+shell throws if a forwarding function runs before `main.ts` installs it.
 
 `src/app/**` is excluded from coverage and Stryker, like `main.ts`; the
 jsdom boot test ([src/main.boot.test.ts](src/main.boot.test.ts)) is what

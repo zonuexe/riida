@@ -388,7 +388,7 @@ planner を使って同じ半径でウィンドウ描画します。spread の�
 数冊開くとそのぶん丸ごと residents になります。
 
 `releaseActivePdfDocument()` ([src/app/pdf-viewer.ts](../src/app/pdf-viewer.ts)) が
-`activePdfRenderSession` のクリアと loading task の `destroy()` をまとめて
+`appState.activePdfRenderSession` のクリアと loading task の `destroy()` をまとめて
 行い、PDF ビューアを離れる経路すべて（別の本、EPUB、画像 EPUB、native
 レンダラ）がここを通ります。`pdfRenderToken` の加算も同じ関数に入れて、
 破棄中のドキュメントに進行中のレンダーが触れないようにしています。

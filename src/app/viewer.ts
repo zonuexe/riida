@@ -26,7 +26,7 @@ import {
   shouldAnchorNoteWindowToBottomRight,
   syncNoteUi,
 } from "./notes";
-import { closePdfSearch } from "./pdf-search";
+import { closePdfSearch } from "./pdf-search-highlights";
 import {
   findPdfRenderGroupIndexForPage,
   releaseActivePdfDocument,

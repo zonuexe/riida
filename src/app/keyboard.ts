@@ -25,7 +25,8 @@ import {
 } from "./epub-viewer";
 import { goToImageSpread } from "./image-epub-viewer";
 import { navigateBack, navigateForward } from "./navigation";
-import { closePdfSearch, isPdfSearchShortcut, openPdfSearch, pdfSearchState } from "./pdf-search";
+import { isPdfSearchShortcut, openPdfSearch } from "./pdf-search";
+import { closePdfSearch, pdfSearchState } from "./pdf-search-highlights";
 import {
   advancePdfPagedSpread,
   handlePdfPagedKey,

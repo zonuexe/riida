@@ -15,7 +15,7 @@ import { buildPdfRenderWindowPlan } from "../pdf-render-window-utils";
 import { planPagedKeyAction } from "../pdf-paged-nav-utils";
 import { applyEpubViewerColors } from "./epub-viewer";
 import { navigateBack } from "./navigation";
-import { applyPdfSearchHighlights, closePdfSearch, pdfSearchState } from "./pdf-search";
+import { applyPdfSearchHighlights, closePdfSearch, pdfSearchState } from "./pdf-search-highlights";
 import {
   restoreReadingPositionAttempt,
   scheduleReadingPositionRestore,

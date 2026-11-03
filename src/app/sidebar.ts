@@ -10,7 +10,8 @@ import {
   type SidebarSectionKey,
 } from "../sidebar-section-order.ts";
 import { openCustomSourceEditor } from "./custom-sources";
-import { refreshShelves, renderApp } from "./library";
+import { renderApp } from "./library";
+import { refreshShelves } from "./library-data";
 import { navigateToState } from "./navigation";
 import { openShelfEditor } from "./shelf-editor";
 import { appState, viewerState } from "./state";

@@ -7,7 +7,8 @@ import {
   parsePdfPageQueryParam,
 } from "../navigation-utils";
 import { goToImagePage } from "./image-epub-viewer";
-import { bulkSelectState, resetListSort, syncBulkActionBar } from "./library-view";
+import { bulkSelectState, syncBulkActionBar } from "./library-view";
+import { resetListSort } from "./library-data";
 import { renderApp } from "./library";
 import { ensureExpandedPath, ensureExpandedTag } from "./sidebar";
 import { appState, viewerState } from "./state";

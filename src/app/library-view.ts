@@ -11,53 +11,15 @@ import {
 import { destroyEpubBook } from "./epub-viewer";
 import { renderFulltextResults } from "./fulltext";
 import { destroyImageEpub } from "./image-epub-viewer";
-import { hasActiveLibraryFilter, renderApp, visibleBooks } from "./library";
+import { renderApp } from "./library";
+import { hasActiveLibraryFilter, visibleBooks } from "./library-data";
 import { openBookMetadataEditorForBooks } from "./metadata-editor";
 import { loadNoteForCurrentBook, noteState, syncNoteUi } from "./notes";
 import { appState, viewerState } from "./state";
 import { openTagEditorForBooks } from "./tag-editor";
-import type { BookSummary, LibrarySnapshot } from "./types";
+import type { LibrarySnapshot, ListSortKey } from "./types";
 import { syncViewerSettingsUi } from "./viewer-settings";
 import { renderCurrentPage, syncViewerPageJumpUi, viewerNeedsRender } from "./viewer";
-
-type ListSortKey =
-  | "default"
-  | "title-asc"
-  | "title-desc"
-  | "last-read"
-  | "file-size"
-  | "added-desc"
-  | "added-asc";
-let currentListSort: ListSortKey = "default";
-
-export function resetListSort() {
-  currentListSort = "default";
-  const el = document.querySelector<HTMLSelectElement>("#library-sort");
-  if (el) el.value = "default";
-}
-
-export function sortBooks(books: BookSummary[]): BookSummary[] {
-  switch (currentListSort) {
-    case "title-asc":
-      return [...books].sort((a, b) =>
-        (a.title ?? a.fileName).localeCompare(b.title ?? b.fileName, "ja"),
-      );
-    case "title-desc":
-      return [...books].sort((a, b) =>
-        (b.title ?? b.fileName).localeCompare(a.title ?? a.fileName, "ja"),
-      );
-    case "last-read":
-      return [...books].sort((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0));
-    case "file-size":
-      return [...books].sort((a, b) => b.fileSize - a.fileSize);
-    case "added-desc":
-      return [...books].sort((a, b) => b.indexedAt - a.indexedAt);
-    case "added-asc":
-      return [...books].sort((a, b) => a.indexedAt - b.indexedAt);
-    default:
-      return books;
-  }
-}
 
 export const bulkSelectState = {
   selectedFilePaths: new Set<string>(),
@@ -276,7 +238,7 @@ export function initLibraryViewControls() {
   const libraryViewToggleEl = document.querySelector<HTMLButtonElement>("#library-view-toggle");
   if (librarySortEl) {
     librarySortEl.addEventListener("change", () => {
-      currentListSort = (librarySortEl.value as ListSortKey) ?? "default";
+      appState.listSort = (librarySortEl.value as ListSortKey) ?? "default";
       if (appState.lastSnapshot) {
         renderApp();
       }

@@ -13,7 +13,8 @@ import { primeHomeDirCache } from "./app/home-path";
 import { initGlobalShortcuts } from "./app/keyboard";
 import { initLibrarySearch } from "./app/library-search";
 import { initBulkSelection, initLibraryViewControls } from "./app/library-view";
-import { refreshShelves, registerLibraryEvents } from "./app/library";
+import { registerLibraryEvents } from "./app/library";
+import { refreshShelves } from "./app/library-data";
 import { applyStaticTranslations } from "./app/locale";
 import { initBookMetadataEditor, initLibraryAddButtons } from "./app/metadata-editor";
 import {

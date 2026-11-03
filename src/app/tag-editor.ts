@@ -7,7 +7,8 @@ import { deriveTags } from "../library-utils";
 import { suggestTagCompletions } from "../tag-suggestions";
 import { countBooksWithTagOrDescendants, validateTagValue } from "../tag-utils";
 import { applyStatusMessage, syncControlValue } from "./dom";
-import { refreshSnapshot, renderApp, updateBookTagsInState } from "./library";
+import { renderApp } from "./library";
+import { refreshSnapshot, updateBookTagsInState } from "./library-data";
 import { appState, viewerState } from "./state";
 import type { BookSummary } from "./types";
 

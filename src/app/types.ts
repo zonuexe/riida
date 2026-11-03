@@ -200,3 +200,12 @@ export type ImageEpubSession = {
   /** Rendered <img> elements of the current spread, in on-screen order. */
   imgEls: HTMLImageElement[];
 };
+
+export type ListSortKey =
+  | "default"
+  | "title-asc"
+  | "title-desc"
+  | "last-read"
+  | "file-size"
+  | "added-desc"
+  | "added-asc";

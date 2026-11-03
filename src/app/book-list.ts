@@ -13,7 +13,7 @@ import {
 } from "../library-utils";
 import { cachedHomeDir } from "./home-path";
 import { bulkSelectState, syncBulkActionBar } from "./library-view";
-import { describeCurrentEmptyLibraryState } from "./library";
+import { describeCurrentEmptyLibraryState } from "./library-data";
 import { openBookMetadataEditor } from "./metadata-editor";
 import { navigateToState } from "./navigation";
 import { appState, viewerState } from "./state";

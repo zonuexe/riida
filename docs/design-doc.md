@@ -19,7 +19,7 @@ The application is split into a Rust backend and a TypeScript frontend.
 
 - Backend core (no Tauri dependency): [src-tauri/crates/riida-core](src-tauri/crates/riida-core)
 - Backend Tauri app (commands, state, watcher): [src-tauri/src/lib.rs](src-tauri/src/lib.rs)
-- Frontend entry: [src/main.ts](src/main.ts)
+- Frontend entry: [src/main.ts](src/main.ts), with the library-shell features in [src/app/](src/app)
 - Frontend styles: [src/styles.css](src/styles.css)
 - Frontend helpers: [src/*.ts](src)
 - App shell: [index.html](index.html)
@@ -379,7 +379,7 @@ External books do not use file-generated thumbnails; they currently rely on `cov
 
 ## Frontend Module Boundaries
 
-The app still uses a large `main.ts`, but logic-heavy pieces are extracted into helpers such as:
+DOM-driven features live in modules under [src/app/](src/app) (see AGENTS.md > Frontend Layout), with `main.ts` reduced to startup wiring. Logic-heavy pieces are extracted into helpers such as:
 
 - [src/library-utils.ts](src/library-utils.ts)
 - [src/navigation-utils.ts](src/navigation-utils.ts)
@@ -398,7 +398,7 @@ The app still uses a large `main.ts`, but logic-heavy pieces are extracted into 
 
 The general pattern is:
 
-- DOM-heavy orchestration stays in `main.ts`
+- DOM-heavy orchestration lives in the `src/app/` feature modules
 - pure logic moves into helper modules
 - helper modules get Vitest coverage
 
@@ -441,7 +441,7 @@ Current helper-level coverage includes:
 
 ## Known Architectural Characteristics
 
-- `main.ts` is still the orchestration center and remains large
+- orchestration is split across `src/app/` feature modules that call each other directly
 - frontend state is centralized and mutable rather than store-library-driven
 - SQLite acts as both index and user-data store
 - local PDFs and external books are intentionally presented through one merged list model

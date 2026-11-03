@@ -83,7 +83,8 @@ Frontend checks also print a small bundle-size report after `npm run build` so l
 ## Project Structure
 
 - [src-tauri/src/lib.rs](src-tauri/src/lib.rs): backend, config, SQLite, library scan/watch, thumbnails
-- [src/main.ts](src/main.ts): frontend state, navigation, PDF viewer, notes
+- [src/main.ts](src/main.ts): frontend entry point; it wires the feature modules
+- [src/app/](src/app): frontend features (library, viewers, navigation, notes, dialogs)
 - [src/styles.css](src/styles.css): UI styling
 
 ## Expectations

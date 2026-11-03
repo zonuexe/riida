@@ -14,7 +14,7 @@ pdf.js 使用法（`getDocument` の呼び出し方や TextLayer の使い方そ
 
 設定 `pdf_renderer` で切替。`pdfjs` がデフォルトです。
 
-[src/main.ts](../src/main.ts) と [src/styles.css](../src/styles.css) が
+[src/app/pdf-viewer.ts](../src/app/pdf-viewer.ts) と [src/styles.css](../src/styles.css) が
 本体。検出系・レイアウト系・検索系・リンク解決系は
 `src/pdf-*.ts` の helper module 群に切り出してテストしています。
 
@@ -37,7 +37,7 @@ pdf.js の `DOMBinaryDataFactory` は内部で `fetchData()` 経由でリソー�
 
 ### 対処
 
-[src/main.ts](../src/main.ts) の `TauriBinaryDataFactory` クラスで
+[src/pdf-runtime.ts](../src/pdf-runtime.ts) の `TauriBinaryDataFactory` クラスで
 `BinaryDataFactory` API を上書き。`fetch()` を直接呼ぶことで `tauri:` URL
 でも実体を取得できるようになります。pdf.js の `getDocument` 呼び出しに
 `BinaryDataFactory: TauriBinaryDataFactory` を渡しているのはこのため。
@@ -387,7 +387,7 @@ planner を使って同じ半径でウィンドウ描画します。spread の�
 続けます。本を閉じても別の本に移っても解放されないので、1 セッションで
 数冊開くとそのぶん丸ごと residents になります。
 
-`releaseActivePdfDocument()` ([src/main.ts](../src/main.ts)) が
+`releaseActivePdfDocument()` ([src/app/pdf-viewer.ts](../src/app/pdf-viewer.ts)) が
 `activePdfRenderSession` のクリアと loading task の `destroy()` をまとめて
 行い、PDF ビューアを離れる経路すべて（別の本、EPUB、画像 EPUB、native
 レンダラ）がここを通ります。`pdfRenderToken` の加算も同じ関数に入れて、

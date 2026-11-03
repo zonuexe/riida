@@ -68,7 +68,10 @@ UI implementation references [DESIGN.md](DESIGN.md) for visual language, color r
     state (`DATABASE`, `APP_PATHS`, the full-text index), path resolution,
     `#[tauri::command]` handlers, events, the library watcher, and background
     workers. Commands should stay thin wrappers over `riida-core`.
-- Vite/TypeScript frontend in [src/main.ts](src/main.ts)
+- Vite/TypeScript frontend: [src/main.ts](src/main.ts) is the library shell's
+  entry point and only wires startup; the features live in
+  [src/app/](src/app) (see Frontend Layout below). The standalone viewer
+  window is [src/main-viewer.ts](src/main-viewer.ts).
 - Styling in [src/styles.css](src/styles.css)
 - Nix flake dev environment in [flake.nix](flake.nix)
 
@@ -219,7 +222,7 @@ its own, so four things have to be released explicitly. Full reasoning and
 measurements: [docs/pdf.md](docs/pdf.md#メモリ使用量).
 
 - **The loading task.** `releaseActivePdfDocument()` in
-  [src/main.ts](src/main.ts) clears the session, bumps `pdfRenderToken` and
+  [src/app/pdf-viewer.ts](src/app/pdf-viewer.ts) clears the session, bumps `pdfRenderToken` and
   calls `loadingTask.destroy()`; every path that leaves a PDF goes through it.
   Because `destroy()` rejects the page requests an abandoned render is
   awaiting, the `catch` in `renderCurrentPage` and in
@@ -371,7 +374,7 @@ streams one image at a time straight out of the zip.
   sides alternate; no metadata → first-as-cover sequential). `computeImageFit`
   contain-fits a spread to the stage with a shared height.
 - **Wiring (frontend):** `renderImageEpub` / `goToImageSpread` /
-  `goToImagePage` in [src/main.ts](src/main.ts), rendering into
+  `goToImagePage` in [src/app/image-epub-viewer.ts](src/app/image-epub-viewer.ts), rendering into
   `#epub-image-viewer`. Page count is the image-page count (no epub.js
   `locations.generate`), reading position persists by page number via
   `save_reading_position` (no CFI; stale CFI-only positions clamp to page 1),
@@ -397,9 +400,9 @@ on macOS (WKWebView). As of v0.2.3 the observable symptoms are:
   navigates to the wrong spine item.
 
 These symptoms are reproducible against the current best-effort
-implementation in [src/main.ts](src/main.ts) (see the
+implementation in [src/app/epub-viewer.ts](src/app/epub-viewer.ts) (see the
 `rendition.hooks.content.register` + `rendition.on("click")` block
-inside `renderCurrentPage()`).
+inside `renderEpubBook()`).
 
 ### Root-Cause Hypothesis
 
@@ -433,8 +436,9 @@ it would in a plain browser. The narrower hypotheses worth testing:
 
 ### Approaches Tried (and why each failed)
 
-All changes were in [src/main.ts](src/main.ts), inside the
-`renderCurrentPage()` EPUB branch, across commits `2edc1c7` through
+All changes were in `src/main.ts`, inside the
+`renderCurrentPage()` EPUB branch (now `renderEpubBook()` in
+[src/app/epub-viewer.ts](src/app/epub-viewer.ts)), across commits `2edc1c7` through
 `2096c58`. Listed newest-first:
 
 1. **Rewrite `href` to `javascript:void(0)` + dispatch via
@@ -611,7 +615,7 @@ and tags. Design and rationale: [docs/fulltext-search-design.md](docs/fulltext-s
   (which books to index, their base docs, chunked commits), and the
   worker/commands/hooks in [src-tauri/src/lib.rs](src-tauri/src/lib.rs). Frontend:
   [src/fulltext-ui.ts](src/fulltext-ui.ts) (pure helpers, tested) + DOM wiring in
-  [src/main.ts](src/main.ts).
+  [src/app/fulltext.ts](src/app/fulltext.ts).
 - **Opt-in (important):** indexing consumes disk and is **never** started
   implicitly. The tantivy index lives in the data dir and is created only when
   the user presses *Build index* in Settings (`fulltext_build_index`). Opt-in is
@@ -800,7 +804,8 @@ The frontend has a parallel mutation-testing setup via
 [Stryker](https://stryker-mutator.io). It is not part of `check:frontend`
 for the same speed reasons. Configuration lives in
 [stryker.config.json](stryker.config.json) and excludes DOM-driven
-entry points (`src/main.ts`, `src/note-editor.ts`), the large
+entry points (`src/main.ts`, the feature modules under `src/app/`,
+`src/note-editor.ts`), the large
 `cjk-radical-map.ts` data module, and the test-only
 `pdf-page-fixtures.ts`.
 
@@ -904,6 +909,53 @@ unit test that kills its mutants; when adding a new command handler,
 extend `exclude_re` (or move the testable part into `riida-core` as a
 function that takes a `&Connection` or explicit paths).
 
+## Frontend Layout
+
+The library shell is split into DOM-driven feature modules under
+[src/app/](src/app); pure, tested helpers stay flat in `src/` (`*-utils.ts`,
+`pdf-*.ts`, `search-*.ts`, ...).
+
+- [src/main.ts](src/main.ts) — entry point. On `DOMContentLoaded` it calls each
+  feature's `init*()` (synchronous listener wiring) and `register*()` (async
+  Tauri event subscriptions), then loads config, shelves, the library snapshot
+  and app metadata. The call order is the original registration order; keep
+  `window` listeners of the same event type in their relative order when
+  rearranging.
+- Foundation, imported by everything and importing no feature module:
+  `types.ts` (payload/state shapes), `state.ts` (`viewerState`,
+  `viewerSettings`, `appState`), `dom.ts`, `locale.ts`, `home-path.ts`.
+- Library: `library.ts` (snapshot refresh, `renderApp`), `library-view.ts`,
+  `book-list.ts`, `sidebar.ts`, `library-search.ts`, `fulltext.ts`.
+- Viewer: `viewer.ts` (`openBook`, `renderCurrentPage` dispatch, page jump,
+  resize), `pdf-viewer.ts`, `pdf-search.ts`, `epub-viewer.ts`,
+  `image-epub-viewer.ts`, `toc.ts`, `viewer-settings.ts`,
+  `reading-position.ts`, `notes.ts`, `navigation.ts`, `keyboard.ts`.
+- Dialogs and editors: `settings.ts`, `about.ts`, `welcome.ts`,
+  `custom-sources.ts`, `shelf-editor.ts`, `tag-editor.ts`,
+  `metadata-editor.ts`.
+
+State rules:
+
+- State one feature reassigns is a module-level `let` in that feature's
+  module; other modules read it through the live import binding.
+- ES module imports are read-only, so a value that more than one module
+  reassigns lives on `appState` in [src/app/state.ts](src/app/state.ts)
+  (`appState.lastSnapshot`, `appState.activeReadingPosition`, ...). Add a
+  field there rather than exporting a setter or importing a writer back.
+- Mutable objects shared across features (`viewerState`, `viewerSettings`)
+  also live in `state.ts`.
+
+Feature modules call each other's functions directly, so the feature modules
+form import cycles at the function level. That is safe only because no
+module does work at evaluation time beyond initializing its own constants:
+do not add top-level calls into another feature module, and keep listener
+wiring inside `init*()` functions that `main.ts` calls.
+
+`src/app/**` is excluded from coverage and Stryker, like `main.ts`; the
+jsdom boot test ([src/main.boot.test.ts](src/main.boot.test.ts)) is what
+exercises the wiring. Logic that can be tested without the DOM still belongs
+in a helper module next to its tests.
+
 ## Frontend Naming Conventions
 
 Interactive HTML elements that are referenced from both JavaScript and CSS
@@ -954,7 +1006,7 @@ Settings entry that reopens it) is translated so far; the rest of the shell
 keeps its fixed copy.
 
 - Static markup keeps its English text and carries `data-i18n="<key>"`;
-  `applyStaticTranslations()` in [src/main.ts](src/main.ts) swaps it at startup
+  `applyStaticTranslations()` in [src/app/locale.ts](src/app/locale.ts) swaps it at startup
   and sets `<html lang>`.
 - Dynamic text goes through `t(key, params)`; `{name}`-style placeholders are
   filled from `params`.
@@ -1010,8 +1062,8 @@ nix --extra-experimental-features 'nix-command flakes' develop --command npm run
 `check:frontend` runs `test:coverage` instead of plain `test`, so any
 regression below the thresholds breaks the verification pipeline.
 
-`src/main.ts`, `src/note-editor.ts`, the vendored assets, and
-`src/cjk-radical-map.ts` are excluded from coverage because they are
+`src/main.ts`, the feature modules under `src/app/`, `src/note-editor.ts`,
+the vendored assets, and `src/cjk-radical-map.ts` are excluded from coverage because they are
 DOM-driven entry points or large data files that the helper-module
 test strategy does not target.
 

@@ -581,5 +581,5 @@ Follow broadly accepted desktop and web accessibility practices, even when the v
 
 - The current source of truth for visual tokens is [src/styles.css](/Users/megurine/repo/rust/riida/src/styles.css).
 - The shell structure and major component regions live in [index.html](/Users/megurine/repo/rust/riida/index.html).
-- Theme persistence and early application behavior live in [src/main.ts](/Users/megurine/repo/rust/riida/src/main.ts).
+- Theme persistence and early application behavior live in [src/app-theme.ts](/Users/megurine/repo/rust/riida/src/app-theme.ts) and [src/app/settings.ts](/Users/megurine/repo/rust/riida/src/app/settings.ts).
 - When updating the visual language, update this file alongside token or component changes so AI and humans stay aligned.

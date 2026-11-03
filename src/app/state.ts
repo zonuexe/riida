@@ -4,8 +4,10 @@
 import { DEFAULT_VIEWER_SETTINGS } from "../viewer-settings-utils";
 import type {
   AppConfigPayload,
+  ImageEpubSession,
   LibrarySnapshot,
   PdfOutlineNode,
+  PdfRenderSession,
   ReadingPosition,
   ViewerSettingsState,
   ViewerState,
@@ -57,6 +59,14 @@ type AppState = {
   // DPFJ guide §ページ進行方向の遵守: page direction is governed by OPF spine, not writing-mode.
   // In rtl books, ArrowLeft advances the reading order (next page) while ArrowRight goes back.
   activeEpubIsRtl: boolean;
+  // The open document of each viewer engine. The engine module that renders it
+  // is the only writer; the reading-position, TOC, search and navigation
+  // modules below it read the handle here.
+  activePdfRenderSession: PdfRenderSession | null;
+  pdfRenderInProgress: boolean;
+  activeEpubBook: import("epubjs").Book | null;
+  activeEpubRendition: import("epubjs").Rendition | null;
+  activeImageEpub: ImageEpubSession | null;
 };
 
 export const appState: AppState = {
@@ -68,4 +78,9 @@ export const appState: AppState = {
   tocPanelOpen: false,
   activeEpubTotalPages: null,
   activeEpubIsRtl: false,
+  activePdfRenderSession: null,
+  pdfRenderInProgress: false,
+  activeEpubBook: null,
+  activeEpubRendition: null,
+  activeImageEpub: null,
 };

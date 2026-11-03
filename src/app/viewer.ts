@@ -7,20 +7,13 @@ import { parseRequestedPageNumber } from "../page-jump-utils";
 import { preserveNoteWindowBottomRightOffset } from "../note-window-utils";
 import { DEFAULT_VIEWER_SETTINGS } from "../viewer-settings-utils";
 import {
-  activeEpubBook,
-  activeEpubRendition,
   applyEpubViewerColors,
   captureEpubCfiForHistory,
   destroyEpubBook,
   renderEpubBook,
   resizeEpubRendition,
 } from "./epub-viewer";
-import {
-  activeImageEpub,
-  destroyImageEpub,
-  fitImageEpubSpread,
-  goToImagePage,
-} from "./image-epub-viewer";
+import { destroyImageEpub, fitImageEpubSpread, goToImagePage } from "./image-epub-viewer";
 import { renderApp } from "./library";
 import { openBookMetadataEditor } from "./metadata-editor";
 import { syncNavigationHistory } from "./navigation";
@@ -35,7 +28,6 @@ import {
 } from "./notes";
 import { closePdfSearch } from "./pdf-search";
 import {
-  activePdfRenderSession,
   findPdfRenderGroupIndexForPage,
   releaseActivePdfDocument,
   renderPdfJsBook,
@@ -96,7 +88,7 @@ export function currentViewerTotalPages() {
     return appState.activeEpubTotalPages;
   }
 
-  return activePdfRenderSession?.pdfDocument.numPages ?? null;
+  return appState.activePdfRenderSession?.pdfDocument.numPages ?? null;
 }
 
 export function syncViewerPageJumpUi() {
@@ -140,17 +132,21 @@ export function navigateViewerToPage(pageNumber: number, options: { pushHistory?
   const { pushHistory = true } = options;
 
   if (currentBook.sourceType === "epub") {
-    if (activeImageEpub) {
+    if (appState.activeImageEpub) {
       goToImagePage(pageNumber, { pushHistory });
       void flushReadingPositionSave();
       return;
     }
-    if (!activeEpubBook || !activeEpubRendition || !appState.activeEpubTotalPages) {
+    if (
+      !appState.activeEpubBook ||
+      !appState.activeEpubRendition ||
+      !appState.activeEpubTotalPages
+    ) {
       return;
     }
 
     const boundedPageNumber = clampEpubPageNumber(pageNumber, appState.activeEpubTotalPages);
-    const cfi = activeEpubBook.locations.cfiFromLocation(
+    const cfi = appState.activeEpubBook.locations.cfiFromLocation(
       epubLocationIndexFromPageNumber(boundedPageNumber, appState.activeEpubTotalPages),
     );
     if (!cfi) {
@@ -158,7 +154,7 @@ export function navigateViewerToPage(pageNumber: number, options: { pushHistory?
     }
 
     if (pushHistory) {
-      captureEpubCfiForHistory(activeEpubRendition);
+      captureEpubCfiForHistory(appState.activeEpubRendition);
       syncNavigationHistory("replace");
     }
 
@@ -176,12 +172,13 @@ export function navigateViewerToPage(pageNumber: number, options: { pushHistory?
     }
 
     syncViewerPageJumpUi();
-    void activeEpubRendition.display(cfi);
+    void appState.activeEpubRendition.display(cfi);
     void flushReadingPositionSave();
     return;
   }
 
-  const maxPageNumber = activePdfRenderSession?.pdfDocument.numPages ?? Number.POSITIVE_INFINITY;
+  const maxPageNumber =
+    appState.activePdfRenderSession?.pdfDocument.numPages ?? Number.POSITIVE_INFINITY;
   const boundedPageNumber = Math.min(Math.max(Math.trunc(pageNumber), 1), maxPageNumber);
 
   if (pushHistory) {
@@ -206,10 +203,16 @@ export function navigateViewerToPage(pageNumber: number, options: { pushHistory?
 
   syncViewerPageJumpUi();
 
-  if (appState.lastSnapshot?.pdfRenderer === "pdfjs" && activePdfRenderSession) {
-    activePdfRenderSession.restoreTargetPage = boundedPageNumber;
-    const groupIndex = findPdfRenderGroupIndexForPage(activePdfRenderSession, boundedPageNumber);
-    schedulePdfRenderWindowUpdate(activePdfRenderSession, groupIndex >= 0 ? groupIndex : undefined);
+  if (appState.lastSnapshot?.pdfRenderer === "pdfjs" && appState.activePdfRenderSession) {
+    appState.activePdfRenderSession.restoreTargetPage = boundedPageNumber;
+    const groupIndex = findPdfRenderGroupIndexForPage(
+      appState.activePdfRenderSession,
+      boundedPageNumber,
+    );
+    schedulePdfRenderWindowUpdate(
+      appState.activePdfRenderSession,
+      groupIndex >= 0 ? groupIndex : undefined,
+    );
     scheduleReadingPositionRestore();
   } else {
     const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
@@ -313,7 +316,7 @@ export function viewerNeedsRender(snapshot: LibrarySnapshot) {
     return (
       epubViewerEl.hidden ||
       epubViewerEl.dataset.filePath !== currentBook.filePath ||
-      activeEpubBook === null
+      appState.activeEpubBook === null
     );
   }
 

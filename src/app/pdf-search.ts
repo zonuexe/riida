@@ -9,11 +9,7 @@ import {
   pickInitialMatchIndex,
   searchNormalize,
 } from "../pdf-search-utils";
-import {
-  activePdfRenderSession,
-  findPdfRenderGroupIndexForPage,
-  schedulePdfRenderWindowUpdate,
-} from "./pdf-viewer";
+import { findPdfRenderGroupIndexForPage, schedulePdfRenderWindowUpdate } from "./pdf-viewer";
 import { appState } from "./state";
 
 export const pdfSearchState: {
@@ -36,7 +32,7 @@ async function ensurePdfSearchPageIndex(pageNumber: number): Promise<PdfSearchPa
   const cached = pdfSearchState.pageIndices.get(pageNumber);
   if (cached) return cached;
 
-  const session = activePdfRenderSession;
+  const session = appState.activePdfRenderSession;
   if (!session) return null;
 
   try {
@@ -61,7 +57,7 @@ async function ensurePdfSearchPageIndex(pageNumber: number): Promise<PdfSearchPa
 }
 
 async function executePdfSearch(query: string) {
-  const session = activePdfRenderSession;
+  const session = appState.activePdfRenderSession;
   const normalizedQuery = searchNormalize(query);
   console.log(
     `[pdf-search] executePdfSearch query="${query}" normalizedQuery="${normalizedQuery}" session=${session ? "ok" : "null"}`,
@@ -102,7 +98,7 @@ async function executePdfSearch(query: string) {
 }
 
 function findPageElement(pageNumber: number): HTMLElement | null {
-  const session = activePdfRenderSession;
+  const session = appState.activePdfRenderSession;
   if (!session) return null;
 
   for (const plan of session.plans) {
@@ -200,7 +196,7 @@ function scrollToPdfSearchMatch(index: number) {
   const match = pdfSearchState.matches[index];
   if (!match) return;
 
-  const session = activePdfRenderSession;
+  const session = appState.activePdfRenderSession;
   if (!session) return;
 
   const groupIndex = findPdfRenderGroupIndexForPage(session, match.pageNumber);

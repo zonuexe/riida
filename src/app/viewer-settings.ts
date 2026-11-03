@@ -15,12 +15,7 @@ import {
   type ViewerSettingsScope,
   type ViewerSourceType,
 } from "../viewer-settings-utils";
-import {
-  activeEpubRendition,
-  applyEpubFontSize,
-  applyEpubViewerColors,
-  resizeEpubRendition,
-} from "./epub-viewer";
+import { applyEpubFontSize, applyEpubViewerColors, resizeEpubRendition } from "./epub-viewer";
 import { rebuildImageEpub } from "./image-epub-viewer";
 import { syncImmediatePdfScrollMode } from "./pdf-viewer";
 import { currentAppTheme } from "./settings";
@@ -71,7 +66,7 @@ export function applyViewerVerticalGapMode(mode: ViewerSettings["verticalGapMode
   if (epubViewerEl) {
     epubViewerEl.dataset.verticalGap = mode;
     epubViewerEl.style.setProperty("--epub-vertical-gap", `${extraGap}px`);
-    if (activeEpubRendition) {
+    if (appState.activeEpubRendition) {
       requestAnimationFrame(() => resizeEpubRendition());
     }
   }

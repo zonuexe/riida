@@ -37,8 +37,6 @@ import {
 import { syncViewerPageJumpUi } from "./viewer";
 
 let epubRenderToken = 0;
-export let activeEpubBook: import("epubjs").Book | null = null;
-export let activeEpubRendition: import("epubjs").Rendition | null = null;
 let activeEpubLinkMessageHandler: ((event: MessageEvent) => void) | null = null;
 
 function applyEpubColorsToDocument(doc: Document, palette: ViewerColorPalette) {
@@ -163,8 +161,8 @@ export function applyEpubViewerColors(backgroundMode: ViewerBackgroundMode) {
     }
   }
 
-  const contentsList = activeEpubRendition
-    ? ((activeEpubRendition.getContents() as unknown as import("epubjs").Contents[]) ?? [])
+  const contentsList = appState.activeEpubRendition
+    ? ((appState.activeEpubRendition.getContents() as unknown as import("epubjs").Contents[]) ?? [])
     : [];
   for (const contents of contentsList) {
     if (contents.document) {
@@ -174,8 +172,8 @@ export function applyEpubViewerColors(backgroundMode: ViewerBackgroundMode) {
 }
 
 export function applyEpubFontSize(fontSize: number) {
-  if (!activeEpubRendition) return;
-  activeEpubRendition.themes.fontSize(`${fontSize}%`);
+  if (!appState.activeEpubRendition) return;
+  appState.activeEpubRendition.themes.fontSize(`${fontSize}%`);
 }
 
 const EPUB_PREVIEW_NOTICE_STORAGE_KEY = "riida.epub.previewNoticeShown";
@@ -254,10 +252,10 @@ export function applyEpubFontSizeShortcut(nextSize: number) {
 }
 
 export function resizeEpubRendition() {
-  if (!activeEpubRendition) return;
+  if (!appState.activeEpubRendition) return;
   const el = document.querySelector<HTMLElement>("#epub-viewer");
   if (!el) return;
-  activeEpubRendition.resize(el.clientWidth, el.clientHeight);
+  appState.activeEpubRendition.resize(el.clientWidth, el.clientHeight);
 }
 
 export function destroyEpubBook() {
@@ -266,12 +264,12 @@ export function destroyEpubBook() {
     activeEpubLinkMessageHandler = null;
   }
   appState.activeEpubTotalPages = null;
-  activeEpubRendition = null;
+  appState.activeEpubRendition = null;
   appState.activeEpubIsRtl = false;
   appState.tocPanelOpen = false;
-  if (activeEpubBook) {
-    activeEpubBook.destroy();
-    activeEpubBook = null;
+  if (appState.activeEpubBook) {
+    appState.activeEpubBook.destroy();
+    appState.activeEpubBook = null;
   }
   epubRenderToken += 1;
   const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
@@ -489,7 +487,7 @@ export async function renderEpubBook(
 
     const Epub = EpubModule.default;
     const book = Epub(sourceUrl);
-    activeEpubBook = book;
+    appState.activeEpubBook = book;
     await book.ready;
     if (currentToken !== epubRenderToken) return;
 
@@ -651,7 +649,7 @@ export async function renderEpubBook(
     await rendition.display(restoreCfi);
     if (currentToken !== epubRenderToken) return;
 
-    activeEpubRendition = rendition;
+    appState.activeEpubRendition = rendition;
     applyViewerVerticalGapMode(viewerSettings.verticalGapMode);
     applyEpubViewerColors(viewerSettings.backgroundMode);
     applyEpubFontSize(viewerSettings.epubFontSize);
@@ -734,12 +732,12 @@ export function initEpubFocusGuard() {
   // sequence (mousedown → mouseup → click) completes — otherwise stealing
   // focus during mousedown would suppress the click event in the iframe.
   window.addEventListener("blur", () => {
-    if (!activeEpubRendition) return;
+    if (!appState.activeEpubRendition) return;
     const epubViewerEl = document.querySelector("#epub-viewer");
     const active = document.activeElement;
     if (active instanceof HTMLIFrameElement && epubViewerEl?.contains(active)) {
       setTimeout(() => {
-        if (activeEpubRendition) window.focus();
+        if (appState.activeEpubRendition) window.focus();
       }, 0);
     }
   });

@@ -1,7 +1,5 @@
 // Table-of-contents panel for PDF outlines and EPUB navigation.
 
-import { activeEpubBook, activeEpubRendition } from "./epub-viewer";
-import { activePdfRenderSession } from "./pdf-viewer";
 import { appState } from "./state";
 import type { PdfOutlineNode } from "./types";
 import { currentViewerSettingsSourceType } from "./viewer-settings";
@@ -9,11 +7,12 @@ import { navigateViewerToPage } from "./viewer";
 
 export function buildEpubToc() {
   const listEl = document.querySelector<HTMLElement>("#epub-toc-list");
-  if (!listEl || !activeEpubBook) return;
+  if (!listEl || !appState.activeEpubBook) return;
   listEl.innerHTML = "";
 
   type NavItem = { label: string; href: string; subitems?: NavItem[] };
-  const toc: NavItem[] = (activeEpubBook.navigation as unknown as { toc: NavItem[] }).toc ?? [];
+  const toc: NavItem[] =
+    (appState.activeEpubBook.navigation as unknown as { toc: NavItem[] }).toc ?? [];
 
   function appendItems(items: NavItem[], depth: number) {
     for (const item of items) {
@@ -25,8 +24,8 @@ export function buildEpubToc() {
       btn.addEventListener("click", () => {
         appState.tocPanelOpen = false;
         syncTocUi();
-        if (activeEpubRendition) {
-          void activeEpubRendition.display(item.href);
+        if (appState.activeEpubRendition) {
+          void appState.activeEpubRendition.display(item.href);
         }
       });
       listEl!.appendChild(btn);
@@ -47,7 +46,7 @@ export function buildPdfToc() {
   const outline = appState.activePdfOutline;
   if (!outline || outline.length === 0) return;
 
-  const session = activePdfRenderSession;
+  const session = appState.activePdfRenderSession;
 
   function appendItems(items: PdfOutlineNode[], depth: number) {
     for (const item of items) {

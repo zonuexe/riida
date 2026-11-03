@@ -6,11 +6,9 @@ import {
   navigationStateSignature,
   parsePdfPageQueryParam,
 } from "../navigation-utils";
-import { activeEpubRendition } from "./epub-viewer";
-import { activeImageEpub, goToImagePage } from "./image-epub-viewer";
+import { goToImagePage } from "./image-epub-viewer";
 import { bulkSelectState, resetListSort, syncBulkActionBar } from "./library-view";
 import { renderApp } from "./library";
-import { activePdfRenderSession } from "./pdf-viewer";
 import { ensureExpandedPath, ensureExpandedTag } from "./sidebar";
 import { appState, viewerState } from "./state";
 import type { LibrarySnapshot, NavigationState } from "./types";
@@ -29,7 +27,10 @@ function currentNavigationState(): NavigationState {
     bookFilePath: currentBook?.filePath ?? null,
     epubCfi: appState.activeReadingPosition?.cfi ?? null,
     // pdfPage carries the page number for any paged viewer (PDF or image EPUB).
-    pdfPage: isPdf || activeImageEpub ? (appState.activeReadingPosition?.pageNumber ?? null) : null,
+    pdfPage:
+      isPdf || appState.activeImageEpub
+        ? (appState.activeReadingPosition?.pageNumber ?? null)
+        : null,
     activeDirectory: viewerState.activeDirectory,
     activeTag: viewerState.activeTag,
     activeExternalSource: viewerState.activeExternalSource,
@@ -159,9 +160,9 @@ async function applyNavigationState(state: NavigationState) {
       state.epubCfi &&
       nextBook.filePath === viewerState.currentBook?.filePath &&
       nextBook.sourceType === "epub" &&
-      activeEpubRendition
+      appState.activeEpubRendition
     ) {
-      await activeEpubRendition.display(state.epubCfi);
+      await appState.activeEpubRendition.display(state.epubCfi);
       return;
     }
 
@@ -171,7 +172,7 @@ async function applyNavigationState(state: NavigationState) {
       state.pdfPage &&
       nextBook.filePath === viewerState.currentBook?.filePath &&
       nextBook.sourceType === "pdf" &&
-      activePdfRenderSession
+      appState.activePdfRenderSession
     ) {
       navigateViewerToPage(state.pdfPage, { pushHistory: false });
       return;
@@ -182,7 +183,7 @@ async function applyNavigationState(state: NavigationState) {
       state.pdfPage &&
       nextBook.filePath === viewerState.currentBook?.filePath &&
       nextBook.sourceType === "epub" &&
-      activeImageEpub
+      appState.activeImageEpub
     ) {
       goToImagePage(state.pdfPage, { pushHistory: false });
       return;

@@ -7744,65 +7744,7 @@ function renderApp() {
   syncBookMetadataEditorUi();
 }
 
-window.addEventListener("DOMContentLoaded", async () => {
-  applyStaticTranslations();
-  await primeHomeDirCache();
-  const searchInput = document.querySelector<HTMLInputElement>("#library-search");
-  const viewerStageEl = currentViewerStage();
-  const navBackEl = document.querySelector<HTMLButtonElement>("#nav-back");
-  const navForwardEl = document.querySelector<HTMLButtonElement>("#nav-forward");
-  const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
-  const sidebarHomeOpenEl = document.querySelector<HTMLButtonElement>("#sidebar-home-open");
-  const appSettingsOpenEl = document.querySelector<HTMLButtonElement>("#app-settings-open");
-  const appAboutOpenEl = document.querySelector<HTMLButtonElement>("#app-about-open");
-  const appAboutCloseEl = document.querySelector<HTMLButtonElement>("#app-about-close");
-  const appAboutDoneEl = document.querySelector<HTMLButtonElement>("#app-about-done");
-  const appAboutBackdropEl = document.querySelector<HTMLElement>("#app-about-backdrop");
-  const appSettingsCloseEl = document.querySelector<HTMLButtonElement>("#app-settings-close");
-  const appSettingsCancelEl = document.querySelector<HTMLButtonElement>("#app-settings-cancel");
-  const appSettingsSaveEl = document.querySelector<HTMLButtonElement>("#app-settings-save");
-  const appSettingsBackdropEl = document.querySelector<HTMLElement>("#app-settings-backdrop");
-  const appSettingsAddRootEl = document.querySelector<HTMLButtonElement>(
-    "#config-library-roots-add",
-  );
-  const libraryAddKindleEl = document.querySelector<HTMLButtonElement>("#library-add-kindle");
-  const noteToggleEl = document.querySelector<HTMLButtonElement>("#note-toggle");
-  const noteCloseEl = document.querySelector<HTMLButtonElement>("#note-close");
-  const viewerTagsOpenEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
-  const viewerMetadataOpenEl = document.querySelector<HTMLButtonElement>("#viewer-metadata-open");
-  const viewerSettingsToggleEl =
-    document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
-  const viewerPageJumpFormEl = document.querySelector<HTMLFormElement>("#viewer-page-jump-form");
-  const viewerPageJumpInputEl = document.querySelector<HTMLInputElement>("#viewer-page-jump-input");
-  const viewerSettingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
-  const viewerSettingsScopeGlobalEl = document.querySelector<HTMLButtonElement>(
-    "#viewer-settings-scope-global",
-  );
-  const viewerSettingsScopeFileEl = document.querySelector<HTMLButtonElement>(
-    "#viewer-settings-scope-file",
-  );
-  const viewerPageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
-  const viewerBindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
-  const viewerZoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
-  const viewerAlignModeEl = document.querySelector<HTMLSelectElement>("#viewer-align-mode");
-  const viewerVerticalGapModeEl = document.querySelector<HTMLSelectElement>(
-    "#viewer-vertical-gap-mode",
-  );
-  const viewerScrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
-  const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
-  const viewerDeskewModeEl = document.querySelector<HTMLInputElement>("#viewer-deskew-mode");
-  const viewerTrimModeEl = document.querySelector<HTMLInputElement>("#viewer-trim-mode");
-  const viewerEpubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
-  const viewerEpubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
-    "#viewer-epub-font-size-output",
-  );
-  const viewerBackgroundInheritEl = document.querySelector<HTMLInputElement>(
-    "#viewer-background-inherit",
-  );
-  const tagDirectOnlyEl = document.querySelector<HTMLInputElement>("#tag-direct-only");
-  const noteDragHandleEl = document.querySelector<HTMLElement>("#note-drag-handle");
-  const noteResizeEls = document.querySelectorAll<HTMLElement>(".note-resize-handle");
-  const tagEditorBackdropEl = document.querySelector<HTMLElement>("#tag-editor-backdrop");
+function initBulkSelection() {
   const bulkSelectAllEl = document.querySelector<HTMLButtonElement>("#bulk-select-all");
   const bulkEditTagsEl = document.querySelector<HTMLButtonElement>("#bulk-edit-tags");
   const bulkEditMetadataEl = document.querySelector<HTMLButtonElement>("#bulk-edit-metadata");
@@ -7836,48 +7778,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     syncBulkActionBar();
     renderApp();
   });
+}
 
-  const tagEditorCloseEl = document.querySelector<HTMLButtonElement>("#tag-editor-close");
-  const tagEditorCancelEl = document.querySelector<HTMLButtonElement>("#tag-editor-cancel");
-  const tagEditorSaveEl = document.querySelector<HTMLButtonElement>("#tag-editor-save");
-  const tagEditorAddEl = document.querySelector<HTMLButtonElement>("#tag-editor-add");
-  const tagEditorInputEl = document.querySelector<HTMLInputElement>("#tag-editor-input");
-  const tagManagerBackdropEl = document.querySelector<HTMLElement>("#tag-manager-backdrop");
-  const tagManagerCloseEl = document.querySelector<HTMLButtonElement>("#tag-manager-close");
-  const tagManagerCancelEl = document.querySelector<HTMLButtonElement>("#tag-manager-cancel");
-  const tagManagerRenameEl = document.querySelector<HTMLButtonElement>("#tag-manager-rename");
-  const tagManagerDeleteEl = document.querySelector<HTMLButtonElement>("#tag-manager-delete");
-  const tagManagerInputEl = document.querySelector<HTMLInputElement>("#tag-manager-rename-input");
-  const bookMetadataBackdropEl = document.querySelector<HTMLElement>("#book-metadata-backdrop");
-  const bookMetadataCloseEl = document.querySelector<HTMLButtonElement>("#book-metadata-close");
-  const bookMetadataCancelEl = document.querySelector<HTMLButtonElement>("#book-metadata-cancel");
-  const bookMetadataSaveEl = document.querySelector<HTMLButtonElement>("#book-metadata-save");
-  const bookMetadataDeleteEl = document.querySelector<HTMLButtonElement>("#book-metadata-delete");
-  const bookMetadataImportEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-import");
-  const bookMetadataImportApplyEl = document.querySelector<HTMLButtonElement>(
-    "#book-metadata-import-apply",
-  );
-  const bookMetadataTitleEl = document.querySelector<HTMLInputElement>("#book-metadata-title");
-  const bookMetadataAuthorsEl =
-    document.querySelector<HTMLTextAreaElement>("#book-metadata-authors");
-  const bookMetadataDescriptionEl = document.querySelector<HTMLTextAreaElement>(
-    "#book-metadata-description",
-  );
-  const bookMetadataPublisherEl = document.querySelector<HTMLInputElement>(
-    "#book-metadata-publisher",
-  );
-  const bookMetadataReleaseDateEl = document.querySelector<HTMLInputElement>(
-    "#book-metadata-release-date",
-  );
-  const bookMetadataLanguageEl =
-    document.querySelector<HTMLInputElement>("#book-metadata-language");
-  const bookMetadataUrlEl = document.querySelector<HTMLInputElement>("#book-metadata-url");
-  const bookMetadataAsinEl = document.querySelector<HTMLInputElement>("#book-metadata-asin");
-  const bookMetadataCoverUrlEl = document.querySelector<HTMLInputElement>(
-    "#book-metadata-cover-url",
-  );
-
+function initLibrarySearch() {
+  const searchInput = document.querySelector<HTMLInputElement>("#library-search");
   const searchSuggestionsEl = document.querySelector<HTMLElement>("#library-search-suggestions");
+  const sidebarSearchSaveEl = document.querySelector<HTMLButtonElement>("#sidebar-search-save");
+  const sidebarSearchClearEl = document.querySelector<HTMLButtonElement>("#sidebar-search-clear");
 
   let activeSuggestionIndex = -1;
   let currentSuggestions: SearchSuggestion[] = [];
@@ -8035,6 +7942,39 @@ window.addEventListener("DOMContentLoaded", async () => {
   searchInput?.addEventListener("click", () => {
     renderSearchSuggestions();
   });
+  sidebarSearchSaveEl?.addEventListener("click", () => {
+    const presetQuery = viewerState.searchQuery.trim();
+    if (presetQuery.length === 0) return;
+    openShelfEditor(undefined, presetQuery);
+  });
+  sidebarSearchClearEl?.addEventListener("click", () => {
+    if (librarySearchTimer !== null) {
+      window.clearTimeout(librarySearchTimer);
+      librarySearchTimer = null;
+    }
+    if (searchInput) {
+      searchInput.value = "";
+      closeSearchSuggestions();
+      searchInput.focus();
+    }
+    void navigateToState(
+      {
+        bookFilePath: null,
+        activeDirectory: null,
+        activeTag: null,
+        activeExternalSource: null,
+        activeShelf: null,
+        activeTagDirectOnly: false,
+        searchQuery: "",
+      },
+      "replace",
+    );
+  });
+}
+
+function initNavigationControls() {
+  const navBackEl = document.querySelector<HTMLButtonElement>("#nav-back");
+  const navForwardEl = document.querySelector<HTMLButtonElement>("#nav-forward");
 
   navBackEl?.addEventListener("click", () => {
     navigateBack();
@@ -8043,6 +7983,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   navForwardEl?.addEventListener("click", () => {
     navigateForward();
   });
+}
+
+function initViewerPageJump() {
+  const viewerPageJumpFormEl = document.querySelector<HTMLFormElement>("#viewer-page-jump-form");
+  const viewerPageJumpInputEl = document.querySelector<HTMLInputElement>("#viewer-page-jump-input");
 
   viewerPageJumpInputEl?.addEventListener("input", () => {
     viewerPageJumpState.input = viewerPageJumpInputEl.value;
@@ -8081,7 +8026,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     navigateViewerToPage(pageNumber);
     viewerPageJumpInputEl?.blur();
   });
+}
 
+function initShellControls() {
+  const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
+  const sidebarHomeOpenEl = document.querySelector<HTMLButtonElement>("#sidebar-home-open");
   const mainPaneScrollEl = document.querySelector<HTMLElement>("#main-pane");
   if (mainPaneScrollEl) {
     let scrollIdleTimer: number | null = null;
@@ -8101,59 +8050,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     );
   }
 
-  viewerStageEl?.addEventListener(
-    "scroll",
-    () => {
-      if (lastSnapshot?.pdfRenderer !== "pdfjs" || !viewerState.currentBook) {
-        return;
-      }
-      if (pdfRenderInProgress) {
-        return;
-      }
-
-      scheduleReadingPositionSave();
-      if (activePdfRenderSession) {
-        schedulePdfRenderWindowUpdate(activePdfRenderSession);
-      }
-    },
-    { passive: true },
-  );
-
   sidebarToggleEl?.addEventListener("click", () => {
     viewerState.sidebarCollapsed = !viewerState.sidebarCollapsed;
     renderApp();
-  });
-
-  const sidebarSearchSaveEl = document.querySelector<HTMLButtonElement>("#sidebar-search-save");
-  sidebarSearchSaveEl?.addEventListener("click", () => {
-    const presetQuery = viewerState.searchQuery.trim();
-    if (presetQuery.length === 0) return;
-    openShelfEditor(undefined, presetQuery);
-  });
-
-  const sidebarSearchClearEl = document.querySelector<HTMLButtonElement>("#sidebar-search-clear");
-  sidebarSearchClearEl?.addEventListener("click", () => {
-    if (librarySearchTimer !== null) {
-      window.clearTimeout(librarySearchTimer);
-      librarySearchTimer = null;
-    }
-    if (searchInput) {
-      searchInput.value = "";
-      closeSearchSuggestions();
-      searchInput.focus();
-    }
-    void navigateToState(
-      {
-        bookFilePath: null,
-        activeDirectory: null,
-        activeTag: null,
-        activeExternalSource: null,
-        activeShelf: null,
-        activeTagDirectOnly: false,
-        searchQuery: "",
-      },
-      "replace",
-    );
   });
 
   sidebarHomeOpenEl?.addEventListener("click", () => {
@@ -8171,8 +8070,33 @@ window.addEventListener("DOMContentLoaded", async () => {
       "push",
     );
   });
+}
 
+function initPdfStageScroll() {
+  const viewerStageEl = currentViewerStage();
+
+  viewerStageEl?.addEventListener(
+    "scroll",
+    () => {
+      if (lastSnapshot?.pdfRenderer !== "pdfjs" || !viewerState.currentBook) {
+        return;
+      }
+      if (pdfRenderInProgress) {
+        return;
+      }
+
+      scheduleReadingPositionSave();
+      if (activePdfRenderSession) {
+        schedulePdfRenderWindowUpdate(activePdfRenderSession);
+      }
+    },
+    { passive: true },
+  );
+}
+
+function initLibraryViewControls() {
   const librarySortEl = document.querySelector<HTMLSelectElement>("#library-sort");
+  const libraryViewToggleEl = document.querySelector<HTMLButtonElement>("#library-view-toggle");
   if (librarySortEl) {
     librarySortEl.addEventListener("change", () => {
       currentListSort = (librarySortEl.value as ListSortKey) ?? "default";
@@ -8181,8 +8105,6 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
     });
   }
-
-  const libraryViewToggleEl = document.querySelector<HTMLButtonElement>("#library-view-toggle");
   if (libraryViewToggleEl) {
     const updateToggleState = () => {
       const mode = getLibraryViewMode();
@@ -8207,12 +8129,15 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
     });
   }
+}
+
+function initLibraryAddButtons() {
+  const libraryAddKindleEl = document.querySelector<HTMLButtonElement>("#library-add-kindle");
+  const libraryAddCustomEl2 = document.querySelector<HTMLButtonElement>("#library-add-custom");
 
   libraryAddKindleEl?.addEventListener("click", () => {
     openNewKindleBookEditor();
   });
-
-  const libraryAddCustomEl2 = document.querySelector<HTMLButtonElement>("#library-add-custom");
   libraryAddCustomEl2?.addEventListener("click", () => {
     const source =
       viewerState.activeExternalSource && viewerState.activeExternalSource !== "kindle"
@@ -8222,32 +8147,30 @@ window.addEventListener("DOMContentLoaded", async () => {
       openNewCustomBookEditor(source);
     }
   });
+}
 
+function initCustomSourceEditor() {
   const configAddCustomSourceEl = document.querySelector<HTMLButtonElement>(
     "#config-add-custom-source",
   );
-  configAddCustomSourceEl?.addEventListener("click", () => openCustomSourceEditor());
-
   const customSourceSaveEl = document.querySelector<HTMLButtonElement>("#custom-source-save");
-  customSourceSaveEl?.addEventListener("click", () => void saveCustomSource());
-
   const customSourceCancelEl = document.querySelector<HTMLButtonElement>("#custom-source-cancel");
-  customSourceCancelEl?.addEventListener("click", () => closeCustomSourceEditor());
   const customSourceCloseEl = document.querySelector<HTMLButtonElement>("#custom-source-close");
-  customSourceCloseEl?.addEventListener("click", () => closeCustomSourceEditor());
   const customSourceBackdropEl = document.querySelector<HTMLElement>("#custom-source-backdrop");
-  customSourceBackdropEl?.addEventListener("click", () => closeCustomSourceEditor());
   const customSourceDeleteEl = document.querySelector<HTMLButtonElement>("#custom-source-delete");
+  const customSourceNameEl = document.querySelector<HTMLInputElement>("#custom-source-name");
+  const iconPickerEl = document.querySelector<HTMLElement>("#custom-source-icon-picker");
+  configAddCustomSourceEl?.addEventListener("click", () => openCustomSourceEditor());
+  customSourceSaveEl?.addEventListener("click", () => void saveCustomSource());
+  customSourceCancelEl?.addEventListener("click", () => closeCustomSourceEditor());
+  customSourceCloseEl?.addEventListener("click", () => closeCustomSourceEditor());
+  customSourceBackdropEl?.addEventListener("click", () => closeCustomSourceEditor());
   customSourceDeleteEl?.addEventListener("click", () => {
     void deleteCustomSourceFromEditor();
   });
-
-  const customSourceNameEl = document.querySelector<HTMLInputElement>("#custom-source-name");
   customSourceNameEl?.addEventListener("input", () => {
     customSourceEditorState.name = customSourceNameEl.value;
   });
-
-  const iconPickerEl = document.querySelector<HTMLElement>("#custom-source-icon-picker");
   if (iconPickerEl && iconPickerEl.childElementCount === 0) {
     for (const icon of CUSTOM_SOURCE_ICONS) {
       const btn = document.createElement("button");
@@ -8263,6 +8186,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       iconPickerEl.appendChild(btn);
     }
   }
+}
+
+function initSidebarControls() {
+  const tagDirectOnlyEl = document.querySelector<HTMLInputElement>("#tag-direct-only");
 
   tagDirectOnlyEl?.addEventListener("change", () => {
     void navigateToState(
@@ -8278,17 +8205,26 @@ window.addEventListener("DOMContentLoaded", async () => {
       "replace",
     );
   });
+}
 
-  const closeAppSettings = () => {
-    viewerState.isAppSettingsOpen = false;
-    setAppSettingsStatus("");
-    syncAppSettingsUi();
-  };
-
-  const closeAbout = () => {
-    viewerState.isAboutOpen = false;
-    syncAboutUi();
-  };
+const closeAppSettings = () => {
+  viewerState.isAppSettingsOpen = false;
+  setAppSettingsStatus("");
+  syncAppSettingsUi();
+};
+const closeAbout = () => {
+  viewerState.isAboutOpen = false;
+  syncAboutUi();
+};
+function initAppSettings() {
+  const appSettingsOpenEl = document.querySelector<HTMLButtonElement>("#app-settings-open");
+  const appSettingsCloseEl = document.querySelector<HTMLButtonElement>("#app-settings-close");
+  const appSettingsCancelEl = document.querySelector<HTMLButtonElement>("#app-settings-cancel");
+  const appSettingsSaveEl = document.querySelector<HTMLButtonElement>("#app-settings-save");
+  const appSettingsBackdropEl = document.querySelector<HTMLElement>("#app-settings-backdrop");
+  const appSettingsAddRootEl = document.querySelector<HTMLButtonElement>(
+    "#config-library-roots-add",
+  );
 
   appSettingsOpenEl?.addEventListener("click", async () => {
     viewerState.isAppSettingsOpen = true;
@@ -8300,80 +8236,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     } catch (error) {
       setAppSettingsStatus(`Failed to load settings: ${String(error)}`, "error");
     }
-  });
-
-  const fulltextBuildEl = document.querySelector<HTMLButtonElement>("#fulltext-build");
-  const fulltextIncludeOnlineEl = document.querySelector<HTMLInputElement>(
-    "#fulltext-include-online-only",
-  );
-  fulltextIncludeOnlineEl?.addEventListener("change", () => {
-    localStorage.setItem(FULLTEXT_INCLUDE_ONLINE_KEY, fulltextIncludeOnlineEl.checked ? "1" : "0");
-  });
-  fulltextBuildEl?.addEventListener("click", async () => {
-    fulltextBuildEl.disabled = true;
-    try {
-      await invoke("fulltext_build_index", {
-        includeOnlineOnly: fulltextIncludeOnlineEl?.checked ?? false,
-      });
-    } catch (error) {
-      console.error("fulltext_build_index failed:", error);
-    }
-    await refreshFulltextStatus();
-  });
-
-  const fulltextClearEl = document.querySelector<HTMLButtonElement>("#fulltext-clear");
-  fulltextClearEl?.addEventListener("click", async () => {
-    const confirmed = await confirm(
-      "全文検索の索引を削除します。ディスクは解放されますが、再度検索するには作り直しが必要です。",
-      { title: "索引をクリア", kind: "warning" },
-    );
-    if (!confirmed) {
-      return;
-    }
-    fulltextClearEl.disabled = true;
-    try {
-      await invoke("fulltext_clear_index");
-      fulltextBuilt = false;
-      void renderFulltextResults(viewerState.searchQuery);
-    } catch (error) {
-      console.error("fulltext_clear_index failed:", error);
-    }
-    fulltextClearEl.disabled = false;
-    await refreshFulltextStatus();
-  });
-
-  document.querySelector("#config-library-welcome-open")?.addEventListener("click", () => {
-    closeAppSettings();
-    viewerState.isLibraryWelcomeRequested = true;
-    const welcomeStatusEl = document.querySelector<HTMLElement>("#library-welcome-status");
-    if (welcomeStatusEl) {
-      applyStatusMessage(welcomeStatusEl, "");
-    }
-    if (viewerState.currentBook || hasActiveLibraryFilter()) {
-      // Leaving the book or filter would otherwise cancel the request.
-      void navigateToState(
-        {
-          bookFilePath: null,
-          activeDirectory: null,
-          activeTag: null,
-          activeExternalSource: null,
-          activeShelf: null,
-          activeTagDirectOnly: false,
-          searchQuery: "",
-        },
-        "push",
-      ).then(() => {
-        viewerState.isLibraryWelcomeRequested = true;
-        renderApp();
-      });
-      return;
-    }
-    renderApp();
-  });
-
-  document.querySelector("#library-welcome-close")?.addEventListener("click", () => {
-    viewerState.isLibraryWelcomeRequested = false;
-    renderApp();
   });
 
   appSettingsCloseEl?.addEventListener("click", closeAppSettings);
@@ -8419,6 +8281,90 @@ window.addEventListener("DOMContentLoaded", async () => {
       setAppSettingsStatus(`Failed to choose a folder: ${String(error)}`, "error");
     }
   });
+}
+
+function initFulltextSettings() {
+  const fulltextBuildEl = document.querySelector<HTMLButtonElement>("#fulltext-build");
+  const fulltextIncludeOnlineEl = document.querySelector<HTMLInputElement>(
+    "#fulltext-include-online-only",
+  );
+  const fulltextClearEl = document.querySelector<HTMLButtonElement>("#fulltext-clear");
+  fulltextIncludeOnlineEl?.addEventListener("change", () => {
+    localStorage.setItem(FULLTEXT_INCLUDE_ONLINE_KEY, fulltextIncludeOnlineEl.checked ? "1" : "0");
+  });
+  fulltextBuildEl?.addEventListener("click", async () => {
+    fulltextBuildEl.disabled = true;
+    try {
+      await invoke("fulltext_build_index", {
+        includeOnlineOnly: fulltextIncludeOnlineEl?.checked ?? false,
+      });
+    } catch (error) {
+      console.error("fulltext_build_index failed:", error);
+    }
+    await refreshFulltextStatus();
+  });
+  fulltextClearEl?.addEventListener("click", async () => {
+    const confirmed = await confirm(
+      "全文検索の索引を削除します。ディスクは解放されますが、再度検索するには作り直しが必要です。",
+      { title: "索引をクリア", kind: "warning" },
+    );
+    if (!confirmed) {
+      return;
+    }
+    fulltextClearEl.disabled = true;
+    try {
+      await invoke("fulltext_clear_index");
+      fulltextBuilt = false;
+      void renderFulltextResults(viewerState.searchQuery);
+    } catch (error) {
+      console.error("fulltext_clear_index failed:", error);
+    }
+    fulltextClearEl.disabled = false;
+    await refreshFulltextStatus();
+  });
+}
+
+function initLibraryWelcome() {
+  document.querySelector("#config-library-welcome-open")?.addEventListener("click", () => {
+    closeAppSettings();
+    viewerState.isLibraryWelcomeRequested = true;
+    const welcomeStatusEl = document.querySelector<HTMLElement>("#library-welcome-status");
+    if (welcomeStatusEl) {
+      applyStatusMessage(welcomeStatusEl, "");
+    }
+    if (viewerState.currentBook || hasActiveLibraryFilter()) {
+      // Leaving the book or filter would otherwise cancel the request.
+      void navigateToState(
+        {
+          bookFilePath: null,
+          activeDirectory: null,
+          activeTag: null,
+          activeExternalSource: null,
+          activeShelf: null,
+          activeTagDirectOnly: false,
+          searchQuery: "",
+        },
+        "push",
+      ).then(() => {
+        viewerState.isLibraryWelcomeRequested = true;
+        renderApp();
+      });
+      return;
+    }
+    renderApp();
+  });
+
+  document.querySelector("#library-welcome-close")?.addEventListener("click", () => {
+    viewerState.isLibraryWelcomeRequested = false;
+    renderApp();
+  });
+}
+
+function initAbout() {
+  const appAboutOpenEl = document.querySelector<HTMLButtonElement>("#app-about-open");
+  const appAboutCloseEl = document.querySelector<HTMLButtonElement>("#app-about-close");
+  const appAboutDoneEl = document.querySelector<HTMLButtonElement>("#app-about-done");
+  const appAboutBackdropEl = document.querySelector<HTMLElement>("#app-about-backdrop");
 
   appAboutOpenEl?.addEventListener("click", () => {
     viewerState.isAboutOpen = true;
@@ -8436,6 +8382,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   appAboutCloseEl?.addEventListener("click", closeAbout);
   appAboutDoneEl?.addEventListener("click", closeAbout);
   appAboutBackdropEl?.addEventListener("click", closeAbout);
+}
+
+function initViewerEditorButtons() {
+  const viewerTagsOpenEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
+  const viewerMetadataOpenEl = document.querySelector<HTMLButtonElement>("#viewer-metadata-open");
 
   viewerTagsOpenEl?.addEventListener("click", () => {
     if (viewerState.currentBook) {
@@ -8448,7 +8399,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       void openBookMetadataEditor(viewerState.currentBook);
     }
   });
+}
 
+function initShelfEditor() {
   const shelfEditorCloseEl = document.querySelector<HTMLButtonElement>("#shelf-editor-close");
   const shelfEditorCancelEl = document.querySelector<HTMLButtonElement>("#shelf-editor-cancel");
   const shelfEditorBackdropEl = document.querySelector<HTMLElement>("#shelf-editor-backdrop");
@@ -8456,6 +8409,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   const shelfEditorDeleteEl = document.querySelector<HTMLButtonElement>("#shelf-editor-delete");
   const shelfEditorNameEl = document.querySelector<HTMLInputElement>("#shelf-editor-name");
   const shelfEditorQueryEl = document.querySelector<HTMLTextAreaElement>("#shelf-editor-query");
+  const shelfEditorModeEl = document.querySelector<HTMLElement>("#shelf-editor-mode");
+  const shelfEditorAddConditionEl = document.querySelector<HTMLButtonElement>(
+    "#shelf-editor-add-condition",
+  );
+  const shelfIconPickerEl = document.querySelector<HTMLElement>("#shelf-editor-icon-picker");
   shelfEditorCloseEl?.addEventListener("click", closeShelfEditor);
   shelfEditorCancelEl?.addEventListener("click", closeShelfEditor);
   shelfEditorBackdropEl?.addEventListener("click", closeShelfEditor);
@@ -8472,7 +8430,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     shelfEditorState.query = shelfEditorQueryEl.value;
     updateShelfPreview();
   });
-  const shelfEditorModeEl = document.querySelector<HTMLElement>("#shelf-editor-mode");
   shelfEditorModeEl?.addEventListener("click", (event) => {
     const target = (event.target as HTMLElement).closest<HTMLButtonElement>(
       ".shelf-editor-mode-btn",
@@ -8482,10 +8439,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (!mode) return;
     setShelfEditorMode(mode);
   });
-  const shelfEditorAddConditionEl = document.querySelector<HTMLButtonElement>(
-    "#shelf-editor-add-condition",
-  );
-  const shelfIconPickerEl = document.querySelector<HTMLElement>("#shelf-editor-icon-picker");
   if (shelfIconPickerEl && shelfIconPickerEl.childElementCount === 0) {
     for (const icon of SHELF_ICONS) {
       const btn = document.createElement("button");
@@ -8509,6 +8462,21 @@ window.addEventListener("DOMContentLoaded", async () => {
       inputs[inputs.length - 1]?.focus();
     }, 0);
   });
+}
+
+function initTagEditor() {
+  const tagEditorBackdropEl = document.querySelector<HTMLElement>("#tag-editor-backdrop");
+  const tagEditorCloseEl = document.querySelector<HTMLButtonElement>("#tag-editor-close");
+  const tagEditorCancelEl = document.querySelector<HTMLButtonElement>("#tag-editor-cancel");
+  const tagEditorSaveEl = document.querySelector<HTMLButtonElement>("#tag-editor-save");
+  const tagEditorAddEl = document.querySelector<HTMLButtonElement>("#tag-editor-add");
+  const tagEditorInputEl = document.querySelector<HTMLInputElement>("#tag-editor-input");
+  const tagManagerBackdropEl = document.querySelector<HTMLElement>("#tag-manager-backdrop");
+  const tagManagerCloseEl = document.querySelector<HTMLButtonElement>("#tag-manager-close");
+  const tagManagerCancelEl = document.querySelector<HTMLButtonElement>("#tag-manager-cancel");
+  const tagManagerRenameEl = document.querySelector<HTMLButtonElement>("#tag-manager-rename");
+  const tagManagerDeleteEl = document.querySelector<HTMLButtonElement>("#tag-manager-delete");
+  const tagManagerInputEl = document.querySelector<HTMLInputElement>("#tag-manager-rename-input");
 
   tagEditorCloseEl?.addEventListener("click", closeTagEditor);
   tagEditorCancelEl?.addEventListener("click", closeTagEditor);
@@ -8546,6 +8514,58 @@ window.addEventListener("DOMContentLoaded", async () => {
       void renameTagFromManager();
     }
   });
+  tagEditorInputEl?.addEventListener("input", () => {
+    tagEditorState.input = tagEditorInputEl.value;
+    syncTagEditorUi();
+  });
+  tagEditorInputEl?.addEventListener("compositionstart", () => {
+    isTagEditorComposing = true;
+  });
+  tagEditorInputEl?.addEventListener("compositionend", () => {
+    isTagEditorComposing = false;
+  });
+  tagEditorInputEl?.addEventListener("keydown", (event) => {
+    if (
+      event.key === "Enter" &&
+      !event.isComposing &&
+      !isTagEditorComposing &&
+      event.keyCode !== 229
+    ) {
+      event.preventDefault();
+      addTagFromEditorInput();
+    }
+  });
+}
+
+function initBookMetadataEditor() {
+  const bookMetadataBackdropEl = document.querySelector<HTMLElement>("#book-metadata-backdrop");
+  const bookMetadataCloseEl = document.querySelector<HTMLButtonElement>("#book-metadata-close");
+  const bookMetadataCancelEl = document.querySelector<HTMLButtonElement>("#book-metadata-cancel");
+  const bookMetadataSaveEl = document.querySelector<HTMLButtonElement>("#book-metadata-save");
+  const bookMetadataDeleteEl = document.querySelector<HTMLButtonElement>("#book-metadata-delete");
+  const bookMetadataImportEl = document.querySelector<HTMLTextAreaElement>("#book-metadata-import");
+  const bookMetadataImportApplyEl = document.querySelector<HTMLButtonElement>(
+    "#book-metadata-import-apply",
+  );
+  const bookMetadataTitleEl = document.querySelector<HTMLInputElement>("#book-metadata-title");
+  const bookMetadataAuthorsEl =
+    document.querySelector<HTMLTextAreaElement>("#book-metadata-authors");
+  const bookMetadataDescriptionEl = document.querySelector<HTMLTextAreaElement>(
+    "#book-metadata-description",
+  );
+  const bookMetadataPublisherEl = document.querySelector<HTMLInputElement>(
+    "#book-metadata-publisher",
+  );
+  const bookMetadataReleaseDateEl = document.querySelector<HTMLInputElement>(
+    "#book-metadata-release-date",
+  );
+  const bookMetadataLanguageEl =
+    document.querySelector<HTMLInputElement>("#book-metadata-language");
+  const bookMetadataUrlEl = document.querySelector<HTMLInputElement>("#book-metadata-url");
+  const bookMetadataAsinEl = document.querySelector<HTMLInputElement>("#book-metadata-asin");
+  const bookMetadataCoverUrlEl = document.querySelector<HTMLInputElement>(
+    "#book-metadata-cover-url",
+  );
   bookMetadataCloseEl?.addEventListener("click", closeBookMetadataEditor);
   bookMetadataCancelEl?.addEventListener("click", closeBookMetadataEditor);
   bookMetadataBackdropEl?.addEventListener("click", closeBookMetadataEditor);
@@ -8600,27 +8620,36 @@ window.addEventListener("DOMContentLoaded", async () => {
   bookMetadataCoverUrlEl?.addEventListener("input", () => {
     bookMetadataEditorState.coverUrl = bookMetadataCoverUrlEl.value;
   });
-  tagEditorInputEl?.addEventListener("input", () => {
-    tagEditorState.input = tagEditorInputEl.value;
-    syncTagEditorUi();
-  });
-  tagEditorInputEl?.addEventListener("compositionstart", () => {
-    isTagEditorComposing = true;
-  });
-  tagEditorInputEl?.addEventListener("compositionend", () => {
-    isTagEditorComposing = false;
-  });
-  tagEditorInputEl?.addEventListener("keydown", (event) => {
-    if (
-      event.key === "Enter" &&
-      !event.isComposing &&
-      !isTagEditorComposing &&
-      event.keyCode !== 229
-    ) {
-      event.preventDefault();
-      addTagFromEditorInput();
-    }
-  });
+}
+
+function initViewerSettingsPanel() {
+  const viewerSettingsToggleEl =
+    document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
+  const viewerSettingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
+  const viewerSettingsScopeGlobalEl = document.querySelector<HTMLButtonElement>(
+    "#viewer-settings-scope-global",
+  );
+  const viewerSettingsScopeFileEl = document.querySelector<HTMLButtonElement>(
+    "#viewer-settings-scope-file",
+  );
+  const viewerPageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
+  const viewerBindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
+  const viewerZoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
+  const viewerAlignModeEl = document.querySelector<HTMLSelectElement>("#viewer-align-mode");
+  const viewerVerticalGapModeEl = document.querySelector<HTMLSelectElement>(
+    "#viewer-vertical-gap-mode",
+  );
+  const viewerScrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
+  const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
+  const viewerDeskewModeEl = document.querySelector<HTMLInputElement>("#viewer-deskew-mode");
+  const viewerTrimModeEl = document.querySelector<HTMLInputElement>("#viewer-trim-mode");
+  const viewerEpubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
+  const viewerEpubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
+    "#viewer-epub-font-size-output",
+  );
+  const viewerBackgroundInheritEl = document.querySelector<HTMLInputElement>(
+    "#viewer-background-inherit",
+  );
 
   viewerSettingsToggleEl?.addEventListener("click", () => {
     const isOpening = !viewerSettings.isSettingsOpen;
@@ -8629,11 +8658,6 @@ window.addEventListener("DOMContentLoaded", async () => {
       viewerSettings.scope = "file";
     }
     syncViewerSettingsUi();
-  });
-
-  document.querySelector<HTMLButtonElement>("#epub-toc-toggle")?.addEventListener("click", () => {
-    tocPanelOpen = !tocPanelOpen;
-    syncTocUi();
   });
 
   const rerenderPdfJs = () => {
@@ -8831,6 +8855,33 @@ window.addEventListener("DOMContentLoaded", async () => {
     );
   });
 
+  window.addEventListener("click", (event) => {
+    const target = event.target as Node | null;
+    if (
+      viewerSettings.isSettingsOpen &&
+      target &&
+      !viewerSettingsPanelEl?.contains(target) &&
+      !viewerSettingsToggleEl?.contains(target)
+    ) {
+      viewerSettings.isSettingsOpen = false;
+      syncViewerSettingsUi();
+    }
+  });
+}
+
+function initTocToggle() {
+  document.querySelector<HTMLButtonElement>("#epub-toc-toggle")?.addEventListener("click", () => {
+    tocPanelOpen = !tocPanelOpen;
+    syncTocUi();
+  });
+}
+
+function initNotes() {
+  const noteToggleEl = document.querySelector<HTMLButtonElement>("#note-toggle");
+  const noteCloseEl = document.querySelector<HTMLButtonElement>("#note-close");
+  const noteDragHandleEl = document.querySelector<HTMLElement>("#note-drag-handle");
+  const noteResizeEls = document.querySelectorAll<HTMLElement>(".note-resize-handle");
+
   noteToggleEl?.addEventListener("click", () => {
     noteState.isOpen = !noteState.isOpen;
     renderApp();
@@ -8844,6 +8895,31 @@ window.addEventListener("DOMContentLoaded", async () => {
     renderApp();
   });
 
+  noteDragHandleEl?.addEventListener("pointerdown", (event) => {
+    beginNoteDrag(event);
+  });
+
+  for (const resizeEl of noteResizeEls) {
+    resizeEl.addEventListener("pointerdown", (event) => {
+      const edge = resizeEl.dataset.resize;
+      if (!edge) {
+        return;
+      }
+
+      beginNoteResize(event, edge);
+    });
+  }
+
+  window.addEventListener("pointermove", (event) => {
+    updateNoteInteraction(event);
+  });
+
+  window.addEventListener("pointerup", () => {
+    endNoteInteraction();
+  });
+}
+
+function initPdfSearch() {
   const pdfSearchInputEl = document.querySelector<HTMLInputElement>("#pdf-search-input");
   const pdfSearchPrevEl = document.querySelector<HTMLButtonElement>("#pdf-search-prev");
   const pdfSearchNextEl = document.querySelector<HTMLButtonElement>("#pdf-search-next");
@@ -8874,43 +8950,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   pdfSearchPrevEl?.addEventListener("click", () => navigatePdfSearchBackward());
   pdfSearchNextEl?.addEventListener("click", () => navigatePdfSearchForward());
   pdfSearchCloseEl?.addEventListener("click", () => closePdfSearch());
+}
 
-  noteDragHandleEl?.addEventListener("pointerdown", (event) => {
-    beginNoteDrag(event);
-  });
-
-  for (const resizeEl of noteResizeEls) {
-    resizeEl.addEventListener("pointerdown", (event) => {
-      const edge = resizeEl.dataset.resize;
-      if (!edge) {
-        return;
-      }
-
-      beginNoteResize(event, edge);
-    });
-  }
-
-  window.addEventListener("pointermove", (event) => {
-    updateNoteInteraction(event);
-  });
-
-  window.addEventListener("pointerup", () => {
-    endNoteInteraction();
-  });
-
-  window.addEventListener("click", (event) => {
-    const target = event.target as Node | null;
-    if (
-      viewerSettings.isSettingsOpen &&
-      target &&
-      !viewerSettingsPanelEl?.contains(target) &&
-      !viewerSettingsToggleEl?.contains(target)
-    ) {
-      viewerSettings.isSettingsOpen = false;
-      syncViewerSettingsUi();
-    }
-  });
-
+function initGlobalShortcuts() {
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && tagEditorState.isOpen) {
       closeTagEditor();
@@ -9077,7 +9119,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       }
     }
   });
+}
 
+function initEpubFocusGuard() {
   // When the EPUB viewer is active, prevent keyboard focus from being
   // captured by the epub.js iframe.  If the window loses focus to one of
   // those iframes, return focus to the window so that the global keydown
@@ -9095,7 +9139,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       }, 0);
     }
   });
+}
 
+function initViewerResize() {
   window.addEventListener("resize", () => {
     if (shouldAnchorNoteWindowToBottomRight()) {
       const nextState = preserveNoteWindowBottomRightOffset(noteState, lastViewportSize, {
@@ -9136,7 +9182,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       fitImageEpubSpread();
     }
   });
+}
 
+function initFlushOnUnload() {
   window.addEventListener("beforeunload", () => {
     activeReadingPosition = captureReadingPositionFromViewer();
     void flushReadingPositionSave();
@@ -9144,7 +9192,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       window.clearTimeout(noteSaveTimer);
     }
   });
+}
 
+async function registerLibraryEvents() {
   await listen<LibrarySnapshot>("library-updated", (event) => {
     lastSnapshot = event.payload;
     viewerState.libraryErrorMessage = null;
@@ -9161,6 +9211,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     renderApp();
   });
 
+  await listen<string>("library-watch-error", (event) => {
+    console.error("library-watch-error", event.payload);
+  });
+}
+
+async function registerLibraryDrops() {
   await getCurrentWebview().onDragDropEvent((event) => {
     handleLibraryDragDrop(event.payload);
   });
@@ -9181,15 +9237,15 @@ window.addEventListener("DOMContentLoaded", async () => {
       reportLibraryAddStatus(t("status.chooseFailed", { error: String(error) }), "error");
     }
   });
+}
 
-  await listen<string>("library-watch-error", (event) => {
-    console.error("library-watch-error", event.payload);
-  });
-
+async function registerThumbnailEvents() {
   await listen<{ filePath: string; thumbnailPath: string }>("thumbnail-ready", (event) => {
     applyThumbnail(event.payload.filePath, event.payload.thumbnailPath);
   });
+}
 
+async function registerFulltextEvents() {
   await listen<{ done: number; total: number; filePath: string }>("fulltext-progress", (event) => {
     const statusEl = document.querySelector<HTMLElement>("#fulltext-status");
     if (statusEl) {
@@ -9213,7 +9269,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Learn whether a prior session already built the index (so search calls and
   // the results group are enabled) without triggering any indexing.
   void refreshFulltextStatus();
+}
 
+function initHistoryPopstate() {
   window.addEventListener("popstate", (event) => {
     const state = event.state as NavigationState | null;
     const fallbackParams = new URLSearchParams(window.location.search);
@@ -9245,18 +9303,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       suppressHistoryUpdates = false;
     });
   });
+}
 
-  try {
-    await loadAppConfig();
-  } catch (error) {
-    applyAppTheme("default");
-    console.error("failed to load app config", error);
-  } finally {
-    finishStartupPhase();
-  }
-
-  await refreshShelves();
-
+function loadInitialLibraryState() {
   invoke<LibrarySnapshot>("library_snapshot")
     .then((snapshot) => {
       lastSnapshot = snapshot;
@@ -9290,7 +9339,9 @@ window.addEventListener("DOMContentLoaded", async () => {
       renderApp();
       console.error("failed to load library snapshot", error);
     });
+}
 
+async function loadAppMetadata() {
   try {
     cachedAppName = await getName();
     cachedAppVersion = await getVersion();
@@ -9298,4 +9349,52 @@ window.addEventListener("DOMContentLoaded", async () => {
     console.error("failed to load app metadata", error);
   }
   syncAboutUi();
+}
+
+window.addEventListener("DOMContentLoaded", async () => {
+  applyStaticTranslations();
+  await primeHomeDirCache();
+  initBulkSelection();
+  initLibrarySearch();
+  initNavigationControls();
+  initViewerPageJump();
+  initShellControls();
+  initPdfStageScroll();
+  initLibraryViewControls();
+  initLibraryAddButtons();
+  initCustomSourceEditor();
+  initSidebarControls();
+  initAppSettings();
+  initFulltextSettings();
+  initLibraryWelcome();
+  initAbout();
+  initViewerEditorButtons();
+  initShelfEditor();
+  initTagEditor();
+  initBookMetadataEditor();
+  initViewerSettingsPanel();
+  initTocToggle();
+  initNotes();
+  initPdfSearch();
+  initGlobalShortcuts();
+  initEpubFocusGuard();
+  initViewerResize();
+  initFlushOnUnload();
+  await registerLibraryEvents();
+  await registerLibraryDrops();
+  await registerThumbnailEvents();
+  await registerFulltextEvents();
+  initHistoryPopstate();
+  try {
+    await loadAppConfig();
+  } catch (error) {
+    applyAppTheme("default");
+    console.error("failed to load app config", error);
+  } finally {
+    finishStartupPhase();
+  }
+
+  await refreshShelves();
+  loadInitialLibraryState();
+  await loadAppMetadata();
 });

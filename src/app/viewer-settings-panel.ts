@@ -18,7 +18,6 @@ import {
   viewerSettings,
   viewerState,
 } from "./state";
-import { renderCurrentPage } from "./viewer";
 import {
   applyEpubFontSize,
   applyEpubViewerColors,
@@ -30,6 +29,7 @@ import {
   syncImmediatePdfScrollMode,
   syncViewerSettingsUi,
 } from "./viewer-settings";
+import { renderCurrentPage } from "./viewer";
 function syncImmediatePdfBackgroundPreview() {
   const sourceType = currentViewerSettingsSourceType();
   if (sourceType === "pdf" && appState.lastSnapshot?.pdfRenderer === "pdfjs") {

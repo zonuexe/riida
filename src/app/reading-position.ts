@@ -9,11 +9,11 @@ import {
   selectAnchorPageIndex,
   selectHeadSidePageInSpread,
 } from "../reading-position-utils";
+import { currentViewerStage } from "./dom";
 import { noteSaveTimer } from "./notes";
+import { syncViewerPageJumpUi } from "./page-jump";
 import { appState, viewerState } from "./state";
 import type { ReadingPosition } from "./types";
-import { syncViewerPageJumpUi } from "./viewer";
-import { currentViewerStage } from "./dom";
 
 let readingPositionSaveTimer: number | null = null;
 

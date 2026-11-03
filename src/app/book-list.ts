@@ -11,8 +11,8 @@ import {
   formatFileSize,
   formatReleaseYear,
 } from "../library-utils";
-import { cachedHomeDir } from "./home-path";
 import { bulkSelectState, syncBulkActionBar } from "./bulk-selection";
+import { cachedHomeDir } from "./home-path";
 import { describeCurrentEmptyLibraryState } from "./library-data";
 import { openBookMetadataEditor } from "./metadata-editor";
 import { navigateToState } from "./navigation";

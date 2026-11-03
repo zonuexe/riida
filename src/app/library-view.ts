@@ -14,11 +14,12 @@ import { renderFulltextResults } from "./fulltext";
 import { destroyImageEpub } from "./image-epub-viewer";
 import { hasActiveLibraryFilter, visibleBooks } from "./library-data";
 import { loadNoteForCurrentBook, noteState, syncNoteUi } from "./notes";
+import { syncViewerPageJumpUi } from "./page-jump";
 import { renderApp } from "./shell";
 import { appState, viewerState } from "./state";
 import type { LibrarySnapshot, ListSortKey } from "./types";
 import { syncViewerSettingsUi } from "./viewer-settings";
-import { renderCurrentPage, syncViewerPageJumpUi, viewerNeedsRender } from "./viewer";
+import { renderCurrentPage, viewerNeedsRender } from "./viewer";
 
 export function renderMain(snapshot: LibrarySnapshot) {
   const appShellEl = document.querySelector<HTMLElement>(".two-pane");

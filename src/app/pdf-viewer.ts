@@ -13,6 +13,7 @@ import { cropRectForPage, type TrimBoxes, trimmedPageSize } from "../pdf-trim";
 import { buildPageGroups, getVisualPageOrder } from "../viewer-layout-utils";
 import { buildPdfRenderWindowPlan } from "../pdf-render-window-utils";
 import { planPagedKeyAction } from "../pdf-paged-nav-utils";
+import { currentViewerStage } from "./dom";
 import { navigateBack } from "./navigation";
 import { applyPdfSearchHighlights, closePdfSearch, pdfSearchState } from "./pdf-search-highlights";
 import {
@@ -30,7 +31,6 @@ import {
   applyViewerVerticalGapMode,
   syncImmediatePdfScrollMode,
 } from "./viewer-settings";
-import { currentViewerStage } from "./dom";
 
 // Scan analysis for deskew and margin trimming (viewer settings "deskewMode"
 // and "trimMode"). One scratch canvas serves every page; `willReadFrequently`

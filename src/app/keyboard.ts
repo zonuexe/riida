@@ -25,8 +25,9 @@ import {
 } from "./epub-viewer";
 import { goToImageSpread } from "./image-epub-viewer";
 import { navigateBack, navigateForward } from "./navigation";
-import { isPdfSearchShortcut, openPdfSearch } from "./pdf-search";
+import { currentViewerTotalPages } from "./page-jump";
 import { closePdfSearch, pdfSearchState } from "./pdf-search-highlights";
+import { isPdfSearchShortcut, openPdfSearch } from "./pdf-search";
 import {
   advancePdfPagedSpread,
   handlePdfPagedKey,
@@ -36,7 +37,7 @@ import {
 import { closeAppSettings } from "./settings";
 import { appState, viewerState } from "./state";
 import { closeTagEditor, tagEditorState } from "./tag-editor";
-import { currentViewerTotalPages, navigateViewerToPage } from "./viewer";
+import { navigateViewerToPage } from "./viewer";
 
 export function initGlobalShortcuts() {
   window.addEventListener("keydown", (event) => {

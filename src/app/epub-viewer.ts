@@ -10,6 +10,7 @@ import { resolveEpubLinkAction } from "../epub-link-routing";
 import { clampEpubFontSize } from "../viewer-shortcuts";
 import { viewerColorPaletteForMode, type ViewerSettingsPayload } from "../viewer-settings-utils";
 import { syncNavigationHistory } from "./navigation";
+import { syncViewerPageJumpUi } from "./page-jump";
 import { releaseActivePdfDocument } from "./pdf-viewer";
 import { scheduleEpubPositionSave } from "./reading-position";
 import {
@@ -31,7 +32,6 @@ import {
   setViewerDraft,
   syncViewerSettingsUi,
 } from "./viewer-settings";
-import { syncViewerPageJumpUi } from "./viewer";
 
 let epubRenderToken = 0;
 let activeEpubLinkMessageHandler: ((event: MessageEvent) => void) | null = null;

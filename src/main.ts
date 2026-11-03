@@ -12,10 +12,10 @@ import { initEpubFocusGuard } from "./app/epub-viewer";
 import { initFulltextSettings, registerFulltextEvents } from "./app/fulltext";
 import { primeHomeDirCache } from "./app/home-path";
 import { initGlobalShortcuts } from "./app/keyboard";
+import { refreshShelves } from "./app/library-data";
 import { initLibrarySearch } from "./app/library-search";
 import { initLibraryViewControls } from "./app/library-view";
 import { registerLibraryEvents, renderApp } from "./app/library";
-import { refreshShelves } from "./app/library-data";
 import { applyStaticTranslations } from "./app/locale";
 import { initBookMetadataEditor, initLibraryAddButtons } from "./app/metadata-editor";
 import {
@@ -24,6 +24,7 @@ import {
   loadInitialLibraryState,
 } from "./app/navigation";
 import { initNotes } from "./app/notes";
+import { initViewerPageJump } from "./app/page-jump";
 import { initPdfSearch } from "./app/pdf-search";
 import { initPdfStageScroll } from "./app/pdf-viewer";
 import { initFlushOnUnload } from "./app/reading-position";
@@ -36,7 +37,6 @@ import { initTocToggle } from "./app/toc";
 import { initViewerSettingsPanel } from "./app/viewer-settings-panel";
 import {
   initViewerEditorButtons,
-  initViewerPageJump,
   initViewerResize,
   navigateViewerToPage,
   renderCurrentPage,

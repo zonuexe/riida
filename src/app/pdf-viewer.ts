@@ -20,6 +20,7 @@ import {
   scheduleReadingPositionRestore,
   scheduleReadingPositionSave,
 } from "./reading-position";
+import { navigateViewerToPage, renderCurrentPage } from "./shell";
 import { appState, viewerSettings, viewerState } from "./state";
 import { buildPdfToc, syncTocUi } from "./toc";
 import type { PdfRenderPlan, PdfRenderSession } from "./types";
@@ -29,7 +30,6 @@ import {
   applyViewerVerticalGapMode,
   syncImmediatePdfScrollMode,
 } from "./viewer-settings";
-import { navigateViewerToPage, renderCurrentPage } from "./viewer";
 import { currentViewerStage } from "./dom";
 
 // Scan analysis for deskew and margin trimming (viewer settings "deskewMode"

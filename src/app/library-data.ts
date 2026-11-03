@@ -3,7 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { describeEmptyLibraryState, filterVisibleBooks } from "../library-utils";
-import { renderApp } from "./library";
+import { renderApp } from "./shell";
 import { appState, viewerState } from "./state";
 import type { BookSummary, LibrarySnapshot, Shelf } from "./types";
 export function updateBookTagsInState(filePath: string, tags: string[]) {

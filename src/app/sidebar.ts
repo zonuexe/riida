@@ -10,10 +10,10 @@ import {
   type SidebarSectionKey,
 } from "../sidebar-section-order.ts";
 import { openCustomSourceEditor } from "./custom-sources";
-import { renderApp } from "./library";
 import { refreshShelves } from "./library-data";
 import { navigateToState } from "./navigation";
 import { openShelfEditor } from "./shelf-editor";
+import { renderApp } from "./shell";
 import { appState, viewerState } from "./state";
 import { openTagManager } from "./tag-editor";
 import type { LibrarySnapshot } from "./types";

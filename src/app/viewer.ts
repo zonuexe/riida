@@ -14,7 +14,6 @@ import {
   loadImageEpubLayout,
   renderImageEpub,
 } from "./image-epub-viewer";
-import { renderApp } from "./library";
 import { openBookMetadataEditor } from "./metadata-editor";
 import { syncNavigationHistory } from "./navigation";
 import {
@@ -42,6 +41,7 @@ import {
   scheduleReadingPositionRestore,
 } from "./reading-position";
 import { currentViewerStage } from "./dom";
+import { renderApp } from "./shell";
 import { appState, viewerSettings, viewerState } from "./state";
 import { openTagEditor } from "./tag-editor";
 import type { BookSummary, LibrarySnapshot } from "./types";

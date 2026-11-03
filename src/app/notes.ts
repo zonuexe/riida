@@ -6,7 +6,7 @@ import {
   clampNoteWindowPosition,
   ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
 } from "../note-window-utils";
-import { renderApp } from "./library";
+import { renderApp } from "./shell";
 import { viewerSettings, viewerState } from "./state";
 import type { NoteDocument } from "./types";
 

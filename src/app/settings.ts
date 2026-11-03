@@ -9,7 +9,7 @@ import { deleteCustomSource, openCustomSourceEditor } from "./custom-sources";
 import { applyStatusMessage } from "./dom";
 import { refreshFulltextStatus } from "./fulltext";
 import { collapseHomePath } from "./home-path";
-import { renderApp } from "./library";
+import { renderApp } from "./shell";
 import { appState, viewerState } from "./state";
 import type { AppConfigPayload, LibrarySnapshot } from "./types";
 

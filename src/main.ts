@@ -14,7 +14,7 @@ import { primeHomeDirCache } from "./app/home-path";
 import { initGlobalShortcuts } from "./app/keyboard";
 import { initLibrarySearch } from "./app/library-search";
 import { initLibraryViewControls } from "./app/library-view";
-import { registerLibraryEvents } from "./app/library";
+import { registerLibraryEvents, renderApp } from "./app/library";
 import { refreshShelves } from "./app/library-data";
 import { applyStaticTranslations } from "./app/locale";
 import { initBookMetadataEditor, initLibraryAddButtons } from "./app/metadata-editor";
@@ -29,12 +29,21 @@ import { initPdfStageScroll } from "./app/pdf-viewer";
 import { initFlushOnUnload } from "./app/reading-position";
 import { initAppSettings, loadAppConfig } from "./app/settings";
 import { initShelfEditor } from "./app/shelf-editor";
+import { installAppShell } from "./app/shell";
 import { initShellControls, initSidebarControls } from "./app/sidebar";
 import { initTagEditor } from "./app/tag-editor";
 import { initTocToggle } from "./app/toc";
 import { initViewerSettingsPanel } from "./app/viewer-settings-panel";
-import { initViewerEditorButtons, initViewerPageJump, initViewerResize } from "./app/viewer";
+import {
+  initViewerEditorButtons,
+  initViewerPageJump,
+  initViewerResize,
+  navigateViewerToPage,
+  renderCurrentPage,
+} from "./app/viewer";
 import { initLibraryWelcome, registerLibraryDrops } from "./app/welcome";
+
+installAppShell({ renderApp, renderCurrentPage, navigateViewerToPage });
 
 window.addEventListener("DOMContentLoaded", async () => {
   applyStaticTranslations();

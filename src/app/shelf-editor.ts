@@ -18,9 +18,9 @@ import {
   type ShelfMode,
 } from "../shelf-query.ts";
 import { syncControlValue } from "./dom";
-import { renderApp } from "./library";
 import { refreshShelves } from "./library-data";
 import { navigateToState } from "./navigation";
+import { renderApp } from "./shell";
 import { appState, viewerState } from "./state";
 import type { Shelf } from "./types";
 

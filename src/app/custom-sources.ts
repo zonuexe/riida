@@ -3,8 +3,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { confirm, message } from "@tauri-apps/plugin-dialog";
 import { syncControlValue } from "./dom";
-import { renderApp } from "./library";
 import { syncAppSettingsUi } from "./settings";
+import { renderApp } from "./shell";
 import { appState, viewerState } from "./state";
 import type { CustomSource, LibrarySnapshot } from "./types";
 

@@ -1,9 +1,9 @@
 // Multi-book selection in the library list and the bulk action bar that edits
 // the selected books' tags or metadata.
 
-import { renderApp } from "./library";
 import { visibleBooks } from "./library-data";
 import { openBookMetadataEditorForBooks } from "./metadata-editor";
+import { renderApp } from "./shell";
 import { appState, viewerState } from "./state";
 import { openTagEditorForBooks } from "./tag-editor";
 export const bulkSelectState = {

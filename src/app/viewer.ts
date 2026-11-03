@@ -41,6 +41,7 @@ import {
   loadReadingPositionForCurrentBook,
   scheduleReadingPositionRestore,
 } from "./reading-position";
+import { currentViewerStage } from "./dom";
 import { appState, viewerSettings, viewerState } from "./state";
 import { openTagEditor } from "./tag-editor";
 import type { BookSummary, LibrarySnapshot } from "./types";
@@ -243,10 +244,6 @@ export async function clearCurrentBookSelection() {
   viewerSettings.fileDraft = { ...DEFAULT_VIEWER_SETTINGS };
   syncNoteUi();
   syncViewerSettingsUi();
-}
-
-export function currentViewerStage() {
-  return document.querySelector<HTMLElement>(".viewer-stage");
 }
 
 export async function renderCurrentPage() {

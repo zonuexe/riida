@@ -1,8 +1,7 @@
 // Table-of-contents panel for PDF outlines and EPUB navigation.
 
-import { appState } from "./state";
+import { appState, currentViewerSettingsSourceType } from "./state";
 import type { PdfOutlineNode } from "./types";
-import { currentViewerSettingsSourceType } from "./viewer-settings";
 import { navigateViewerToPage } from "./viewer";
 
 export function buildEpubToc() {

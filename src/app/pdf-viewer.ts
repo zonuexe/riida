@@ -25,7 +25,8 @@ import { appState, viewerSettings, viewerState } from "./state";
 import { buildPdfToc, syncTocUi } from "./toc";
 import type { PdfRenderPlan, PdfRenderSession } from "./types";
 import { applyPdfViewerBackground, applyViewerVerticalGapMode } from "./viewer-settings";
-import { currentViewerStage, navigateViewerToPage, renderCurrentPage } from "./viewer";
+import { navigateViewerToPage, renderCurrentPage } from "./viewer";
+import { currentViewerStage } from "./dom";
 
 // Scan analysis for deskew and margin trimming (viewer settings "deskewMode"
 // and "trimMode"). One scratch canvas serves every page; `willReadFrequently`

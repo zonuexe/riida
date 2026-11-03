@@ -15,8 +15,7 @@ import { destroyEpubBook } from "./epub-viewer";
 import { syncNavigationHistory } from "./navigation";
 import { releaseActivePdfDocument } from "./pdf-viewer";
 import { cacheReadingPosition, scheduleEpubPositionSave } from "./reading-position";
-import { currentAppTheme } from "./settings";
-import { appState, viewerSettings, viewerState } from "./state";
+import { appState, viewerSettings, viewerState, currentAppTheme } from "./state";
 import type { ImageEpubSession } from "./types";
 import { syncViewerPageJumpUi } from "./viewer";
 

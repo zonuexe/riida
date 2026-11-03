@@ -4,7 +4,6 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   applyViewerSettingsPayloadToState,
   DEFAULT_VIEWER_SETTINGS,
-  normalizeViewerSourceType,
   preferredExplicitViewerBackgroundMode,
   switchViewerSettingsScopeInState,
   type ViewerBackgroundMode,
@@ -18,21 +17,17 @@ import {
 import { applyEpubFontSize, applyEpubViewerColors, resizeEpubRendition } from "./epub-viewer";
 import { rebuildImageEpub } from "./image-epub-viewer";
 import { syncImmediatePdfScrollMode } from "./pdf-viewer";
-import { currentAppTheme } from "./settings";
-import { appState, viewerSettings, viewerState } from "./state";
+import {
+  appState,
+  currentAppTheme,
+  currentViewerSettingsSourceType,
+  viewerSettings,
+  viewerState,
+} from "./state";
 import { syncTocUi } from "./toc";
 import { renderCurrentPage } from "./viewer";
 
 let viewerSettingsLoadToken = 0;
-
-export function currentViewerSettingsSourceType(): ViewerSourceType | null {
-  const currentBook = viewerState.currentBook;
-  if (!currentBook) {
-    return null;
-  }
-
-  return normalizeViewerSourceType(currentBook.sourceType);
-}
 
 export function applyPdfViewerBackground(backgroundMode: ViewerBackgroundMode) {
   const palette = viewerColorPaletteForMode(backgroundMode, currentAppTheme());

@@ -1,7 +1,12 @@
 // Library-shell state shared across feature modules. State that a single
 // feature owns lives in that feature's module instead.
 
-import { DEFAULT_VIEWER_SETTINGS } from "../viewer-settings-utils";
+import { type AppTheme, normalizeAppTheme } from "../app-config-utils";
+import {
+  DEFAULT_VIEWER_SETTINGS,
+  normalizeViewerSourceType,
+  type ViewerSourceType,
+} from "../viewer-settings-utils";
 import type {
   AppConfigPayload,
   ImageEpubSession,
@@ -84,3 +89,18 @@ export const appState: AppState = {
   activeEpubRendition: null,
   activeImageEpub: null,
 };
+
+// Reads derived from the state above, shared by modules on every layer.
+
+export function currentAppTheme(): AppTheme {
+  return normalizeAppTheme(appState.lastAppConfig?.theme ?? "default");
+}
+
+export function currentViewerSettingsSourceType(): ViewerSourceType | null {
+  const currentBook = viewerState.currentBook;
+  if (!currentBook) {
+    return null;
+  }
+
+  return normalizeViewerSourceType(currentBook.sourceType);
+}

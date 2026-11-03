@@ -23,14 +23,18 @@ import {
 import { syncNavigationHistory } from "./navigation";
 import { releaseActivePdfDocument } from "./pdf-viewer";
 import { scheduleEpubPositionSave } from "./reading-position";
-import { currentAppTheme } from "./settings";
-import { appState, viewerSettings, viewerState } from "./state";
+import {
+  appState,
+  viewerSettings,
+  viewerState,
+  currentAppTheme,
+  currentViewerSettingsSourceType,
+} from "./state";
 import { buildEpubToc, syncTocUi } from "./toc";
 import {
   applyViewerSettingsPayload,
   applyViewerVerticalGapMode,
   currentViewerPreferences,
-  currentViewerSettingsSourceType,
   setViewerDraft,
   syncViewerSettingsUi,
 } from "./viewer-settings";

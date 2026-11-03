@@ -12,7 +12,8 @@ import {
 import { noteSaveTimer } from "./notes";
 import { appState, viewerState } from "./state";
 import type { ReadingPosition } from "./types";
-import { currentViewerStage, syncViewerPageJumpUi } from "./viewer";
+import { syncViewerPageJumpUi } from "./viewer";
+import { currentViewerStage } from "./dom";
 
 let readingPositionSaveTimer: number | null = null;
 

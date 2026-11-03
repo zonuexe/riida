@@ -653,6 +653,78 @@ mod tests {
         }
     }
 
+    /// Commit `count` single-document segments with merging disabled, so the
+    /// index starts from a known, unmerged segment set.
+    fn commit_unmerged_segments(idx: &FullTextIndex, count: usize) {
+        let mut writer: IndexWriter = idx.index.writer_with_num_threads(1, 15_000_000).unwrap();
+        writer.set_merge_policy(Box::new(tantivy::merge_policy::NoMergePolicy));
+        for i in 0..count {
+            writer
+                .add_document(doc!(idx.fields.doc_key => format!("seed:{i}")))
+                .unwrap();
+            writer.commit().unwrap();
+        }
+        writer.wait_merging_threads().unwrap();
+    }
+
+    fn segment_count(idx: &FullTextIndex) -> usize {
+        idx.index.searchable_segment_ids().unwrap().len()
+    }
+
+    #[test]
+    fn token_filters_can_rewrite_lindera_tokens() {
+        use tantivy::tokenizer::{LowerCaser, TextAnalyzer};
+        let mut analyzer = TextAnalyzer::builder(build_tokenizer().unwrap())
+            .filter(LowerCaser)
+            .build();
+        let mut stream = analyzer.token_stream("RIIDA");
+        let mut texts = Vec::new();
+        while stream.advance() {
+            texts.push(stream.token().text.clone());
+        }
+        assert_eq!(texts.concat(), "riida");
+    }
+
+    #[test]
+    fn open_or_create_uses_zstd_docstore() {
+        let dir = std::env::temp_dir().join(format!(
+            "riida-fulltext-open-or-create-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let idx = FullTextIndex::open_or_create(&dir).unwrap();
+        let compression = idx.index.settings().docstore_compression;
+        drop(idx);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            matches!(compression, tantivy::store::Compressor::Zstd(_)),
+            "got: {compression:?}"
+        );
+    }
+
+    #[test]
+    fn small_batch_writes_wait_for_their_merges() {
+        let idx = FullTextIndex::in_ram().unwrap();
+        // One short of the merge policy's threshold; the next commit tips it.
+        commit_unmerged_segments(&idx, 7);
+        idx.index_docs(&[body_doc("/a.pdf", "T", 1, "本文")])
+            .unwrap();
+        assert!(segment_count(&idx) < 8, "segments: {}", segment_count(&idx));
+    }
+
+    #[test]
+    fn consolidate_merges_pending_segments() {
+        let idx = FullTextIndex::in_ram().unwrap();
+        commit_unmerged_segments(&idx, 10);
+        assert_eq!(segment_count(&idx), 10);
+        idx.consolidate().unwrap();
+        assert!(
+            segment_count(&idx) < 10,
+            "segments: {}",
+            segment_count(&idx)
+        );
+    }
+
     #[test]
     fn indexes_and_searches_japanese_body() {
         let idx = FullTextIndex::in_ram().unwrap();

@@ -800,8 +800,22 @@ The frontend has a parallel mutation-testing setup via
 [Stryker](https://stryker-mutator.io). It is not part of `check:frontend`
 for the same speed reasons. Configuration lives in
 [stryker.config.json](stryker.config.json) and excludes DOM-driven
-entry points (`src/main.ts`, `src/note-editor.ts`) and the large
-`cjk-radical-map.ts` data module.
+entry points (`src/main.ts`, `src/note-editor.ts`), the large
+`cjk-radical-map.ts` data module, and the test-only
+`pdf-page-fixtures.ts`.
+
+It also excludes the scan-correction pixel analysis (`pdf-deskew.ts`,
+`pdf-trim.ts`, `pdf-gray-image.ts`, `pdf-page-sample.ts`). Stryker
+instruments every expression in their per-pixel loops, which slows those
+tests ~300× (dry run: 3 s without them, ~2.5 min with them) and pushes a
+full run past the nightly job's time limit. They stay covered by unit tests
+and the coverage thresholds. To audit one of them by hand, pass it via
+`--mutate` and raise vitest's `testTimeout` for that run.
+
+Stryker 10's tsconfig preprocessor calls a TypeScript JS API that
+TypeScript 7 removed, so `tsconfigFile` points at a file that does not
+exist to skip the preprocessor (it only rewrites `extends`/`references`
+paths, which our tsconfig does not use).
 
 ```bash
 nix --extra-experimental-features 'nix-command flakes' develop --command npm run mutants:frontend
@@ -836,9 +850,12 @@ surviving mutant (exit 2) fails the job — the fix is to add a killing
 unit test, or, for a genuinely untestable function (a `#[tauri::command]`
 handler, external-process IO, an app-path/global-state helper, or an
 entry point), add it to `exclude_re` in
-[src-tauri/.cargo/mutants.toml](src-tauri/.cargo/mutants.toml). The
-deletions of the EPUB read-loop `Eof`/`Err` arms are caught as timeouts
-(they cause infinite loops), which counts as caught. `frontend-mutation`
+[src-tauri/.cargo/mutants.toml](src-tauri/.cargo/mutants.toml). A
+timeout also fails the job (exit 3), so mutants that can only hang — deleting
+an XML read loop's `Eof` arm, a byte cursor that stops advancing — are
+excluded there by mutant name rather than left to time out. Struct-field
+deletion mutants ignore `exclude_re` altogether and need a killing test.
+`frontend-mutation`
 likewise gates on Stryker's score threshold (`break: 50`). `rust-coverage`
 is reporting-only. Reports always upload (`if: always()`). CI installs the
 tools via `taiki-e/install-action` and, for coverage, the

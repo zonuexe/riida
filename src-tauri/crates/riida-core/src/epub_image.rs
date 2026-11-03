@@ -401,7 +401,8 @@ pub(crate) fn single_image_href(xhtml: &[u8]) -> Option<String> {
 /// Read width/height from a JPEG's frame header (first SOF0..SOF15 marker,
 /// excluding DHT/JPG/DAC). Pure byte scan; no image-decoding dependency.
 pub(crate) fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
-    if bytes.len() < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8 {
+    // The loop bounds every read, so a too-short input just finds no frame.
+    if !bytes.starts_with(&[0xFF, 0xD8]) {
         return None;
     }
     let mut i = 2;
@@ -421,7 +422,7 @@ pub(crate) fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
             i += 2;
             continue;
         }
-        let len = ((bytes[i + 2] as usize) << 8) | (bytes[i + 3] as usize);
+        let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
         if len < 2 {
             return None;
         }
@@ -432,8 +433,8 @@ pub(crate) fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
             if i + 8 >= bytes.len() {
                 return None;
             }
-            let height = ((bytes[i + 5] as u32) << 8) | (bytes[i + 6] as u32);
-            let width = ((bytes[i + 7] as u32) << 8) | (bytes[i + 8] as u32);
+            let height = u32::from(u16::from_be_bytes([bytes[i + 5], bytes[i + 6]]));
+            let width = u32::from(u16::from_be_bytes([bytes[i + 7], bytes[i + 8]]));
             if width == 0 || height == 0 {
                 return None;
             }
@@ -727,7 +728,127 @@ mod tests {
         assert_eq!(content_type_for("item/image/img.jpg"), "image/jpeg");
         assert_eq!(content_type_for("a.JPEG"), "image/jpeg");
         assert_eq!(content_type_for("a.png"), "image/png");
+        assert_eq!(content_type_for("a.gif"), "image/gif");
+        assert_eq!(content_type_for("a.webp"), "image/webp");
+        assert_eq!(content_type_for("a.svg"), "image/svg+xml");
         assert_eq!(content_type_for("a.bin"), "application/octet-stream");
+    }
+
+    #[test]
+    fn spread_side_str_names_each_side() {
+        assert_eq!(spread_side_str(SpreadSide::Left), "left");
+        assert_eq!(spread_side_str(SpreadSide::Right), "right");
+        assert_eq!(spread_side_str(SpreadSide::Center), "center");
+    }
+
+    #[test]
+    fn parse_opf_layout_legacy_layout_meta_needs_matching_content() {
+        let opf = br#"<package><metadata>
+<meta name="fixed-layout" content="false"/>
+</metadata><spine></spine></package>"#;
+        assert!(!parse_opf_layout(opf).unwrap().pre_paginated);
+
+        let opf = br#"<package><metadata>
+<meta name="book-type" content="pre-paginated"/>
+</metadata><spine></spine></package>"#;
+        assert!(!parse_opf_layout(opf).unwrap().pre_paginated);
+
+        let opf = br#"<package><metadata>
+<meta name="original-layout" content="pre-paginated"/>
+</metadata><spine></spine></package>"#;
+        assert!(parse_opf_layout(opf).unwrap().pre_paginated);
+    }
+
+    #[test]
+    fn parse_opf_layout_reads_layout_text_only_inside_the_layout_meta() {
+        // An empty layout meta must not carry over to the next text node.
+        let opf = br#"<package><metadata><meta property="rendition:layout"></meta><title>pre-paginated</title></metadata><spine></spine></package>"#;
+        assert!(!parse_opf_layout(opf).unwrap().pre_paginated);
+    }
+
+    #[test]
+    fn page_dimensions_reject_zero_sizes() {
+        assert_eq!(dimensions_from_viewbox("0 0 0 1980"), None);
+        assert_eq!(dimensions_from_viewbox("0 0 1396 0"), None);
+        assert_eq!(dimensions_from_viewport("width=0, height=1600"), None);
+        assert_eq!(dimensions_from_viewport("width=1200, height=0"), None);
+        assert_eq!(dimensions_from_viewport("width=1, height=1"), Some((1, 1)));
+    }
+
+    #[test]
+    fn single_image_href_reads_src_and_open_image_tags() {
+        let xhtml = br#"<html><body><img src="a.jpg"/></body></html>"#;
+        assert_eq!(single_image_href(xhtml).as_deref(), Some("a.jpg"));
+
+        let xhtml = br#"<html><body><svg><image xlink:href="b.jpg"></image></svg></body></html>"#;
+        assert_eq!(single_image_href(xhtml).as_deref(), Some("b.jpg"));
+    }
+
+    #[test]
+    fn single_image_href_counts_body_text_after_head() {
+        let xhtml = br#"<html><head><title>t</title></head><body>
+<p>Caption</p><img src="a.jpg"/></body></html>"#;
+        assert_eq!(single_image_href(xhtml), None);
+    }
+
+    #[test]
+    fn single_image_href_ignores_stray_skip_end_tag() {
+        let xhtml = br#"<html><body></script><img src="a.jpg"/></body></html>"#;
+        assert_eq!(single_image_href(xhtml).as_deref(), Some("a.jpg"));
+    }
+
+    /// SOI followed by `segments`, then a SOF0 frame for 1396x1980.
+    fn jpeg_with(segments: &[u8]) -> Vec<u8> {
+        let mut bytes: Vec<u8> = vec![0xFF, 0xD8];
+        bytes.extend_from_slice(segments);
+        bytes.extend_from_slice(&[0xFF, 0xC0, 0x00, 0x11, 0x08]);
+        bytes.extend_from_slice(&1980u16.to_be_bytes());
+        bytes.extend_from_slice(&1396u16.to_be_bytes());
+        bytes.extend_from_slice(&[0x03, 0x01, 0x22, 0x00]);
+        bytes
+    }
+
+    #[test]
+    fn jpeg_dimensions_skips_fill_bytes_padding_and_standalone_markers() {
+        // A stray non-marker byte, a 0xFF padding run, and RST0 after an APP0
+        // segment (so the marker does not sit at offset 2).
+        let segments = [0x00, 0xFF, 0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xD0];
+        assert_eq!(jpeg_dimensions(&jpeg_with(&segments)), Some((1396, 1980)));
+        // An empty (length 2) segment is valid.
+        let segments = [0xFF, 0xE1, 0x00, 0x02];
+        assert_eq!(jpeg_dimensions(&jpeg_with(&segments)), Some((1396, 1980)));
+    }
+
+    #[test]
+    fn jpeg_dimensions_skips_long_segments() {
+        let mut segments = vec![0xFF, 0xE0, 0x01, 0x00];
+        segments.resize(4 + 254, 0x00);
+        assert_eq!(jpeg_dimensions(&jpeg_with(&segments)), Some((1396, 1980)));
+    }
+
+    #[test]
+    fn jpeg_dimensions_rejects_malformed_frames() {
+        // Invalid segment length.
+        assert_eq!(jpeg_dimensions(&jpeg_with(&[0xFF, 0xE0, 0x00, 0x00])), None);
+        // Wrong signature bytes.
+        assert_eq!(jpeg_dimensions(&jpeg_with(&[])[1..]), None);
+        let mut bytes = jpeg_with(&[]);
+        bytes[1] = 0x00;
+        assert_eq!(jpeg_dimensions(&bytes), None);
+        // Truncated segment header and truncated SOF.
+        assert_eq!(jpeg_dimensions(&[0xFF, 0xD8, 0xFF, 0xE0, 0x00]), None);
+        assert_eq!(jpeg_dimensions(&jpeg_with(&[])[..9]), None);
+        // Zero width.
+        let mut bytes = jpeg_with(&[]);
+        bytes[9] = 0x00;
+        bytes[10] = 0x00;
+        assert_eq!(jpeg_dimensions(&bytes), None);
+    }
+
+    #[test]
+    fn percent_decode_passes_through_truncated_escape() {
+        assert_eq!(percent_decode("%4"), "%4");
+        assert_eq!(percent_decode("%41"), "A");
     }
 
     /// Env-gated smoke test against a real image EPUB. Set RIIDA_IMAGE_EPUB to a

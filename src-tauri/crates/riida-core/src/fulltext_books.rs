@@ -501,6 +501,18 @@ mod tests {
     use crate::test_support::{chunk_doc, fulltext_book};
 
     #[test]
+    fn book_index_input_classifies_source_type() {
+        let pdf = fulltext_book("/a.pdf", "pdf", 0);
+        let epub = fulltext_book("/a.epub", "epub", 0);
+        let kindle = fulltext_book("kindle:1", "kindle", 0);
+        assert!(pdf.is_pdf() && !pdf.is_epub());
+        assert!(epub.is_epub() && !epub.is_pdf());
+        assert!(!kindle.is_pdf() && !kindle.is_epub());
+        assert!(extract_request_for_book(&pdf).is_pdf);
+        assert!(!extract_request_for_book(&epub).is_pdf);
+    }
+
+    #[test]
     #[cfg(unix)]
     fn is_dataless_blocks_detects_online_only_files() {
         // Non-empty file with no allocated blocks = online-only placeholder.

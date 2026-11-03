@@ -12,6 +12,11 @@
 #
 # Patterns are regexes matched against the names shown by `cargo mutants
 # --list`, each anchored to one function.
+#
+# cargo-mutants 27 does not apply exclude_re to struct-field deletion mutants
+# ("delete field X from struct Y expression in F"): they stay in `--list` and
+# run even when F, or the field name itself, matches a pattern here. Kill those
+# with a test instead of trying to exclude them.
 exclude_re = [
   # App paths and global initialization.
   '\bproject_root\b',
@@ -55,8 +60,8 @@ exclude_re = [
   # wrap (normalize_extracted_text, strip_leading_watermark, html_to_text,
   # join_zip_path, parent_dir, parse_opf_spine, build_metadata_doc,
   # build_note_doc) are unit-tested and stay in scope.
-  '\bopen_or_create\b',   # MmapDirectory disk IO (tests use an in-RAM index)
   '\bbind_pdfium\b',
+  '\bpdfium_dir\b',     # reads the PDFIUM_DIR OnceLock set during app setup
   '\bextract_pdf_body\b',
   '\bextract_epub_body\b',
   '\bzip_bytes\b',
@@ -105,4 +110,11 @@ exclude_re = [
   '\bfulltext_index_size_bytes\b',
   '\bfulltext_clear_index\b',
   '\brun_fulltext_sync\b',
+  # Mutants that can only hang. cargo-mutants exits 3 on any timeout, so a
+  # mutant whose sole effect is an endless loop fails the gate even though the
+  # change is "caught". These patterns name the mutation, not the function, so
+  # every other mutant in these functions stays in scope.
+  'delete match arm (Ok\()?XmlEvent::Eof', # XML read loops lose their only exit
+  'replace \+= with [-*]= in (jpeg_dimensions|percent_decode)$', # byte cursor stops advancing
+  'LinderaTokenStream.*::advance -> bool with true', # token stream never ends
 ]

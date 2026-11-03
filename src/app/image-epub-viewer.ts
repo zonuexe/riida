@@ -15,14 +15,10 @@ import {
 import { viewerColorPaletteForMode } from "../viewer-settings-utils";
 import { destroyEpubBook } from "./epub-viewer";
 import { releaseActivePdfDocument } from "./pdf-viewer";
+import { cacheReadingPosition, scheduleEpubPositionSave } from "./reading-position";
 import { appState, viewerSettings, viewerState } from "./state";
-import {
-  cacheReadingPosition,
-  currentAppTheme,
-  scheduleEpubPositionSave,
-  syncNavigationHistory,
-  syncViewerPageJumpUi,
-} from "../main";
+import { syncViewerPageJumpUi } from "./viewer";
+import { currentAppTheme, syncNavigationHistory } from "../main";
 
 // Raw payload from the `epub_image_layout` Rust command.
 export type EpubImageLayoutPayload = {

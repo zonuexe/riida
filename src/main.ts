@@ -40,7 +40,6 @@ import {
   jumpTargetForHit,
   locationLabel,
 } from "./fulltext-ui";
-import { clampEpubPageNumber, epubLocationIndexFromPageNumber } from "./epub-page-utils";
 import {
   deriveDirectories,
   deriveLanguages,
@@ -100,33 +99,9 @@ import {
 } from "./sidebar-section-order.ts";
 import { countBooksWithTagOrDescendants, validateTagValue } from "./tag-utils";
 import {
-  clampReadingPositionOffsetRatio,
-  computePageOffsetRatio,
-  loadCachedReadingPosition as loadCachedReadingPositionFromStorage,
-  saveCachedReadingPosition,
-  selectAnchorPageIndex,
-  selectHeadSidePageInSpread,
-} from "./reading-position-utils";
-import { parseRequestedPageNumber } from "./page-jump-utils";
-import {
   clampNoteWindowPosition,
   ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
-  preserveNoteWindowBottomRightOffset,
 } from "./note-window-utils";
-import {
-  applyViewerSettingsPayloadToState,
-  DEFAULT_VIEWER_SETTINGS,
-  normalizeViewerSourceType,
-  preferredExplicitViewerBackgroundMode,
-  switchViewerSettingsScopeInState,
-  type ViewerBackgroundMode,
-  viewerColorPaletteForMode,
-  viewerExtraVerticalGap,
-  type ViewerSettings,
-  type ViewerSettingsPayload,
-  type ViewerSettingsScope,
-  type ViewerSourceType,
-} from "./viewer-settings-utils";
 import {
   applyStatusMessage,
   finishStartupPhase,
@@ -134,28 +109,20 @@ import {
   syncControlValue,
 } from "./app/dom";
 import {
-  activeEpubBook,
   activeEpubRendition,
-  applyEpubFontSize,
   applyEpubFontSizeShortcut,
-  applyEpubViewerColors,
-  captureEpubCfiForHistory,
   currentEpubFontSize,
   destroyEpubBook,
   initEpubFocusGuard,
   isEpubNextPageKey,
   isEpubPrevPageKey,
-  renderEpubBook,
-  resizeEpubRendition,
 } from "./app/epub-viewer";
 import { cachedHomeDir, collapseHomePath, primeHomeDirCache } from "./app/home-path";
 import {
   activeImageEpub,
   destroyImageEpub,
-  fitImageEpubSpread,
   goToImagePage,
   goToImageSpread,
-  rebuildImageEpub,
 } from "./app/image-epub-viewer";
 import { applyStaticTranslations, t, uiLocale } from "./app/locale";
 import {
@@ -168,19 +135,14 @@ import {
 import {
   activePdfRenderSession,
   advancePdfPagedSpread,
-  findPdfRenderGroupIndexForPage,
   handlePdfPagedKey,
   initPdfStageScroll,
-  pdfRenderInProgress,
   pdfZoomScale,
-  releaseActivePdfDocument,
-  renderPdfJsBook,
-  resetPdfZoomScaleForBook,
-  schedulePdfRenderWindowUpdate,
   setPdfZoomScale,
-  syncImmediatePdfScrollMode,
 } from "./app/pdf-viewer";
+import { initFlushOnUnload } from "./app/reading-position";
 import { appState, viewerSettings, viewerState } from "./app/state";
+import { initTocToggle } from "./app/toc";
 import type {
   AppConfigPayload,
   BookMetadataPayload,
@@ -189,10 +151,21 @@ import type {
   LibrarySnapshot,
   NavigationState,
   NoteDocument,
-  PdfOutlineNode,
-  ReadingPosition,
   Shelf,
 } from "./app/types";
+import { initViewerSettingsPanel, syncViewerSettingsUi } from "./app/viewer-settings";
+import {
+  clearCurrentBookSelection,
+  currentViewerTotalPages,
+  initViewerEditorButtons,
+  initViewerPageJump,
+  initViewerResize,
+  navigateViewerToPage,
+  openBook,
+  renderCurrentPage,
+  syncViewerPageJumpUi,
+  viewerNeedsRender,
+} from "./app/viewer";
 
 type NoteState = {
   isOpen: boolean;
@@ -268,10 +241,6 @@ type NoteInteractionState = {
   startHeight: number;
 };
 
-type ViewerPageJumpState = {
-  input: string;
-};
-
 type ListSortKey =
   | "default"
   | "title-asc"
@@ -314,7 +283,7 @@ const thumbnailUrls = new Map<string, string>();
 let thumbnailObserver: IntersectionObserver | null = null;
 const thumbnailBookByImage = new WeakMap<HTMLImageElement, BookSummary>();
 let noteEditor: NoteEditorHandle | null = null;
-let noteSaveTimer: number | null = null;
+export let noteSaveTimer: number | null = null;
 let noteLoadToken = 0;
 // Suppress scheduleNoteSave callbacks that fire while we are tearing down the
 // Milkdown editor. Without this guard, Milkdown's listener plugin emits a
@@ -324,11 +293,6 @@ let noteLoadToken = 0;
 // renderer. See https://github.com/Milkdown/milkdown/issues for related reports.
 let isDestroyingNoteEditor = false;
 
-let pdfRenderResizeTimer: number | null = null;
-
-let viewerSettingsLoadToken = 0;
-
-let readingPositionSaveTimer: number | null = null;
 let suppressHistoryUpdates = false;
 let navigationHistoryIndex = 0;
 let navigationHistoryMax = 0;
@@ -347,121 +311,9 @@ export function currentAppTheme(): AppTheme {
   return normalizeAppTheme(appState.lastAppConfig?.theme ?? "default");
 }
 
-export function currentViewerSettingsSourceType(): ViewerSourceType | null {
-  const currentBook = viewerState.currentBook;
-  if (!currentBook) {
-    return null;
-  }
-
-  return normalizeViewerSourceType(currentBook.sourceType);
-}
-
-export function applyPdfViewerBackground(backgroundMode: ViewerBackgroundMode) {
-  const palette = viewerColorPaletteForMode(backgroundMode, currentAppTheme());
-
-  const applyBackgroundStyles = (el: HTMLElement | null) => {
-    if (!el) {
-      return;
-    }
-
-    el.style.backgroundColor = palette.background;
-  };
-
-  const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
-  if (backgroundMode === "inherit-theme") {
-    mainPaneEl?.style.removeProperty("background-color");
-    return;
-  }
-
-  applyBackgroundStyles(mainPaneEl);
-}
-
-export function applyViewerVerticalGapMode(mode: ViewerSettings["verticalGapMode"]) {
-  const extraGap = viewerExtraVerticalGap(mode);
-  const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
-  if (pdfjsViewerEl) {
-    pdfjsViewerEl.dataset.verticalGap = mode;
-    pdfjsViewerEl.style.setProperty("--viewer-extra-vertical-gap", `${extraGap}px`);
-  }
-
-  const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
-  if (epubViewerEl) {
-    epubViewerEl.dataset.verticalGap = mode;
-    epubViewerEl.style.setProperty("--epub-vertical-gap", `${extraGap}px`);
-    if (activeEpubRendition) {
-      requestAnimationFrame(() => resizeEpubRendition());
-    }
-  }
-}
-
-function setCheckedViewerBackgroundOption(groupName: string, value: ViewerBackgroundMode) {
-  const input = document.querySelector<HTMLInputElement>(
-    `input[name="${groupName}"][value="${value}"]`,
-  );
-  if (input) {
-    input.checked = true;
-  }
-}
-
-function syncViewerBackgroundControls(
-  groupName: string,
-  inheritCheckboxId: string,
-  backgroundMode: ViewerBackgroundMode,
-) {
-  const inheritCheckbox = document.querySelector<HTMLInputElement>(`#${inheritCheckboxId}`);
-  const group = document.querySelector<HTMLElement>(`#${groupName}`);
-  const isInherited = backgroundMode === "inherit-theme";
-  const explicitMode = preferredExplicitViewerBackgroundMode(backgroundMode, currentAppTheme());
-
-  if (inheritCheckbox) {
-    inheritCheckbox.checked = isInherited;
-  }
-
-  setCheckedViewerBackgroundOption(groupName, explicitMode);
-  group?.classList.toggle("is-disabled", isInherited);
-}
-
-function syncImmediatePdfBackgroundPreview() {
-  const sourceType = currentViewerSettingsSourceType();
-  if (sourceType === "pdf" && appState.lastSnapshot?.pdfRenderer === "pdfjs") {
-    applyPdfViewerBackground(currentViewerPreferences().backgroundMode);
-    return;
-  }
-
-  if (sourceType === "epub") {
-    applyEpubViewerColors(currentViewerPreferences().backgroundMode);
-    return;
-  }
-}
-
-function syncImmediateViewerLayoutPreview() {
-  const sourceType = currentViewerSettingsSourceType();
-  if (sourceType !== "pdf" && sourceType !== "epub") {
-    return;
-  }
-
-  applyViewerVerticalGapMode(currentViewerPreferences().verticalGapMode);
-}
-
-function bindViewerBackgroundOptionGroup(
-  groupName: string,
-  onChange: (value: ViewerBackgroundMode) => void,
-) {
-  const inputs = document.querySelectorAll<HTMLInputElement>(`input[name="${groupName}"]`);
-  for (const input of inputs) {
-    input.addEventListener("change", () => {
-      if (input.checked) {
-        onChange(input.value as ViewerBackgroundMode);
-      }
-    });
-  }
-}
-
 let isTagEditorComposing = false;
 let noteEditorModulePromise: Promise<typeof import("./note-editor")> | null = null;
-const viewerPageJumpState: ViewerPageJumpState = {
-  input: "",
-};
+
 const tagEditorState: TagEditorState = {
   isOpen: false,
   filePath: null,
@@ -612,11 +464,6 @@ const CUSTOM_SOURCE_ICONS: Array<{ cls: string; label: string }> = [
   { cls: "fa-brands fa-pixiv", label: "Pixiv" },
 ];
 
-let lastViewportSize = {
-  width: window.innerWidth,
-  height: window.innerHeight,
-};
-
 const FULLTEXT_INCLUDE_ONLINE_KEY = "riida.fulltext.includeOnlineOnly";
 
 async function loadNoteEditorModule() {
@@ -624,7 +471,7 @@ async function loadNoteEditorModule() {
   return noteEditorModulePromise;
 }
 
-const noteState: NoteState = {
+export const noteState: NoteState = {
   isOpen: false,
   isLoading: false,
   isSaving: false,
@@ -781,157 +628,7 @@ function isTagVisible(tagId: string, depth: number) {
   return parent ? viewerState.expandedTags.has(parent) : true;
 }
 
-function currentViewerPageNumber() {
-  if (!viewerState.currentBook) {
-    return null;
-  }
-
-  if (viewerState.currentBook.sourceType === "epub") {
-    return appState.activeReadingPosition?.pageNumber ?? (appState.activeEpubTotalPages ? 1 : null);
-  }
-
-  return appState.activeReadingPosition?.pageNumber ?? 1;
-}
-
-function currentViewerTotalPages() {
-  const currentBook = viewerState.currentBook;
-  if (!currentBook) {
-    return null;
-  }
-
-  if (currentBook.sourceType === "epub") {
-    return appState.activeEpubTotalPages;
-  }
-
-  return activePdfRenderSession?.pdfDocument.numPages ?? null;
-}
-
-export function syncViewerPageJumpUi() {
-  const pageJumpEl = document.querySelector<HTMLElement>("#viewer-page-jump");
-  const formEl = document.querySelector<HTMLFormElement>("#viewer-page-jump-form");
-  const inputEl = document.querySelector<HTMLInputElement>("#viewer-page-jump-input");
-  const totalEl = document.querySelector<HTMLElement>("#viewer-page-jump-total");
-  const currentPageNumber = currentViewerPageNumber();
-  const totalPages = currentViewerTotalPages();
-
-  if (!pageJumpEl || !formEl || !inputEl || !totalEl) {
-    return;
-  }
-
-  const shouldShow = Boolean(viewerState.currentBook);
-  pageJumpEl.hidden = !shouldShow;
-  formEl.hidden = !shouldShow;
-
-  if (!shouldShow || currentPageNumber === null) {
-    totalEl.textContent = "";
-    return;
-  }
-
-  totalEl.textContent = totalPages ? `/ ${totalPages}` : "";
-
-  if (document.activeElement !== inputEl) {
-    viewerPageJumpState.input = String(currentPageNumber);
-    inputEl.value = viewerPageJumpState.input;
-  } else if (inputEl.value !== viewerPageJumpState.input) {
-    inputEl.value = viewerPageJumpState.input;
-  }
-}
-
-export function navigateViewerToPage(pageNumber: number, options: { pushHistory?: boolean } = {}) {
-  const currentBook = viewerState.currentBook;
-
-  if (!currentBook) {
-    return;
-  }
-
-  const { pushHistory = true } = options;
-
-  if (currentBook.sourceType === "epub") {
-    if (activeImageEpub) {
-      goToImagePage(pageNumber, { pushHistory });
-      void flushReadingPositionSave();
-      return;
-    }
-    if (!activeEpubBook || !activeEpubRendition || !appState.activeEpubTotalPages) {
-      return;
-    }
-
-    const boundedPageNumber = clampEpubPageNumber(pageNumber, appState.activeEpubTotalPages);
-    const cfi = activeEpubBook.locations.cfiFromLocation(
-      epubLocationIndexFromPageNumber(boundedPageNumber, appState.activeEpubTotalPages),
-    );
-    if (!cfi) {
-      return;
-    }
-
-    if (pushHistory) {
-      captureEpubCfiForHistory(activeEpubRendition);
-      syncNavigationHistory("replace");
-    }
-
-    appState.activeReadingPosition = {
-      filePath: currentBook.filePath,
-      pageNumber: boundedPageNumber,
-      pageOffsetRatio: 0,
-      cfi,
-      updatedAt: appState.activeReadingPosition?.updatedAt ?? null,
-    };
-    cacheReadingPosition(appState.activeReadingPosition);
-
-    if (pushHistory) {
-      syncNavigationHistory("push");
-    }
-
-    syncViewerPageJumpUi();
-    void activeEpubRendition.display(cfi);
-    void flushReadingPositionSave();
-    return;
-  }
-
-  const maxPageNumber = activePdfRenderSession?.pdfDocument.numPages ?? Number.POSITIVE_INFINITY;
-  const boundedPageNumber = Math.min(Math.max(Math.trunc(pageNumber), 1), maxPageNumber);
-
-  if (pushHistory) {
-    const capturedPosition = captureReadingPositionFromViewer();
-    if (capturedPosition) {
-      appState.activeReadingPosition = capturedPosition;
-    }
-    syncNavigationHistory("replace");
-  }
-
-  appState.activeReadingPosition = {
-    filePath: currentBook.filePath,
-    pageNumber: boundedPageNumber,
-    pageOffsetRatio: 0,
-    updatedAt: appState.activeReadingPosition?.updatedAt ?? null,
-  };
-  cacheReadingPosition(appState.activeReadingPosition);
-
-  if (pushHistory) {
-    syncNavigationHistory("push");
-  }
-
-  syncViewerPageJumpUi();
-
-  if (appState.lastSnapshot?.pdfRenderer === "pdfjs" && activePdfRenderSession) {
-    activePdfRenderSession.restoreTargetPage = boundedPageNumber;
-    const groupIndex = findPdfRenderGroupIndexForPage(activePdfRenderSession, boundedPageNumber);
-    schedulePdfRenderWindowUpdate(activePdfRenderSession, groupIndex >= 0 ? groupIndex : undefined);
-    scheduleReadingPositionRestore();
-  } else {
-    const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
-    if (frame) {
-      const sourceUrl = convertFileSrc(currentBook.filePath);
-      frame.src = `${sourceUrl}#page=${boundedPageNumber}`;
-      frame.dataset.filePath = currentBook.filePath;
-      frame.hidden = false;
-    }
-  }
-
-  void flushReadingPositionSave();
-}
-
-function clampNoteWindow() {
+export function clampNoteWindow() {
   const nextState = clampNoteWindowPosition(noteState, {
     width: window.innerWidth,
     height: window.innerHeight,
@@ -949,11 +646,11 @@ function ensureNoteWindowPlacement() {
   noteState.y = nextState.y;
 }
 
-function shouldAnchorNoteWindowToBottomRight() {
+export function shouldAnchorNoteWindowToBottomRight() {
   return viewerSettings.alignMode === "left" || viewerSettings.alignMode === "center";
 }
 
-function syncNoteUi() {
+export function syncNoteUi() {
   const noteToggleEl = document.querySelector<HTMLButtonElement>("#note-toggle");
   const notePanelEl = document.querySelector<HTMLElement>("#note-panel");
   const noteEditorEl = document.querySelector<HTMLElement>("#note-editor");
@@ -2231,7 +1928,7 @@ async function openBookMetadataEditorForBooks(books: BookSummary[]) {
   }
 }
 
-function openTagEditor(book: BookSummary) {
+export function openTagEditor(book: BookSummary) {
   tagEditorState.isOpen = true;
   tagEditorState.filePath = book.filePath;
   tagEditorState.books = null;
@@ -2242,7 +1939,7 @@ function openTagEditor(book: BookSummary) {
   syncTagEditorUi();
 }
 
-async function openBookMetadataEditor(book: BookSummary) {
+export async function openBookMetadataEditor(book: BookSummary) {
   const loadToken = bookMetadataEditorState.loadToken + 1;
   bookMetadataEditorState.loadToken = loadToken;
   bookMetadataEditorState.isOpen = true;
@@ -2928,313 +2625,7 @@ async function saveAppSettingsFromForm() {
   }
 }
 
-export function buildEpubToc() {
-  const listEl = document.querySelector<HTMLElement>("#epub-toc-list");
-  if (!listEl || !activeEpubBook) return;
-  listEl.innerHTML = "";
-
-  type NavItem = { label: string; href: string; subitems?: NavItem[] };
-  const toc: NavItem[] = (activeEpubBook.navigation as unknown as { toc: NavItem[] }).toc ?? [];
-
-  function appendItems(items: NavItem[], depth: number) {
-    for (const item of items) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "epub-toc-item";
-      btn.dataset.depth = String(depth);
-      btn.textContent = item.label.trim();
-      btn.addEventListener("click", () => {
-        appState.tocPanelOpen = false;
-        syncTocUi();
-        if (activeEpubRendition) {
-          void activeEpubRendition.display(item.href);
-        }
-      });
-      listEl!.appendChild(btn);
-      if (item.subitems && item.subitems.length > 0) {
-        appendItems(item.subitems, depth + 1);
-      }
-    }
-  }
-
-  appendItems(toc, 0);
-}
-
-export function buildPdfToc() {
-  const listEl = document.querySelector<HTMLElement>("#epub-toc-list");
-  if (!listEl) return;
-  listEl.innerHTML = "";
-
-  const outline = appState.activePdfOutline;
-  if (!outline || outline.length === 0) return;
-
-  const session = activePdfRenderSession;
-
-  function appendItems(items: PdfOutlineNode[], depth: number) {
-    for (const item of items) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "epub-toc-item";
-      btn.dataset.depth = String(depth);
-      btn.textContent = item.title;
-      btn.addEventListener("click", () => {
-        appState.tocPanelOpen = false;
-        syncTocUi();
-        if (!session || item.dest === null) return;
-        const resolver = session.pdfDocument;
-        void (async () => {
-          let explicitDest: unknown = item.dest;
-          if (typeof item.dest === "string" && resolver.getDestination) {
-            explicitDest = await resolver.getDestination(item.dest);
-          }
-          if (!Array.isArray(explicitDest) || explicitDest.length === 0) return;
-          const [firstEntry] = explicitDest;
-          let pageNumber: number | null = null;
-          if (typeof firstEntry === "number" && Number.isFinite(firstEntry)) {
-            pageNumber = Math.min(Math.max(Math.trunc(firstEntry) + 1, 1), resolver.numPages);
-          } else if (firstEntry && typeof firstEntry === "object" && resolver.getPageIndex) {
-            const idx = await resolver.getPageIndex(firstEntry);
-            pageNumber = Math.min(Math.max(Math.trunc(idx) + 1, 1), resolver.numPages);
-          }
-          if (pageNumber !== null) {
-            navigateViewerToPage(pageNumber);
-          }
-        })();
-      });
-      listEl!.appendChild(btn);
-      if (item.items.length > 0) {
-        appendItems(item.items, depth + 1);
-      }
-    }
-  }
-
-  appendItems(outline, 0);
-}
-
-export function syncTocUi() {
-  const toggleEl = document.querySelector<HTMLButtonElement>("#epub-toc-toggle");
-  const panelEl = document.querySelector<HTMLElement>("#epub-toc-panel");
-  const sourceType = currentViewerSettingsSourceType();
-  const isEpub = sourceType === "epub";
-  const isPdf =
-    sourceType === "pdf" &&
-    appState.lastSnapshot?.pdfRenderer === "pdfjs" &&
-    appState.activePdfOutline !== null &&
-    appState.activePdfOutline.length > 0;
-  const hasToc = isEpub || isPdf;
-  if (toggleEl) {
-    toggleEl.hidden = !hasToc;
-    toggleEl.setAttribute("aria-expanded", String(appState.tocPanelOpen));
-  }
-  if (panelEl) {
-    panelEl.hidden = !hasToc || !appState.tocPanelOpen;
-  }
-}
-
-export function syncViewerSettingsUi() {
-  const settingsToggleEl = document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
-  const settingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
-  const tagsOpenEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
-  const metadataOpenEl = document.querySelector<HTMLButtonElement>("#viewer-metadata-open");
-  const scopeGlobalEl = document.querySelector<HTMLButtonElement>("#viewer-settings-scope-global");
-  const scopeFileEl = document.querySelector<HTMLButtonElement>("#viewer-settings-scope-file");
-  const sourceLabelEl = document.querySelector<HTMLElement>("#viewer-settings-source-label");
-  const readerFieldsEl = document.querySelector<HTMLElement>("#viewer-settings-reader-fields");
-  const pageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
-  const bindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
-  const zoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
-  const alignModeEl = document.querySelector<HTMLSelectElement>("#viewer-align-mode");
-  const verticalGapModeEl = document.querySelector<HTMLSelectElement>("#viewer-vertical-gap-mode");
-  const scrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
-  const coverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
-  const deskewModeEl = document.querySelector<HTMLInputElement>("#viewer-deskew-mode");
-  const trimModeEl = document.querySelector<HTMLInputElement>("#viewer-trim-mode");
-  const epubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
-  const epubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
-    "#viewer-epub-font-size-output",
-  );
-  const sourceType = currentViewerSettingsSourceType();
-  const isPdfViewerSettingsAvailable =
-    sourceType === "pdf" && appState.lastSnapshot?.pdfRenderer === "pdfjs";
-  const isEpubViewerSettingsAvailable = sourceType === "epub";
-  const isViewerSettingsAvailable = isPdfViewerSettingsAvailable || isEpubViewerSettingsAvailable;
-  const editingPreferences =
-    viewerSettings.scope === "file" ? viewerSettings.fileDraft : viewerSettings.globalDraft;
-
-  if (settingsToggleEl) {
-    settingsToggleEl.hidden = !isViewerSettingsAvailable;
-    settingsToggleEl.setAttribute("aria-expanded", String(viewerSettings.isSettingsOpen));
-  }
-
-  if (tagsOpenEl) {
-    tagsOpenEl.hidden = !isViewerSettingsAvailable || !viewerSettings.isSettingsOpen;
-  }
-
-  if (metadataOpenEl) {
-    metadataOpenEl.hidden =
-      !viewerState.currentBook || (isViewerSettingsAvailable && !viewerSettings.isSettingsOpen);
-  }
-
-  if (settingsPanelEl) {
-    settingsPanelEl.hidden = !isViewerSettingsAvailable || !viewerSettings.isSettingsOpen;
-    settingsPanelEl.dataset.scope = viewerSettings.scope;
-    settingsPanelEl.dataset.sourceType = sourceType ?? "";
-  }
-
-  scopeGlobalEl?.classList.toggle("is-active", viewerSettings.scope === "global");
-  scopeGlobalEl?.setAttribute("aria-selected", String(viewerSettings.scope === "global"));
-  scopeFileEl?.classList.toggle("is-active", viewerSettings.scope === "file");
-  scopeFileEl?.setAttribute("aria-selected", String(viewerSettings.scope === "file"));
-  if (sourceLabelEl) {
-    sourceLabelEl.textContent = sourceType === "epub" ? "EPUB" : "PDF";
-  }
-  if (readerFieldsEl) {
-    readerFieldsEl.hidden = !isViewerSettingsAvailable;
-  }
-
-  if (pageModeEl) {
-    pageModeEl.value = editingPreferences.pageMode;
-  }
-
-  if (bindingEl) {
-    bindingEl.value = editingPreferences.bindingDirection;
-  }
-
-  if (zoomModeEl) {
-    zoomModeEl.value = editingPreferences.zoomMode;
-  }
-
-  if (alignModeEl) {
-    alignModeEl.value = editingPreferences.alignMode;
-  }
-
-  if (verticalGapModeEl) {
-    verticalGapModeEl.value = editingPreferences.verticalGapMode;
-  }
-
-  if (scrollModeEl) {
-    scrollModeEl.value = editingPreferences.scrollMode;
-  }
-
-  if (coverModeEl) {
-    coverModeEl.checked = editingPreferences.treatFirstPageAsCover;
-  }
-
-  if (deskewModeEl) {
-    deskewModeEl.checked = editingPreferences.deskewMode === "auto";
-  }
-
-  if (trimModeEl) {
-    trimModeEl.checked = editingPreferences.trimMode === "auto";
-  }
-
-  if (epubFontSizeEl) {
-    epubFontSizeEl.value = String(editingPreferences.epubFontSize);
-  }
-
-  if (epubFontSizeOutputEl) {
-    epubFontSizeOutputEl.value = `${editingPreferences.epubFontSize}%`;
-  }
-
-  syncViewerBackgroundControls(
-    "viewer-background-mode",
-    "viewer-background-inherit",
-    editingPreferences.backgroundMode,
-  );
-
-  syncTocUi();
-}
-
-export function currentViewerPreferences(): ViewerSettings {
-  return {
-    ...(viewerSettings.scope === "file" ? viewerSettings.fileDraft : viewerSettings.globalDraft),
-  };
-}
-
-export function setViewerDraft(scope: ViewerSettingsScope, preferences: ViewerSettings) {
-  if (scope === "file") {
-    viewerSettings.fileDraft = { ...preferences };
-    return;
-  }
-
-  viewerSettings.globalDraft = { ...preferences };
-}
-
-function applyViewerPreferences(
-  preferences: ViewerSettings,
-  scope: ViewerSettingsScope,
-  hasFileOverride: boolean,
-  sourceType: ViewerSourceType,
-) {
-  viewerSettings.pageMode = preferences.pageMode;
-  viewerSettings.bindingDirection = preferences.bindingDirection;
-  viewerSettings.zoomMode = preferences.zoomMode;
-  viewerSettings.alignMode = preferences.alignMode;
-  viewerSettings.verticalGapMode = preferences.verticalGapMode;
-  viewerSettings.treatFirstPageAsCover = preferences.treatFirstPageAsCover;
-  viewerSettings.backgroundMode = preferences.backgroundMode;
-  viewerSettings.scrollMode = preferences.scrollMode;
-  viewerSettings.deskewMode = preferences.deskewMode;
-  viewerSettings.trimMode = preferences.trimMode;
-  syncImmediatePdfScrollMode();
-  viewerSettings.scope = scope;
-  viewerSettings.hasFileOverride = hasFileOverride;
-  viewerSettings.sourceType = sourceType;
-}
-
-export function applyViewerSettingsPayload(
-  payload: ViewerSettingsPayload,
-  sourceType: ViewerSourceType,
-  preferredScope: ViewerSettingsScope = payload.usesFileOverride ? "file" : "global",
-) {
-  const nextState = applyViewerSettingsPayloadToState(payload, preferredScope);
-  applyViewerPreferences(nextState, nextState.scope, nextState.hasFileOverride, sourceType);
-  viewerSettings.globalDraft = nextState.globalDraft;
-  viewerSettings.fileDraft = nextState.fileDraft;
-}
-
-async function loadViewerSettingsForCurrentBook() {
-  const currentBook = viewerState.currentBook;
-  const currentSourceType = currentViewerSettingsSourceType() ?? "pdf";
-
-  if (!currentBook) {
-    applyPdfViewerBackground("inherit-theme");
-    applyViewerPreferences(DEFAULT_VIEWER_SETTINGS, "global", false, currentSourceType);
-    viewerSettings.globalDraft = { ...DEFAULT_VIEWER_SETTINGS };
-    viewerSettings.fileDraft = { ...DEFAULT_VIEWER_SETTINGS };
-    syncViewerSettingsUi();
-    return;
-  }
-
-  viewerSettingsLoadToken += 1;
-  const currentToken = viewerSettingsLoadToken;
-
-  try {
-    const payload = await invoke<ViewerSettingsPayload>("load_viewer_preferences", {
-      filePath: currentBook.filePath,
-      sourceType: currentSourceType,
-    });
-
-    if (
-      currentToken !== viewerSettingsLoadToken ||
-      viewerState.currentBook?.filePath !== currentBook.filePath
-    ) {
-      return;
-    }
-
-    applyViewerSettingsPayload(payload, currentSourceType);
-    syncViewerSettingsUi();
-  } catch (error) {
-    applyPdfViewerBackground("inherit-theme");
-    applyViewerPreferences(DEFAULT_VIEWER_SETTINGS, "global", false, currentSourceType);
-    viewerSettings.globalDraft = { ...DEFAULT_VIEWER_SETTINGS };
-    viewerSettings.fileDraft = { ...DEFAULT_VIEWER_SETTINGS };
-    syncViewerSettingsUi();
-    console.error("Failed to load viewer preferences:", error);
-  }
-}
-
-async function destroyNoteEditor() {
+export async function destroyNoteEditor() {
   if (!noteEditor) {
     return;
   }
@@ -3296,7 +2687,7 @@ function scheduleNoteSave(markdown: string) {
   }, 900);
 }
 
-async function flushPendingNoteSave() {
+export async function flushPendingNoteSave() {
   if (noteSaveTimer === null || noteState.currentContent === noteState.savedContent) {
     return;
   }
@@ -3305,7 +2696,7 @@ async function flushPendingNoteSave() {
   await saveNoteNow();
 }
 
-async function loadNoteForCurrentBook() {
+export async function loadNoteForCurrentBook() {
   const noteRootEl = document.querySelector<HTMLElement>("#note-editor");
   const currentBook = viewerState.currentBook;
 
@@ -3359,24 +2750,6 @@ async function loadNoteForCurrentBook() {
       syncNoteUi();
     }
   }
-}
-
-async function clearCurrentBookSelection() {
-  appState.activeReadingPosition = captureReadingPositionFromViewer();
-  await flushReadingPositionSave();
-  await flushPendingNoteSave();
-  await destroyNoteEditor();
-  noteState.activeFilePath = null;
-  noteState.currentContent = "";
-  noteState.savedContent = "";
-  noteState.statusMessage = "Notes are saved automatically.";
-  viewerState.currentBook = null;
-  applyPdfViewerBackground("inherit-theme");
-  applyViewerPreferences(DEFAULT_VIEWER_SETTINGS, "global", false, "pdf");
-  viewerSettings.globalDraft = { ...DEFAULT_VIEWER_SETTINGS };
-  viewerSettings.fileDraft = { ...DEFAULT_VIEWER_SETTINGS };
-  syncNoteUi();
-  syncViewerSettingsUi();
 }
 
 function beginNoteDrag(event: PointerEvent) {
@@ -3702,224 +3075,6 @@ function syncNavigationControlsUi() {
   }
 }
 
-export function currentViewerStage() {
-  return document.querySelector<HTMLElement>(".viewer-stage");
-}
-
-function captureReadingPositionFromViewer(): ReadingPosition | null {
-  const currentBook = viewerState.currentBook;
-  const stageEl = currentViewerStage();
-  const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
-
-  if (
-    !currentBook ||
-    !stageEl ||
-    !pdfjsViewerEl ||
-    appState.lastSnapshot?.pdfRenderer !== "pdfjs" ||
-    pdfjsViewerEl.dataset.filePath !== currentBook.filePath
-  ) {
-    return appState.activeReadingPosition;
-  }
-
-  const pageEls = Array.from(
-    document.querySelectorAll<HTMLElement>(".pdfjs-page[data-page-number]"),
-  );
-
-  if (pageEls.length === 0) {
-    return appState.activeReadingPosition;
-  }
-
-  const anchorLine = stageEl.scrollTop + 24;
-  const anchorIndex = selectAnchorPageIndex(
-    pageEls.map((el) => el.offsetTop),
-    anchorLine,
-  );
-  const anchorPageEl = pageEls[anchorIndex] ?? pageEls[0]!;
-
-  const candidates = pageEls.map((el) => ({
-    pageNumber: Number(el.dataset.pageNumber ?? "0"),
-    offsetTop: el.offsetTop,
-    offsetHeight: el.offsetHeight,
-    el,
-  }));
-  const anchorCandidate = {
-    pageNumber: Number(anchorPageEl.dataset.pageNumber ?? "1"),
-    offsetTop: anchorPageEl.offsetTop,
-    offsetHeight: anchorPageEl.offsetHeight,
-    el: anchorPageEl,
-  };
-  const representative = selectHeadSidePageInSpread(anchorCandidate, candidates);
-
-  const pageNumber = representative.pageNumber;
-  const pageOffsetRatio = computePageOffsetRatio(
-    stageEl.scrollTop,
-    representative.offsetTop,
-    representative.offsetHeight,
-  );
-
-  return {
-    filePath: currentBook.filePath,
-    pageNumber,
-    pageOffsetRatio,
-    updatedAt: appState.activeReadingPosition?.updatedAt ?? null,
-  };
-}
-
-export function cacheReadingPosition(position: ReadingPosition | null) {
-  if (!position) {
-    return;
-  }
-  saveCachedReadingPosition(position);
-}
-
-function loadCachedReadingPosition(filePath: string): ReadingPosition | null {
-  return loadCachedReadingPositionFromStorage(filePath);
-}
-
-async function flushReadingPositionSave() {
-  if (readingPositionSaveTimer !== null) {
-    window.clearTimeout(readingPositionSaveTimer);
-    readingPositionSaveTimer = null;
-  }
-
-  if (
-    !appState.activeReadingPosition ||
-    appState.activeReadingPosition.filePath !== viewerState.currentBook?.filePath
-  ) {
-    return;
-  }
-
-  const sourceType = viewerState.currentBook?.sourceType;
-
-  try {
-    if (sourceType === "epub" && activeImageEpub) {
-      // Image EPUBs have no CFI; persist the page number like a PDF.
-      appState.activeReadingPosition = await invoke<ReadingPosition>("save_reading_position", {
-        filePath: appState.activeReadingPosition.filePath,
-        pageNumber: appState.activeReadingPosition.pageNumber,
-        pageOffsetRatio: appState.activeReadingPosition.pageOffsetRatio,
-      });
-    } else if (sourceType === "epub" && appState.activeReadingPosition.cfi) {
-      await invoke("save_epub_position", {
-        filePath: appState.activeReadingPosition.filePath,
-        cfi: appState.activeReadingPosition.cfi,
-      });
-    } else if (sourceType !== "epub") {
-      appState.activeReadingPosition = await invoke<ReadingPosition>("save_reading_position", {
-        filePath: appState.activeReadingPosition.filePath,
-        pageNumber: appState.activeReadingPosition.pageNumber,
-        pageOffsetRatio: appState.activeReadingPosition.pageOffsetRatio,
-      });
-    }
-  } catch (error) {
-    console.error("Failed to save reading position:", error);
-  }
-}
-
-export function scheduleEpubPositionSave() {
-  if (readingPositionSaveTimer !== null) {
-    window.clearTimeout(readingPositionSaveTimer);
-  }
-  readingPositionSaveTimer = window.setTimeout(() => {
-    void flushReadingPositionSave();
-  }, 1000);
-}
-
-export function scheduleReadingPositionSave() {
-  if (pdfRenderInProgress) {
-    return;
-  }
-  appState.activeReadingPosition = captureReadingPositionFromViewer();
-
-  if (!appState.activeReadingPosition) {
-    return;
-  }
-
-  cacheReadingPosition(appState.activeReadingPosition);
-  syncViewerPageJumpUi();
-
-  if (readingPositionSaveTimer !== null) {
-    window.clearTimeout(readingPositionSaveTimer);
-  }
-
-  readingPositionSaveTimer = window.setTimeout(() => {
-    void flushReadingPositionSave();
-  }, 1000);
-}
-
-async function loadReadingPositionForCurrentBook() {
-  const currentBook = viewerState.currentBook;
-
-  if (!currentBook) {
-    appState.activeReadingPosition = null;
-    syncViewerPageJumpUi();
-    return;
-  }
-
-  try {
-    appState.activeReadingPosition =
-      loadCachedReadingPosition(currentBook.filePath) ??
-      (await invoke<ReadingPosition | null>("load_reading_position", {
-        filePath: currentBook.filePath,
-      }));
-    cacheReadingPosition(appState.activeReadingPosition);
-    syncViewerPageJumpUi();
-  } catch (error) {
-    appState.activeReadingPosition = loadCachedReadingPosition(currentBook.filePath);
-    syncViewerPageJumpUi();
-    console.error("Failed to load reading position:", error);
-  }
-}
-
-export function restoreReadingPositionAttempt() {
-  const currentBook = viewerState.currentBook;
-  const stageEl = currentViewerStage();
-
-  if (!currentBook || !stageEl || !appState.activeReadingPosition) {
-    return false;
-  }
-
-  if (appState.activeReadingPosition.filePath !== currentBook.filePath) {
-    return false;
-  }
-
-  const pageEl = document.querySelector<HTMLElement>(
-    `.pdfjs-page[data-page-number="${appState.activeReadingPosition.pageNumber}"]`,
-  );
-
-  if (!pageEl) {
-    return false;
-  }
-
-  const stageRect = stageEl.getBoundingClientRect();
-  const pageRect = pageEl.getBoundingClientRect();
-  const pageOffsetRatio = clampReadingPositionOffsetRatio(
-    appState.activeReadingPosition.pageOffsetRatio,
-  );
-  const pageTopInStage = stageEl.scrollTop + (pageRect.top - stageRect.top);
-  const targetTop = pageTopInStage + pageEl.offsetHeight * pageOffsetRatio;
-
-  stageEl.scrollTo({
-    top: Math.max(targetTop, 0),
-    behavior: "auto",
-  });
-  return true;
-}
-
-export function scheduleReadingPositionRestore() {
-  let attempts = 0;
-  const run = () => {
-    attempts += 1;
-    if (restoreReadingPositionAttempt() || attempts >= 5) {
-      return;
-    }
-
-    window.requestAnimationFrame(run);
-  };
-
-  window.requestAnimationFrame(run);
-}
-
 export function navigateBack() {
   if (navigationHistoryIndex <= 0) {
     return;
@@ -3950,143 +3105,6 @@ function navigateForward() {
   void applyNavigationState(nextState).finally(() => {
     suppressHistoryUpdates = false;
   });
-}
-
-export async function renderCurrentPage() {
-  const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
-  const viewerStageEl = currentViewerStage();
-  const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
-  const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
-  const snapshot = appState.lastSnapshot;
-
-  if (
-    !frame ||
-    !viewerStageEl ||
-    !pdfjsViewerEl ||
-    !epubViewerEl ||
-    !viewerState.currentBook ||
-    !snapshot
-  ) {
-    return;
-  }
-
-  const previousFilePath = pdfjsViewerEl.dataset.filePath;
-  if (previousFilePath && previousFilePath === viewerState.currentBook.filePath) {
-    appState.activeReadingPosition = captureReadingPositionFromViewer();
-  }
-
-  const sourceUrl = convertFileSrc(viewerState.currentBook.filePath);
-
-  if (viewerState.currentBook.sourceType === "epub") {
-    await renderEpubBook(frame, pdfjsViewerEl, epubViewerEl, sourceUrl);
-    return;
-  }
-
-  destroyEpubBook();
-  destroyImageEpub();
-
-  if (snapshot.pdfRenderer === "pdfjs") {
-    await renderPdfJsBook(frame, viewerStageEl, pdfjsViewerEl, sourceUrl);
-    return;
-  }
-
-  closePdfSearch();
-  releaseActivePdfDocument();
-  appState.activePdfOutline = null;
-  applyEpubViewerColors("inherit-theme");
-  applyPdfViewerBackground("inherit-theme");
-  pdfjsViewerEl.hidden = true;
-  pdfjsViewerEl.innerHTML = "";
-  pdfjsViewerEl.dataset.filePath = "";
-  frame.hidden = false;
-  frame.dataset.filePath = viewerState.currentBook.filePath;
-  frame.src = appState.activeReadingPosition?.pageNumber
-    ? `${sourceUrl}#page=${appState.activeReadingPosition.pageNumber}`
-    : sourceUrl;
-}
-
-function viewerNeedsRender(snapshot: LibrarySnapshot) {
-  const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
-  const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
-  const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
-  const currentBook = viewerState.currentBook;
-
-  if (!frame || !pdfjsViewerEl || !epubViewerEl || !currentBook) {
-    return false;
-  }
-
-  if (currentBook.sourceType === "epub") {
-    return (
-      epubViewerEl.hidden ||
-      epubViewerEl.dataset.filePath !== currentBook.filePath ||
-      activeEpubBook === null
-    );
-  }
-
-  if (snapshot.pdfRenderer === "pdfjs") {
-    return (
-      pdfjsViewerEl.hidden ||
-      pdfjsViewerEl.dataset.filePath !== currentBook.filePath ||
-      pdfjsViewerEl.childElementCount === 0
-    );
-  }
-
-  return frame.hidden || frame.dataset.filePath !== currentBook.filePath;
-}
-
-async function openBook(
-  book: BookSummary,
-  options: { updateHistory?: "push" | "replace" | "none" } = {},
-) {
-  const { updateHistory = "none" } = options;
-
-  if (viewerState.currentBook?.filePath !== book.filePath) {
-    appState.activeReadingPosition = captureReadingPositionFromViewer();
-    await flushReadingPositionSave();
-    await flushPendingNoteSave();
-    await destroyNoteEditor();
-    resetPdfZoomScaleForBook();
-  }
-
-  viewerState.currentBook = book;
-
-  if (updateHistory !== "none") {
-    syncNavigationHistory(updateHistory);
-  }
-
-  await loadReadingPositionForCurrentBook();
-  applyPendingViewerJump(book);
-  await loadViewerSettingsForCurrentBook();
-  renderApp();
-  await loadNoteForCurrentBook();
-}
-
-// When a full-text hit opens a book, override the just-restored reading position
-// so the viewer lands on the matched page (PDF) or section (EPUB) instead.
-function applyPendingViewerJump(book: BookSummary) {
-  if (!appState.pendingViewerJump || appState.pendingViewerJump.filePath !== book.filePath) {
-    return;
-  }
-  const jump = appState.pendingViewerJump;
-  appState.pendingViewerJump = null;
-  if (book.sourceType === "epub" && jump.cfi) {
-    appState.activeReadingPosition = {
-      filePath: book.filePath,
-      pageNumber: 1,
-      pageOffsetRatio: 0,
-      cfi: jump.cfi,
-      updatedAt: null,
-    };
-  } else if (typeof jump.page === "number") {
-    appState.activeReadingPosition = {
-      filePath: book.filePath,
-      pageNumber: jump.page,
-      pageOffsetRatio: 0,
-      cfi: null,
-      updatedAt: null,
-    };
-  }
-  syncViewerPageJumpUi();
 }
 
 function renderSidebar(snapshot: LibrarySnapshot) {
@@ -5413,7 +4431,7 @@ function renderMain(snapshot: LibrarySnapshot) {
   }
 }
 
-function renderApp() {
+export function renderApp() {
   if (!appState.lastSnapshot) {
     return;
   }
@@ -5662,49 +4680,6 @@ function initNavigationControls() {
 
   navForwardEl?.addEventListener("click", () => {
     navigateForward();
-  });
-}
-
-function initViewerPageJump() {
-  const viewerPageJumpFormEl = document.querySelector<HTMLFormElement>("#viewer-page-jump-form");
-  const viewerPageJumpInputEl = document.querySelector<HTMLInputElement>("#viewer-page-jump-input");
-
-  viewerPageJumpInputEl?.addEventListener("input", () => {
-    viewerPageJumpState.input = viewerPageJumpInputEl.value;
-  });
-
-  viewerPageJumpInputEl?.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      const currentPageNumber = currentViewerPageNumber();
-      viewerPageJumpState.input = currentPageNumber === null ? "" : String(currentPageNumber);
-      syncViewerPageJumpUi();
-      viewerPageJumpInputEl.blur();
-    }
-  });
-
-  viewerPageJumpInputEl?.addEventListener("focus", () => {
-    viewerPageJumpInputEl.select();
-  });
-
-  viewerPageJumpInputEl?.addEventListener("blur", () => {
-    const currentPageNumber = currentViewerPageNumber();
-    viewerPageJumpState.input = currentPageNumber === null ? "" : String(currentPageNumber);
-    syncViewerPageJumpUi();
-  });
-
-  viewerPageJumpFormEl?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const pageNumber = parseRequestedPageNumber(viewerPageJumpState.input);
-    if (pageNumber === null) {
-      const currentPageNumber = currentViewerPageNumber();
-      viewerPageJumpState.input = currentPageNumber === null ? "" : String(currentPageNumber);
-      syncViewerPageJumpUi();
-      return;
-    }
-
-    navigateViewerToPage(pageNumber);
-    viewerPageJumpInputEl?.blur();
   });
 }
 
@@ -6048,23 +5023,6 @@ function initAbout() {
   appAboutBackdropEl?.addEventListener("click", closeAbout);
 }
 
-function initViewerEditorButtons() {
-  const viewerTagsOpenEl = document.querySelector<HTMLButtonElement>("#viewer-tags-open");
-  const viewerMetadataOpenEl = document.querySelector<HTMLButtonElement>("#viewer-metadata-open");
-
-  viewerTagsOpenEl?.addEventListener("click", () => {
-    if (viewerState.currentBook) {
-      openTagEditor(viewerState.currentBook);
-    }
-  });
-
-  viewerMetadataOpenEl?.addEventListener("click", () => {
-    if (viewerState.currentBook) {
-      void openBookMetadataEditor(viewerState.currentBook);
-    }
-  });
-}
-
 function initShelfEditor() {
   const shelfEditorCloseEl = document.querySelector<HTMLButtonElement>("#shelf-editor-close");
   const shelfEditorCancelEl = document.querySelector<HTMLButtonElement>("#shelf-editor-cancel");
@@ -6286,264 +5244,6 @@ function initBookMetadataEditor() {
   });
 }
 
-function initViewerSettingsPanel() {
-  const viewerSettingsToggleEl =
-    document.querySelector<HTMLButtonElement>("#viewer-settings-toggle");
-  const viewerSettingsPanelEl = document.querySelector<HTMLElement>("#viewer-settings-panel");
-  const viewerSettingsScopeGlobalEl = document.querySelector<HTMLButtonElement>(
-    "#viewer-settings-scope-global",
-  );
-  const viewerSettingsScopeFileEl = document.querySelector<HTMLButtonElement>(
-    "#viewer-settings-scope-file",
-  );
-  const viewerPageModeEl = document.querySelector<HTMLSelectElement>("#viewer-page-mode");
-  const viewerBindingEl = document.querySelector<HTMLSelectElement>("#viewer-binding-direction");
-  const viewerZoomModeEl = document.querySelector<HTMLSelectElement>("#viewer-zoom-mode");
-  const viewerAlignModeEl = document.querySelector<HTMLSelectElement>("#viewer-align-mode");
-  const viewerVerticalGapModeEl = document.querySelector<HTMLSelectElement>(
-    "#viewer-vertical-gap-mode",
-  );
-  const viewerScrollModeEl = document.querySelector<HTMLSelectElement>("#viewer-scroll-mode");
-  const viewerCoverModeEl = document.querySelector<HTMLInputElement>("#viewer-cover-mode");
-  const viewerDeskewModeEl = document.querySelector<HTMLInputElement>("#viewer-deskew-mode");
-  const viewerTrimModeEl = document.querySelector<HTMLInputElement>("#viewer-trim-mode");
-  const viewerEpubFontSizeEl = document.querySelector<HTMLInputElement>("#viewer-epub-font-size");
-  const viewerEpubFontSizeOutputEl = document.querySelector<HTMLOutputElement>(
-    "#viewer-epub-font-size-output",
-  );
-  const viewerBackgroundInheritEl = document.querySelector<HTMLInputElement>(
-    "#viewer-background-inherit",
-  );
-
-  viewerSettingsToggleEl?.addEventListener("click", () => {
-    const isOpening = !viewerSettings.isSettingsOpen;
-    viewerSettings.isSettingsOpen = isOpening;
-    if (isOpening) {
-      viewerSettings.scope = "file";
-    }
-    syncViewerSettingsUi();
-  });
-
-  const rerenderPdfJs = () => {
-    const sourceType = currentViewerSettingsSourceType();
-    syncViewerSettingsUi();
-    if (
-      sourceType === "pdf" &&
-      appState.lastSnapshot?.pdfRenderer === "pdfjs" &&
-      viewerState.currentBook
-    ) {
-      void renderCurrentPage();
-    }
-  };
-
-  const persistViewerSettings = async () => {
-    const currentFilePath = viewerState.currentBook?.filePath ?? null;
-    const sourceType = currentViewerSettingsSourceType() ?? viewerSettings.sourceType;
-
-    if (viewerSettings.scope === "file" && currentFilePath) {
-      const payload = await invoke<ViewerSettingsPayload>("save_file_viewer_preferences", {
-        filePath: currentFilePath,
-        sourceType,
-        preferences: currentViewerPreferences(),
-      });
-      applyViewerSettingsPayload(payload, sourceType, "file");
-      return;
-    }
-
-    const payload = await invoke<ViewerSettingsPayload>("save_default_viewer_preferences", {
-      currentFilePath,
-      sourceType,
-      preferences: currentViewerPreferences(),
-    });
-    applyViewerSettingsPayload(payload, sourceType, "global");
-  };
-
-  const updateViewerSettings = (mutate: () => void, options: { rerenderPdf?: boolean } = {}) => {
-    const { rerenderPdf = true } = options;
-    mutate();
-    syncViewerSettingsUi();
-    syncImmediatePdfBackgroundPreview();
-    void persistViewerSettings()
-      .catch((error) => {
-        console.error("Failed to save viewer preferences:", error);
-      })
-      .finally(() => {
-        if (rerenderPdf) {
-          rerenderPdfJs();
-        }
-        rebuildImageEpub();
-      });
-  };
-
-  const switchViewerSettingsScope = (requestedScope: ViewerSettingsScope) => {
-    const nextState = switchViewerSettingsScopeInState(viewerSettings, requestedScope);
-    viewerSettings.scope = nextState.scope;
-    viewerSettings.fileDraft = nextState.fileDraft;
-    syncViewerSettingsUi();
-  };
-
-  const mutateEditingViewerSettings = (mutate: (preferences: ViewerSettings) => void) => {
-    const nextPreferences = { ...currentViewerPreferences() };
-    mutate(nextPreferences);
-    setViewerDraft(viewerSettings.scope, nextPreferences);
-  };
-
-  viewerSettingsScopeGlobalEl?.addEventListener("click", () => {
-    switchViewerSettingsScope("global");
-  });
-
-  viewerSettingsScopeFileEl?.addEventListener("click", () => {
-    switchViewerSettingsScope("file");
-  });
-
-  viewerPageModeEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.pageMode = viewerPageModeEl.value as ViewerSettings["pageMode"];
-      });
-    });
-  });
-
-  viewerBindingEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.bindingDirection = viewerBindingEl.value as ViewerSettings["bindingDirection"];
-      });
-    });
-  });
-
-  viewerZoomModeEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.zoomMode = viewerZoomModeEl.value as ViewerSettings["zoomMode"];
-      });
-    });
-  });
-
-  viewerAlignModeEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.alignMode = viewerAlignModeEl.value as ViewerSettings["alignMode"];
-      });
-    });
-  });
-
-  viewerVerticalGapModeEl?.addEventListener("change", () => {
-    updateViewerSettings(
-      () => {
-        mutateEditingViewerSettings((preferences) => {
-          preferences.verticalGapMode =
-            viewerVerticalGapModeEl.value as ViewerSettings["verticalGapMode"];
-        });
-        syncImmediateViewerLayoutPreview();
-      },
-      { rerenderPdf: false },
-    );
-  });
-
-  viewerCoverModeEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.treatFirstPageAsCover = viewerCoverModeEl.checked;
-      });
-    });
-  });
-
-  viewerDeskewModeEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.deskewMode = viewerDeskewModeEl.checked ? "auto" : "off";
-      });
-    });
-  });
-
-  viewerTrimModeEl?.addEventListener("change", () => {
-    updateViewerSettings(() => {
-      mutateEditingViewerSettings((preferences) => {
-        preferences.trimMode = viewerTrimModeEl.checked ? "auto" : "off";
-      });
-    });
-  });
-
-  viewerScrollModeEl?.addEventListener("change", () => {
-    updateViewerSettings(
-      () => {
-        mutateEditingViewerSettings((preferences) => {
-          preferences.scrollMode = viewerScrollModeEl.value as ViewerSettings["scrollMode"];
-        });
-        syncImmediatePdfScrollMode();
-      },
-      { rerenderPdf: false },
-    );
-  });
-
-  viewerEpubFontSizeEl?.addEventListener("input", () => {
-    const fontSize = Number(viewerEpubFontSizeEl.value);
-    if (viewerEpubFontSizeOutputEl) {
-      viewerEpubFontSizeOutputEl.value = `${fontSize}%`;
-    }
-    mutateEditingViewerSettings((preferences) => {
-      preferences.epubFontSize = fontSize;
-    });
-    applyEpubFontSize(fontSize);
-  });
-
-  viewerEpubFontSizeEl?.addEventListener("change", () => {
-    updateViewerSettings(
-      () => {
-        mutateEditingViewerSettings((preferences) => {
-          preferences.epubFontSize = Number(viewerEpubFontSizeEl.value);
-        });
-      },
-      { rerenderPdf: false },
-    );
-  });
-
-  bindViewerBackgroundOptionGroup("viewer-background-mode", (value) => {
-    updateViewerSettings(
-      () => {
-        mutateEditingViewerSettings((preferences) => {
-          preferences.backgroundMode = value;
-        });
-      },
-      { rerenderPdf: false },
-    );
-  });
-
-  viewerBackgroundInheritEl?.addEventListener("change", () => {
-    updateViewerSettings(
-      () => {
-        mutateEditingViewerSettings((preferences) => {
-          preferences.backgroundMode = viewerBackgroundInheritEl.checked
-            ? "inherit-theme"
-            : preferredExplicitViewerBackgroundMode(preferences.backgroundMode, currentAppTheme());
-        });
-      },
-      { rerenderPdf: false },
-    );
-  });
-
-  window.addEventListener("click", (event) => {
-    const target = event.target as Node | null;
-    if (
-      viewerSettings.isSettingsOpen &&
-      target &&
-      !viewerSettingsPanelEl?.contains(target) &&
-      !viewerSettingsToggleEl?.contains(target)
-    ) {
-      viewerSettings.isSettingsOpen = false;
-      syncViewerSettingsUi();
-    }
-  });
-}
-
-function initTocToggle() {
-  document.querySelector<HTMLButtonElement>("#epub-toc-toggle")?.addEventListener("click", () => {
-    appState.tocPanelOpen = !appState.tocPanelOpen;
-    syncTocUi();
-  });
-}
-
 function initNotes() {
   const noteToggleEl = document.querySelector<HTMLButtonElement>("#note-toggle");
   const noteCloseEl = document.querySelector<HTMLButtonElement>("#note-close");
@@ -6756,59 +5456,6 @@ function initGlobalShortcuts() {
           void activeEpubRendition?.prev();
         }
       }
-    }
-  });
-}
-
-function initViewerResize() {
-  window.addEventListener("resize", () => {
-    if (shouldAnchorNoteWindowToBottomRight()) {
-      const nextState = preserveNoteWindowBottomRightOffset(noteState, lastViewportSize, {
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-      noteState.x = nextState.x;
-      noteState.y = nextState.y;
-    }
-
-    clampNoteWindow();
-    syncNoteUi();
-    lastViewportSize = {
-      width: window.innerWidth,
-      height: window.innerHeight,
-    };
-
-    if (pdfRenderResizeTimer !== null) {
-      window.clearTimeout(pdfRenderResizeTimer);
-    }
-
-    if (appState.lastSnapshot?.pdfRenderer === "pdfjs" && viewerState.currentBook) {
-      pdfRenderResizeTimer = window.setTimeout(() => {
-        void renderCurrentPage();
-      }, 120);
-    }
-
-    resizeEpubRendition();
-    fitImageEpubSpread();
-  });
-
-  // When the sidebar opens or closes the CSS grid transition changes the
-  // right-pane width.  Call resize() once the transition finishes so
-  // epub.js recalculates its column layout for the new dimensions.
-  document.querySelector(".two-pane")?.addEventListener("transitionend", (e) => {
-    if ((e as TransitionEvent).propertyName === "grid-template-columns") {
-      resizeEpubRendition();
-      fitImageEpubSpread();
-    }
-  });
-}
-
-function initFlushOnUnload() {
-  window.addEventListener("beforeunload", () => {
-    appState.activeReadingPosition = captureReadingPositionFromViewer();
-    void flushReadingPositionSave();
-    if (noteSaveTimer !== null) {
-      window.clearTimeout(noteSaveTimer);
     }
   });
 }

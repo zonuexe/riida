@@ -15,21 +15,17 @@ import { buildPdfRenderWindowPlan } from "../pdf-render-window-utils";
 import { planPagedKeyAction } from "../pdf-paged-nav-utils";
 import { applyEpubViewerColors } from "./epub-viewer";
 import { applyPdfSearchHighlights, closePdfSearch, pdfSearchState } from "./pdf-search";
-import { appState, viewerSettings, viewerState } from "./state";
-import type { PdfOutlineNode } from "./types";
 import {
-  applyPdfViewerBackground,
-  applyViewerVerticalGapMode,
-  buildPdfToc,
-  currentViewerStage,
-  navigateBack,
-  navigateViewerToPage,
-  renderCurrentPage,
   restoreReadingPositionAttempt,
   scheduleReadingPositionRestore,
   scheduleReadingPositionSave,
-  syncTocUi,
-} from "../main";
+} from "./reading-position";
+import { appState, viewerSettings, viewerState } from "./state";
+import { buildPdfToc, syncTocUi } from "./toc";
+import type { PdfOutlineNode } from "./types";
+import { applyPdfViewerBackground, applyViewerVerticalGapMode } from "./viewer-settings";
+import { currentViewerStage, navigateViewerToPage, renderCurrentPage } from "./viewer";
+import { navigateBack } from "../main";
 
 type PdfRenderPlan = {
   groupIndex: number;

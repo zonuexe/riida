@@ -21,21 +21,19 @@ import {
   renderImageEpub,
 } from "./image-epub-viewer";
 import { releaseActivePdfDocument } from "./pdf-viewer";
+import { scheduleEpubPositionSave } from "./reading-position";
 import { appState, viewerSettings, viewerState } from "./state";
+import { buildEpubToc, syncTocUi } from "./toc";
 import {
   applyViewerSettingsPayload,
   applyViewerVerticalGapMode,
-  buildEpubToc,
-  currentAppTheme,
   currentViewerPreferences,
   currentViewerSettingsSourceType,
-  scheduleEpubPositionSave,
   setViewerDraft,
-  syncNavigationHistory,
-  syncTocUi,
-  syncViewerPageJumpUi,
   syncViewerSettingsUi,
-} from "../main";
+} from "./viewer-settings";
+import { syncViewerPageJumpUi } from "./viewer";
+import { currentAppTheme, syncNavigationHistory } from "../main";
 
 let epubRenderToken = 0;
 export let activeEpubBook: import("epubjs").Book | null = null;

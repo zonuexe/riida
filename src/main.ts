@@ -29,7 +29,7 @@ import { initViewerPageJump } from "./app/page-jump";
 import { initPdfSearch } from "./app/pdf-search";
 import { initPdfStageScroll } from "./app/pdf-viewer";
 import { initFlushOnUnload } from "./app/reading-position";
-import { initAppSettings, loadAppConfig } from "./app/settings";
+import { initAppSettings, loadAppConfig, syncAppSettingsUi } from "./app/settings";
 import { initShelfEditor } from "./app/shelf-editor";
 import { installAppShell } from "./app/shell";
 import { initShellControls, initSidebarControls } from "./app/sidebar";
@@ -44,7 +44,13 @@ import {
 } from "./app/viewer";
 import { initLibraryWelcome, registerLibraryDrops } from "./app/welcome";
 
-installAppShell({ renderApp, renderCurrentPage, navigateViewerToPage, applyNavigationState });
+installAppShell({
+  renderApp,
+  renderCurrentPage,
+  navigateViewerToPage,
+  applyNavigationState,
+  syncAppSettingsUi,
+});
 
 window.addEventListener("DOMContentLoaded", async () => {
   applyStaticTranslations();

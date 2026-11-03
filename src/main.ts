@@ -5710,297 +5710,7 @@ async function renderCurrentPage() {
   const sourceUrl = convertFileSrc(viewerState.currentBook.filePath);
 
   if (viewerState.currentBook.sourceType === "epub") {
-    // Image-sequence fixed-layout EPUBs (comics / scans: every page a single
-    // image) get the lightweight native image viewer instead of epub.js.
-    const epubFilePath = viewerState.currentBook.filePath;
-    let imageLayout = imageEpubLayoutCache.get(epubFilePath);
-    if (!imageLayout) {
-      try {
-        imageLayout = await invoke<EpubImageLayoutPayload>("epub_image_layout", {
-          filePath: epubFilePath,
-        });
-        imageEpubLayoutCache.set(epubFilePath, imageLayout);
-      } catch (error) {
-        console.warn("[riida] epub_image_layout failed:", error);
-      }
-    }
-    if (viewerState.currentBook?.filePath !== epubFilePath) {
-      return;
-    }
-    if (imageLayout?.is_image_epub) {
-      renderImageEpub(imageLayout);
-      return;
-    }
-    destroyImageEpub();
-
-    applyEpubViewerColors(viewerSettings.backgroundMode);
-    await maybeShowEpubPreviewNotice();
-    destroyEpubBook();
-    releaseActivePdfDocument();
-    activePdfOutline = null;
-    frame.hidden = true;
-    frame.src = "about:blank";
-    frame.dataset.filePath = "";
-    pdfjsViewerEl.hidden = true;
-    pdfjsViewerEl.innerHTML = "";
-    pdfjsViewerEl.dataset.filePath = "";
-    epubViewerEl.hidden = false;
-    epubViewerEl.dataset.filePath = viewerState.currentBook.filePath;
-    epubViewerEl.innerHTML = "";
-    const epubLoadingEl = document.createElement("div");
-    epubLoadingEl.className = "epub-loading";
-    const epubLoadingSpinnerEl = document.createElement("div");
-    epubLoadingSpinnerEl.className = "epub-loading-spinner";
-    epubLoadingEl.appendChild(epubLoadingSpinnerEl);
-    const epubLoadingLabelEl = document.createElement("div");
-    epubLoadingLabelEl.className = "epub-loading-label";
-    epubLoadingLabelEl.textContent = "Loading EPUB...";
-    epubLoadingEl.appendChild(epubLoadingLabelEl);
-    epubViewerEl.appendChild(epubLoadingEl);
-
-    epubRenderToken += 1;
-    const currentToken = epubRenderToken;
-
-    try {
-      const EpubModule = await loadEpubJs();
-      if (currentToken !== epubRenderToken) return;
-
-      const Epub = EpubModule.default;
-      const book = Epub(sourceUrl);
-      activeEpubBook = book;
-      await book.ready;
-      if (currentToken !== epubRenderToken) return;
-
-      tocPanelOpen = false;
-      buildEpubToc();
-      syncTocUi();
-
-      // Fast path: reuse previously-generated locations when the file
-      // hasn't changed. Falls back to background generation after display.
-      const locationsFilePath = viewerState.currentBook.filePath;
-      const locationsFileSize = viewerState.currentBook.fileSize;
-      const cachedLocations = loadCachedEpubLocations(locationsFilePath, locationsFileSize);
-      let locationsReady = false;
-      if (cachedLocations) {
-        try {
-          book.locations.load(cachedLocations);
-          activeEpubTotalPages = Math.max(book.locations.length(), 1);
-          locationsReady = true;
-        } catch (err) {
-          console.warn("[riida] failed to load cached EPUB locations:", err);
-        }
-      }
-      syncViewerPageJumpUi();
-
-      // Detect page-progression-direction for correct key mapping.
-      // DPFJ guide §ページ進行方向の遵守: direction is from OPF spine, not writing-mode.
-      // In rtl books (Japanese vertical text etc.) ArrowLeft = next page, ArrowRight = prev.
-      // epub.js exposes package/spine internals not covered by the public typings.
-      const bookInternal = book as unknown as {
-        spine?: { direction?: string };
-        package?: { metadata?: { direction?: string; rendition_layout?: string } };
-      };
-      const spineDirection =
-        bookInternal.spine?.direction ?? bookInternal.package?.metadata?.direction ?? "ltr";
-      activeEpubIsRtl = spineDirection === "rtl";
-
-      // Detect fixed-layout vs. reflow from OPF metadata.
-      // DPFJ guide §固定レイアウト: pre-paginated books use SVG-wrapped images and
-      // require flow:"pre-paginated" so epub.js renders each spine item as a single page.
-      const renditionLayout = bookInternal.package?.metadata?.rendition_layout ?? "";
-      const isPrePaginated = renditionLayout === "pre-paginated";
-      const flow: string = isPrePaginated ? "pre-paginated" : "paginated";
-      const spread = isPrePaginated
-        ? "auto"
-        : viewerSettings.pageMode === "spread"
-          ? "always"
-          : "none";
-
-      book.spine.hooks.content.register((doc: Document, section: { index: number }) => {
-        doc.documentElement?.setAttribute(
-          "data-riida-file-path",
-          viewerState.currentBook?.filePath ?? "",
-        );
-        doc.documentElement?.setAttribute("data-riida-section-index", String(section.index));
-      });
-
-      // Ensure the viewer element has actually been laid out before
-      // creating the rendition. WKWebView occasionally reports 0 for
-      // clientWidth/clientHeight on the first frame after show; epub.js
-      // then locks the stage to 0x0 and never recovers. Poll up to ~20
-      // frames for a non-zero size so the stage starts at the right size.
-      for (let attempts = 0; attempts < 20; attempts += 1) {
-        if (epubViewerEl.clientWidth > 0 && epubViewerEl.clientHeight > 0) break;
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-        if (currentToken !== epubRenderToken) return;
-      }
-
-      const rendition = book.renderTo(epubViewerEl, {
-        width: "100%",
-        height: "100%",
-        spread,
-        flow,
-        allowScriptedContent: true,
-      });
-
-      const epubThemePalette = viewerColorPaletteForMode(
-        viewerSettings.backgroundMode,
-        currentAppTheme(),
-      );
-      rendition.themes.default({
-        html: {
-          "background-color": `${epubThemePalette.background} !important`,
-          color: `${epubThemePalette.foreground} !important`,
-        },
-        // DPFJ guide §ページメディアの余白: RS should not add its own margins to body.
-        // epub.js injects padding by default; suppress it so the book's own CSS controls spacing.
-        body: {
-          "background-color": `${epubThemePalette.background} !important`,
-          color: `${epubThemePalette.foreground} !important`,
-          padding: "0 !important",
-          margin: "0 !important",
-        },
-        a: {
-          color: `${epubThemePalette.link} !important`,
-        },
-        pre: {
-          "white-space": "pre-wrap !important",
-          "word-break": "break-all !important",
-          "overflow-wrap": "break-word !important",
-        },
-        code: {
-          "word-break": "break-all !important",
-          "overflow-wrap": "break-word !important",
-        },
-      });
-
-      const contentHooks = rendition.hooks.content.list();
-      if (contentHooks.length > 0) {
-        rendition.hooks.content.deregister(contentHooks[0]);
-      }
-
-      rendition.hooks.content.register((contents: import("epubjs").Contents) => {
-        try {
-          installEpubLinkBridge(contents, viewerState.currentBook?.filePath ?? "");
-          if (contents.document) {
-            applyEpubColorsToDocument(
-              contents.document,
-              viewerColorPaletteForMode(viewerSettings.backgroundMode, currentAppTheme()),
-            );
-            injectEpubWritingModeCSS(contents.document);
-          }
-        } catch (err) {
-          console.error("[riida] epub link hook failed:", err);
-        }
-      });
-
-      activeEpubLinkMessageHandler = (event: MessageEvent) => {
-        if (currentToken !== epubRenderToken || !isEpubLinkMessage(event.data)) {
-          return;
-        }
-
-        const currentBook = viewerState.currentBook;
-        if (!currentBook || currentBook.sourceType !== "epub") {
-          return;
-        }
-
-        if (event.data.filePath !== currentBook.filePath) {
-          return;
-        }
-
-        const sectionHref = book.spine.get(event.data.sectionIndex)?.href ?? null;
-        const action = resolveEpubLinkAction(event.data.href, sectionHref);
-        if (!action) {
-          return;
-        }
-
-        if (action.kind === "external") {
-          void openUrl(action.target);
-          return;
-        }
-
-        captureEpubCfiForHistory(rendition);
-        syncNavigationHistory("push");
-        void epubDisplayHref(book, rendition, action.target);
-      };
-      window.addEventListener("message", activeEpubLinkMessageHandler);
-
-      const restoreCfi = activeReadingPosition?.cfi ?? undefined;
-      await rendition.display(restoreCfi);
-      if (currentToken !== epubRenderToken) return;
-
-      activeEpubRendition = rendition;
-      applyViewerVerticalGapMode(viewerSettings.verticalGapMode);
-      applyEpubViewerColors(viewerSettings.backgroundMode);
-      applyEpubFontSize(viewerSettings.epubFontSize);
-
-      // Safety net: if the initial render ended up at zero dimensions
-      // (WKWebView can report 0 clientWidth/Height on first attach),
-      // force resize + redisplay before hiding the spinner. epub.js's
-      // own onResized only re-displays when rendition.location is set,
-      // which can fail to happen after a 0x0 initial render.
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      if (currentToken !== epubRenderToken) return;
-      const iframeEl = epubViewerEl.querySelector<HTMLIFrameElement>("iframe");
-      if (!iframeEl || iframeEl.clientWidth === 0 || iframeEl.clientHeight === 0) {
-        resizeEpubRendition();
-        try {
-          await rendition.display(restoreCfi);
-        } catch (err) {
-          console.warn("[riida] epub redisplay after resize failed:", err);
-        }
-        if (currentToken !== epubRenderToken) return;
-      }
-
-      syncEpubLinkOverlays(rendition, book, epubViewerEl);
-      epubLoadingEl.remove();
-
-      // Slow path: compute pagination in the background so the first
-      // page renders immediately. Result is cached for next open.
-      if (!locationsReady) {
-        void (async () => {
-          try {
-            await book.locations.generate(1200);
-            if (currentToken !== epubRenderToken) return;
-            activeEpubTotalPages = Math.max(book.locations.length(), 1);
-            saveCachedEpubLocations(locationsFilePath, locationsFileSize, book.locations.save());
-            syncViewerPageJumpUi();
-          } catch (err) {
-            console.warn("[riida] failed to generate EPUB locations:", err);
-          }
-        })();
-      }
-
-      rendition.on("relocated", (location: import("epubjs").Location) => {
-        const cfi = location.start.cfi;
-        const currentBook = viewerState.currentBook;
-        if (!cfi || !currentBook || currentBook.sourceType !== "epub") return;
-        const totalPages = activeEpubTotalPages ?? Math.max(book.locations.length(), 1);
-        const currentPageNumber = epubPageNumberFromLocation(location.start.location, totalPages);
-        activeReadingPosition = {
-          filePath: currentBook.filePath,
-          pageNumber: currentPageNumber,
-          pageOffsetRatio: 0,
-          cfi,
-          updatedAt: activeReadingPosition?.updatedAt ?? null,
-        };
-        syncEpubLinkOverlays(rendition, book, epubViewerEl);
-        syncViewerPageJumpUi();
-        scheduleEpubPositionSave();
-      });
-
-      rendition.on("rendered", () => {
-        syncEpubLinkOverlays(rendition, book, epubViewerEl);
-        syncEpubCoverOverlay(epubViewerEl);
-      });
-    } catch (error) {
-      if (currentToken !== epubRenderToken) return;
-      epubViewerEl.innerHTML = "";
-      const errorEl = document.createElement("div");
-      errorEl.className = "pdfjs-loading";
-      errorEl.textContent = `Failed to open EPUB: ${String(error)}`;
-      epubViewerEl.appendChild(errorEl);
-    }
+    await renderEpubBook(frame, pdfjsViewerEl, epubViewerEl, sourceUrl);
     return;
   }
 
@@ -6008,305 +5718,7 @@ async function renderCurrentPage() {
   destroyImageEpub();
 
   if (snapshot.pdfRenderer === "pdfjs") {
-    applyEpubViewerColors("inherit-theme");
-    applyPdfViewerBackground(viewerSettings.backgroundMode);
-    syncImmediatePdfScrollMode();
-    releaseActivePdfDocument();
-    activePdfOutline = null;
-    frame.hidden = true;
-    frame.src = "about:blank";
-    frame.dataset.filePath = "";
-    pdfjsViewerEl.hidden = false;
-    pdfjsViewerEl.innerHTML = "";
-    pdfjsViewerEl.dataset.filePath = viewerState.currentBook.filePath;
-    pdfjsViewerEl.dataset.position = viewerSettings.alignMode;
-    applyViewerVerticalGapMode(viewerSettings.verticalGapMode);
-
-    closePdfSearch();
-    pdfRenderInProgress = true;
-    const currentToken = pdfRenderToken;
-    const loadingEl = document.createElement("div");
-    loadingEl.className = "pdfjs-loading";
-    loadingEl.textContent = "Rendering PDF...";
-    pdfjsViewerEl.appendChild(loadingEl);
-
-    let passwordCancelled = false;
-    try {
-      const { getDocument, PDFDataRangeTransport } = await loadPdfJsRuntime();
-      const filePath = viewerState.currentBook.filePath;
-      const savedPassword = await invoke<string | null>("get_pdf_password", { filePath });
-      let usedPassword: string | null = savedPassword;
-      // Read the document in byte ranges when the source serves them, so the
-      // worker holds the pages actually read instead of the whole file (see
-      // src/pdf-range-source.ts). Falls back to the plain URL when it cannot.
-      const rangeSource = await probePdfRangeSource(sourceUrl, fetch);
-      if (!rangeSource) {
-        console.info("[riida] PDF source does not serve byte ranges; reading the whole file");
-      }
-      const documentTask = getDocument({
-        ...(rangeSource
-          ? { range: createPdfRangeTransport(PDFDataRangeTransport, sourceUrl, rangeSource, fetch) }
-          : { url: sourceUrl }),
-        disableAutoFetch: true,
-        cMapUrl: "/pdfjs/cmaps/node_modules/pdfjs-dist/cmaps/",
-        cMapPacked: true,
-        standardFontDataUrl: "/pdfjs/standard_fonts/node_modules/pdfjs-dist/standard_fonts/",
-        useSystemFonts: true,
-        disableFontFace: false,
-        // PDF.js's built-in DOMBinaryDataFactory routes through `fetchData()`,
-        // which gates on `isValidFetchUrl()` — a hard-coded `http(s):` allow-
-        // list. In Tauri 2 macOS production builds the document loads from
-        // `tauri://localhost`, so cMap URLs resolve to `tauri:` and PDF.js
-        // falls through to an XHR path that silently completes with an empty
-        // body (`status === 0`). Without the Adobe-Japan1 reverse-CMap loaded,
-        // PDF.js cannot map CID → Unicode for non-embedded standard CJK fonts
-        // like Ryumin-Light-Identity-H, and ends up emitting raw CIDs to the
-        // canvas. Provide a `BinaryDataFactory` class that uses plain
-        // `fetch()` — which actually works on `tauri:` URLs in WKWebView.
-        // PDF.js instantiates this class itself with `cMapUrl`,
-        // `standardFontDataUrl`, and `wasmUrl`.
-        BinaryDataFactory: TauriBinaryDataFactory,
-        useWorkerFetch: false,
-        password: savedPassword ?? undefined,
-      });
-
-      // Owned from here on, so switching books or leaving the viewer gives the
-      // document's worker, bytes and decoded pages back. `releaseActivePdfDocument`
-      // may already have run during the awaits above, in which case this task
-      // is stale and goes straight back.
-      if (currentToken !== pdfRenderToken) {
-        void documentTask.destroy().catch(() => {});
-        return;
-      }
-      activePdfLoadingTask = documentTask;
-
-      documentTask.onPassword = async (updatePassword: (pw: string) => void, reason: number) => {
-        // reason 1 = needs password, reason 2 = wrong password
-        const isRetry = reason === 2;
-        if (isRetry) {
-          usedPassword = null;
-        }
-        const entered = await promptPdfPassword(isRetry);
-        if (entered !== null) {
-          usedPassword = entered;
-          updatePassword(entered);
-        } else {
-          // User cancelled — destroy the task so documentTask.promise rejects
-          passwordCancelled = true;
-          void documentTask.destroy();
-        }
-      };
-      const pdfDocument = await documentTask.promise;
-      if (usedPassword !== null && usedPassword !== savedPassword) {
-        await invoke("save_pdf_password", { filePath, password: usedPassword });
-      }
-
-      if (currentToken !== pdfRenderToken) {
-        return;
-      }
-
-      // Resolve `bindingDirection: "auto"` to a concrete left/right by
-      // probing the document. Explicit "left" / "right" prefs short-circuit
-      // detection. When detection is inconclusive (e.g. pure-image PDFs)
-      // we fall back to "left".
-      let resolvedBinding: "left" | "right";
-      if (viewerSettings.bindingDirection === "auto") {
-        const detected = await detectPdfBindingDirection(
-          pdfDocument,
-          () => currentToken !== pdfRenderToken,
-        );
-        if (currentToken !== pdfRenderToken) return;
-        resolvedBinding = detected ?? "left";
-      } else {
-        resolvedBinding = viewerSettings.bindingDirection;
-      }
-
-      // Margin trimming needs the document's crop boxes before any page size
-      // is known; the pre-pass samples a spread of pages (cached per file).
-      let trimBoxes: TrimBoxes | null = null;
-      if (viewerSettings.trimMode === "auto") {
-        trimBoxes = await resolvePdfTrimBoxes({
-          document: pdfDocument,
-          filePath,
-          deskew: viewerSettings.deskewMode === "auto",
-          analyzer: pdfPageAnalyzer,
-          isCancelled: () => currentToken !== pdfRenderToken,
-          onProgress: (measured, total) => {
-            loadingEl.textContent = `Measuring margins (${measured}/${total})...`;
-          },
-        });
-        if (currentToken !== pdfRenderToken) return;
-      }
-      // Page sizes at scale 1 as laid out: the trimmed extent when trimming.
-      const basePageSize = async (pageNumber: number) => {
-        const viewport = (await pdfDocument.getPage(pageNumber)).getViewport({ scale: 1 });
-        return trimmedPageSize(trimBoxes, pageNumber, viewport);
-      };
-
-      pdfjsViewerEl.innerHTML = "";
-      const layoutSettings = {
-        pageMode: viewerSettings.pageMode,
-        bindingDirection: resolvedBinding,
-        treatFirstPageAsCover: viewerSettings.treatFirstPageAsCover,
-      };
-      const pageGroups = buildPageGroups(pdfDocument.numPages, layoutSettings);
-      const restoreTargetPage = activeReadingPosition?.pageNumber ?? null;
-      const pageGap = viewerSettings.pageMode === "spread" ? 6 : 0;
-      const viewerWidth = Math.max(pdfjsViewerEl.clientWidth, 720);
-      const viewerHeight = Math.max(pdfjsViewerEl.clientHeight, 600);
-      const maxColumns = viewerSettings.pageMode === "spread" ? 2 : 1;
-      const availableWidth = viewerWidth - pageGap * (maxColumns - 1) - 32;
-      const targetHeight = Math.max(260, viewerHeight - 56);
-
-      // Strategy A: in fit-height + spread mode, split any 2-page group whose
-      // combined rendered width would exceed the available viewer width.
-      let layoutGroups = pageGroups;
-      if (viewerSettings.pageMode === "spread" && viewerSettings.zoomMode === "fit-height") {
-        layoutGroups = [];
-        for (const group of pageGroups) {
-          if (group.length === 2 && group[0] !== undefined && group[1] !== undefined) {
-            const g0 = group[0];
-            const g1 = group[1];
-            const vp0 = await basePageSize(g0);
-            if (currentToken !== pdfRenderToken) return;
-            const vp1 = await basePageSize(g1);
-            if (currentToken !== pdfRenderToken) return;
-            const fitScale = targetHeight / Math.max(vp0.height, 1);
-            const combinedWidth = (vp0.width + vp1.width) * fitScale + pageGap;
-            if (combinedWidth > availableWidth) {
-              layoutGroups.push([g0]);
-              layoutGroups.push([g1]);
-              continue;
-            }
-          }
-          layoutGroups.push(group);
-        }
-      }
-
-      const renderPlans: PdfRenderPlan[] = [];
-
-      for (const [groupIndex, group] of layoutGroups.entries()) {
-        if (currentToken !== pdfRenderToken) return;
-        const visualOrder = getVisualPageOrder(group, layoutSettings);
-        const spreadEl = document.createElement("section");
-        spreadEl.className = "pdfjs-spread";
-        spreadEl.dataset.pageCount = String(visualOrder.length);
-        spreadEl.dataset.binding = resolvedBinding;
-        spreadEl.dataset.cover = String(group.length === 1);
-
-        const sampleViewport = await basePageSize(group[0]!);
-        if (currentToken !== pdfRenderToken) return;
-        const targetWidth =
-          viewerSettings.pageMode === "spread"
-            ? Math.max(220, Math.floor(availableWidth / Math.max(visualOrder.length, 1)))
-            : Math.max(320, availableWidth);
-
-        let baseScale = 1;
-        if (viewerSettings.zoomMode === "fit-width") {
-          baseScale = targetWidth / Math.max(sampleViewport.width, 1);
-        } else if (viewerSettings.zoomMode === "fit-height") {
-          baseScale = targetHeight / Math.max(sampleViewport.height, 1);
-        }
-        baseScale *= pdfZoomScale;
-
-        pdfjsViewerEl.style.setProperty("--scale-factor", String(baseScale));
-
-        const pageSlots = new Map<number, HTMLElement>();
-        for (const pageNumber of visualOrder) {
-          const estimatedSize = await basePageSize(pageNumber);
-          if (currentToken !== pdfRenderToken) return;
-          const pageEl = document.createElement("section");
-          pageEl.className = "pdfjs-page page";
-          pageEl.dataset.pageNumber = String(pageNumber);
-          pageEl.style.width = `${estimatedSize.width * baseScale}px`;
-          pageEl.style.height = `${estimatedSize.height * baseScale}px`;
-          spreadEl.appendChild(pageEl);
-          pageSlots.set(pageNumber, pageEl);
-        }
-
-        if (currentToken !== pdfRenderToken) return;
-        pdfjsViewerEl.appendChild(spreadEl);
-        renderPlans.push({
-          groupIndex,
-          visualOrder,
-          spreadEl,
-          pageSlots,
-          baseScale,
-          renderedPages: new Map(),
-        });
-      }
-
-      const targetGroupIndex =
-        restoreTargetPage === null
-          ? 0
-          : Math.max(
-              0,
-              layoutGroups.findIndex((group) => group.includes(restoreTargetPage)),
-            );
-      const session: PdfRenderSession = {
-        token: currentToken,
-        pdfDocument,
-        viewerEl: pdfjsViewerEl,
-        stageEl: viewerStageEl,
-        plans: renderPlans,
-        restoreTargetPage,
-        updateScheduled: false,
-        isUpdating: false,
-        pendingFocusGroupIndex: null,
-        resolvedBindingDirection: resolvedBinding,
-        filePath: viewerState.currentBook?.filePath ?? "",
-        trimBoxes,
-      };
-      activePdfRenderSession = session;
-      // Restore scroll position immediately using placeholder dimensions so
-      // the user's view is preserved before async page rendering begins.
-      // Without this, scroll-snap or stray scroll events during rebuild can
-      // re-anchor the render window to group 0 and lose the target group.
-      if (restoreTargetPage !== null) {
-        restoreReadingPositionAttempt();
-      }
-      schedulePdfRenderWindowUpdate(session, targetGroupIndex);
-
-      // Load PDF outline (TOC) asynchronously so it does not block rendering.
-      tocPanelOpen = false;
-      activePdfOutline = null;
-      syncTocUi();
-      if (pdfDocument.getOutline) {
-        void pdfDocument.getOutline().then((outline) => {
-          if (activePdfRenderSession?.token !== currentToken) return;
-          activePdfOutline = outline ?? null;
-          buildPdfToc();
-          syncTocUi();
-        });
-      }
-    } catch (error) {
-      if (passwordCancelled) {
-        pdfjsViewerEl.innerHTML = "";
-        navigateBack();
-        return;
-      }
-      // A render the token has moved past fails by design: closing its
-      // document destroys the loading task and rejects whatever it awaited.
-      // The viewer now belongs to a newer render, so leave its DOM alone.
-      if (currentToken !== pdfRenderToken) {
-        return;
-      }
-      pdfjsViewerEl.innerHTML = "";
-
-      const errorEl = document.createElement("div");
-      errorEl.className = "pdfjs-loading";
-      const msg = String(error);
-      errorEl.textContent =
-        msg.includes("PasswordException") || msg.includes("No password given")
-          ? "This PDF requires a password."
-          : `Failed to render with PDF.js: ${msg}`;
-      pdfjsViewerEl.appendChild(errorEl);
-    } finally {
-      if (currentToken === pdfRenderToken) {
-        pdfRenderInProgress = false;
-      }
-    }
-
+    await renderPdfJsBook(frame, viewerStageEl, pdfjsViewerEl, sourceUrl);
     return;
   }
 
@@ -6323,6 +5735,619 @@ async function renderCurrentPage() {
   frame.src = activeReadingPosition?.pageNumber
     ? `${sourceUrl}#page=${activeReadingPosition.pageNumber}`
     : sourceUrl;
+}
+
+async function renderEpubBook(
+  frame: HTMLIFrameElement,
+  pdfjsViewerEl: HTMLElement,
+  epubViewerEl: HTMLElement,
+  sourceUrl: string,
+) {
+  if (!viewerState.currentBook) {
+    return;
+  }
+
+  // Image-sequence fixed-layout EPUBs (comics / scans: every page a single
+  // image) get the lightweight native image viewer instead of epub.js.
+  const epubFilePath = viewerState.currentBook.filePath;
+  let imageLayout = imageEpubLayoutCache.get(epubFilePath);
+  if (!imageLayout) {
+    try {
+      imageLayout = await invoke<EpubImageLayoutPayload>("epub_image_layout", {
+        filePath: epubFilePath,
+      });
+      imageEpubLayoutCache.set(epubFilePath, imageLayout);
+    } catch (error) {
+      console.warn("[riida] epub_image_layout failed:", error);
+    }
+  }
+  if (viewerState.currentBook?.filePath !== epubFilePath) {
+    return;
+  }
+  if (imageLayout?.is_image_epub) {
+    renderImageEpub(imageLayout);
+    return;
+  }
+  destroyImageEpub();
+
+  applyEpubViewerColors(viewerSettings.backgroundMode);
+  await maybeShowEpubPreviewNotice();
+  destroyEpubBook();
+  releaseActivePdfDocument();
+  activePdfOutline = null;
+  frame.hidden = true;
+  frame.src = "about:blank";
+  frame.dataset.filePath = "";
+  pdfjsViewerEl.hidden = true;
+  pdfjsViewerEl.innerHTML = "";
+  pdfjsViewerEl.dataset.filePath = "";
+  epubViewerEl.hidden = false;
+  epubViewerEl.dataset.filePath = viewerState.currentBook.filePath;
+  epubViewerEl.innerHTML = "";
+  const epubLoadingEl = document.createElement("div");
+  epubLoadingEl.className = "epub-loading";
+  const epubLoadingSpinnerEl = document.createElement("div");
+  epubLoadingSpinnerEl.className = "epub-loading-spinner";
+  epubLoadingEl.appendChild(epubLoadingSpinnerEl);
+  const epubLoadingLabelEl = document.createElement("div");
+  epubLoadingLabelEl.className = "epub-loading-label";
+  epubLoadingLabelEl.textContent = "Loading EPUB...";
+  epubLoadingEl.appendChild(epubLoadingLabelEl);
+  epubViewerEl.appendChild(epubLoadingEl);
+
+  epubRenderToken += 1;
+  const currentToken = epubRenderToken;
+
+  try {
+    const EpubModule = await loadEpubJs();
+    if (currentToken !== epubRenderToken) return;
+
+    const Epub = EpubModule.default;
+    const book = Epub(sourceUrl);
+    activeEpubBook = book;
+    await book.ready;
+    if (currentToken !== epubRenderToken) return;
+
+    tocPanelOpen = false;
+    buildEpubToc();
+    syncTocUi();
+
+    // Fast path: reuse previously-generated locations when the file
+    // hasn't changed. Falls back to background generation after display.
+    const locationsFilePath = viewerState.currentBook.filePath;
+    const locationsFileSize = viewerState.currentBook.fileSize;
+    const cachedLocations = loadCachedEpubLocations(locationsFilePath, locationsFileSize);
+    let locationsReady = false;
+    if (cachedLocations) {
+      try {
+        book.locations.load(cachedLocations);
+        activeEpubTotalPages = Math.max(book.locations.length(), 1);
+        locationsReady = true;
+      } catch (err) {
+        console.warn("[riida] failed to load cached EPUB locations:", err);
+      }
+    }
+    syncViewerPageJumpUi();
+
+    // Detect page-progression-direction for correct key mapping.
+    // DPFJ guide §ページ進行方向の遵守: direction is from OPF spine, not writing-mode.
+    // In rtl books (Japanese vertical text etc.) ArrowLeft = next page, ArrowRight = prev.
+    // epub.js exposes package/spine internals not covered by the public typings.
+    const bookInternal = book as unknown as {
+      spine?: { direction?: string };
+      package?: { metadata?: { direction?: string; rendition_layout?: string } };
+    };
+    const spineDirection =
+      bookInternal.spine?.direction ?? bookInternal.package?.metadata?.direction ?? "ltr";
+    activeEpubIsRtl = spineDirection === "rtl";
+
+    // Detect fixed-layout vs. reflow from OPF metadata.
+    // DPFJ guide §固定レイアウト: pre-paginated books use SVG-wrapped images and
+    // require flow:"pre-paginated" so epub.js renders each spine item as a single page.
+    const renditionLayout = bookInternal.package?.metadata?.rendition_layout ?? "";
+    const isPrePaginated = renditionLayout === "pre-paginated";
+    const flow: string = isPrePaginated ? "pre-paginated" : "paginated";
+    const spread = isPrePaginated
+      ? "auto"
+      : viewerSettings.pageMode === "spread"
+        ? "always"
+        : "none";
+
+    book.spine.hooks.content.register((doc: Document, section: { index: number }) => {
+      doc.documentElement?.setAttribute(
+        "data-riida-file-path",
+        viewerState.currentBook?.filePath ?? "",
+      );
+      doc.documentElement?.setAttribute("data-riida-section-index", String(section.index));
+    });
+
+    // Ensure the viewer element has actually been laid out before
+    // creating the rendition. WKWebView occasionally reports 0 for
+    // clientWidth/clientHeight on the first frame after show; epub.js
+    // then locks the stage to 0x0 and never recovers. Poll up to ~20
+    // frames for a non-zero size so the stage starts at the right size.
+    for (let attempts = 0; attempts < 20; attempts += 1) {
+      if (epubViewerEl.clientWidth > 0 && epubViewerEl.clientHeight > 0) break;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (currentToken !== epubRenderToken) return;
+    }
+
+    const rendition = book.renderTo(epubViewerEl, {
+      width: "100%",
+      height: "100%",
+      spread,
+      flow,
+      allowScriptedContent: true,
+    });
+
+    const epubThemePalette = viewerColorPaletteForMode(
+      viewerSettings.backgroundMode,
+      currentAppTheme(),
+    );
+    rendition.themes.default({
+      html: {
+        "background-color": `${epubThemePalette.background} !important`,
+        color: `${epubThemePalette.foreground} !important`,
+      },
+      // DPFJ guide §ページメディアの余白: RS should not add its own margins to body.
+      // epub.js injects padding by default; suppress it so the book's own CSS controls spacing.
+      body: {
+        "background-color": `${epubThemePalette.background} !important`,
+        color: `${epubThemePalette.foreground} !important`,
+        padding: "0 !important",
+        margin: "0 !important",
+      },
+      a: {
+        color: `${epubThemePalette.link} !important`,
+      },
+      pre: {
+        "white-space": "pre-wrap !important",
+        "word-break": "break-all !important",
+        "overflow-wrap": "break-word !important",
+      },
+      code: {
+        "word-break": "break-all !important",
+        "overflow-wrap": "break-word !important",
+      },
+    });
+
+    const contentHooks = rendition.hooks.content.list();
+    if (contentHooks.length > 0) {
+      rendition.hooks.content.deregister(contentHooks[0]);
+    }
+
+    rendition.hooks.content.register((contents: import("epubjs").Contents) => {
+      try {
+        installEpubLinkBridge(contents, viewerState.currentBook?.filePath ?? "");
+        if (contents.document) {
+          applyEpubColorsToDocument(
+            contents.document,
+            viewerColorPaletteForMode(viewerSettings.backgroundMode, currentAppTheme()),
+          );
+          injectEpubWritingModeCSS(contents.document);
+        }
+      } catch (err) {
+        console.error("[riida] epub link hook failed:", err);
+      }
+    });
+
+    activeEpubLinkMessageHandler = (event: MessageEvent) => {
+      if (currentToken !== epubRenderToken || !isEpubLinkMessage(event.data)) {
+        return;
+      }
+
+      const currentBook = viewerState.currentBook;
+      if (!currentBook || currentBook.sourceType !== "epub") {
+        return;
+      }
+
+      if (event.data.filePath !== currentBook.filePath) {
+        return;
+      }
+
+      const sectionHref = book.spine.get(event.data.sectionIndex)?.href ?? null;
+      const action = resolveEpubLinkAction(event.data.href, sectionHref);
+      if (!action) {
+        return;
+      }
+
+      if (action.kind === "external") {
+        void openUrl(action.target);
+        return;
+      }
+
+      captureEpubCfiForHistory(rendition);
+      syncNavigationHistory("push");
+      void epubDisplayHref(book, rendition, action.target);
+    };
+    window.addEventListener("message", activeEpubLinkMessageHandler);
+
+    const restoreCfi = activeReadingPosition?.cfi ?? undefined;
+    await rendition.display(restoreCfi);
+    if (currentToken !== epubRenderToken) return;
+
+    activeEpubRendition = rendition;
+    applyViewerVerticalGapMode(viewerSettings.verticalGapMode);
+    applyEpubViewerColors(viewerSettings.backgroundMode);
+    applyEpubFontSize(viewerSettings.epubFontSize);
+
+    // Safety net: if the initial render ended up at zero dimensions
+    // (WKWebView can report 0 clientWidth/Height on first attach),
+    // force resize + redisplay before hiding the spinner. epub.js's
+    // own onResized only re-displays when rendition.location is set,
+    // which can fail to happen after a 0x0 initial render.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    if (currentToken !== epubRenderToken) return;
+    const iframeEl = epubViewerEl.querySelector<HTMLIFrameElement>("iframe");
+    if (!iframeEl || iframeEl.clientWidth === 0 || iframeEl.clientHeight === 0) {
+      resizeEpubRendition();
+      try {
+        await rendition.display(restoreCfi);
+      } catch (err) {
+        console.warn("[riida] epub redisplay after resize failed:", err);
+      }
+      if (currentToken !== epubRenderToken) return;
+    }
+
+    syncEpubLinkOverlays(rendition, book, epubViewerEl);
+    epubLoadingEl.remove();
+
+    // Slow path: compute pagination in the background so the first
+    // page renders immediately. Result is cached for next open.
+    if (!locationsReady) {
+      void (async () => {
+        try {
+          await book.locations.generate(1200);
+          if (currentToken !== epubRenderToken) return;
+          activeEpubTotalPages = Math.max(book.locations.length(), 1);
+          saveCachedEpubLocations(locationsFilePath, locationsFileSize, book.locations.save());
+          syncViewerPageJumpUi();
+        } catch (err) {
+          console.warn("[riida] failed to generate EPUB locations:", err);
+        }
+      })();
+    }
+
+    rendition.on("relocated", (location: import("epubjs").Location) => {
+      const cfi = location.start.cfi;
+      const currentBook = viewerState.currentBook;
+      if (!cfi || !currentBook || currentBook.sourceType !== "epub") return;
+      const totalPages = activeEpubTotalPages ?? Math.max(book.locations.length(), 1);
+      const currentPageNumber = epubPageNumberFromLocation(location.start.location, totalPages);
+      activeReadingPosition = {
+        filePath: currentBook.filePath,
+        pageNumber: currentPageNumber,
+        pageOffsetRatio: 0,
+        cfi,
+        updatedAt: activeReadingPosition?.updatedAt ?? null,
+      };
+      syncEpubLinkOverlays(rendition, book, epubViewerEl);
+      syncViewerPageJumpUi();
+      scheduleEpubPositionSave();
+    });
+
+    rendition.on("rendered", () => {
+      syncEpubLinkOverlays(rendition, book, epubViewerEl);
+      syncEpubCoverOverlay(epubViewerEl);
+    });
+  } catch (error) {
+    if (currentToken !== epubRenderToken) return;
+    epubViewerEl.innerHTML = "";
+    const errorEl = document.createElement("div");
+    errorEl.className = "pdfjs-loading";
+    errorEl.textContent = `Failed to open EPUB: ${String(error)}`;
+    epubViewerEl.appendChild(errorEl);
+  }
+}
+
+async function renderPdfJsBook(
+  frame: HTMLIFrameElement,
+  viewerStageEl: HTMLElement,
+  pdfjsViewerEl: HTMLElement,
+  sourceUrl: string,
+) {
+  if (!viewerState.currentBook) {
+    return;
+  }
+
+  applyEpubViewerColors("inherit-theme");
+  applyPdfViewerBackground(viewerSettings.backgroundMode);
+  syncImmediatePdfScrollMode();
+  releaseActivePdfDocument();
+  activePdfOutline = null;
+  frame.hidden = true;
+  frame.src = "about:blank";
+  frame.dataset.filePath = "";
+  pdfjsViewerEl.hidden = false;
+  pdfjsViewerEl.innerHTML = "";
+  pdfjsViewerEl.dataset.filePath = viewerState.currentBook.filePath;
+  pdfjsViewerEl.dataset.position = viewerSettings.alignMode;
+  applyViewerVerticalGapMode(viewerSettings.verticalGapMode);
+
+  closePdfSearch();
+  pdfRenderInProgress = true;
+  const currentToken = pdfRenderToken;
+  const loadingEl = document.createElement("div");
+  loadingEl.className = "pdfjs-loading";
+  loadingEl.textContent = "Rendering PDF...";
+  pdfjsViewerEl.appendChild(loadingEl);
+
+  let passwordCancelled = false;
+  try {
+    const { getDocument, PDFDataRangeTransport } = await loadPdfJsRuntime();
+    const filePath = viewerState.currentBook.filePath;
+    const savedPassword = await invoke<string | null>("get_pdf_password", { filePath });
+    let usedPassword: string | null = savedPassword;
+    // Read the document in byte ranges when the source serves them, so the
+    // worker holds the pages actually read instead of the whole file (see
+    // src/pdf-range-source.ts). Falls back to the plain URL when it cannot.
+    const rangeSource = await probePdfRangeSource(sourceUrl, fetch);
+    if (!rangeSource) {
+      console.info("[riida] PDF source does not serve byte ranges; reading the whole file");
+    }
+    const documentTask = getDocument({
+      ...(rangeSource
+        ? { range: createPdfRangeTransport(PDFDataRangeTransport, sourceUrl, rangeSource, fetch) }
+        : { url: sourceUrl }),
+      disableAutoFetch: true,
+      cMapUrl: "/pdfjs/cmaps/node_modules/pdfjs-dist/cmaps/",
+      cMapPacked: true,
+      standardFontDataUrl: "/pdfjs/standard_fonts/node_modules/pdfjs-dist/standard_fonts/",
+      useSystemFonts: true,
+      disableFontFace: false,
+      // PDF.js's built-in DOMBinaryDataFactory routes through `fetchData()`,
+      // which gates on `isValidFetchUrl()` — a hard-coded `http(s):` allow-
+      // list. In Tauri 2 macOS production builds the document loads from
+      // `tauri://localhost`, so cMap URLs resolve to `tauri:` and PDF.js
+      // falls through to an XHR path that silently completes with an empty
+      // body (`status === 0`). Without the Adobe-Japan1 reverse-CMap loaded,
+      // PDF.js cannot map CID → Unicode for non-embedded standard CJK fonts
+      // like Ryumin-Light-Identity-H, and ends up emitting raw CIDs to the
+      // canvas. Provide a `BinaryDataFactory` class that uses plain
+      // `fetch()` — which actually works on `tauri:` URLs in WKWebView.
+      // PDF.js instantiates this class itself with `cMapUrl`,
+      // `standardFontDataUrl`, and `wasmUrl`.
+      BinaryDataFactory: TauriBinaryDataFactory,
+      useWorkerFetch: false,
+      password: savedPassword ?? undefined,
+    });
+
+    // Owned from here on, so switching books or leaving the viewer gives the
+    // document's worker, bytes and decoded pages back. `releaseActivePdfDocument`
+    // may already have run during the awaits above, in which case this task
+    // is stale and goes straight back.
+    if (currentToken !== pdfRenderToken) {
+      void documentTask.destroy().catch(() => {});
+      return;
+    }
+    activePdfLoadingTask = documentTask;
+
+    documentTask.onPassword = async (updatePassword: (pw: string) => void, reason: number) => {
+      // reason 1 = needs password, reason 2 = wrong password
+      const isRetry = reason === 2;
+      if (isRetry) {
+        usedPassword = null;
+      }
+      const entered = await promptPdfPassword(isRetry);
+      if (entered !== null) {
+        usedPassword = entered;
+        updatePassword(entered);
+      } else {
+        // User cancelled — destroy the task so documentTask.promise rejects
+        passwordCancelled = true;
+        void documentTask.destroy();
+      }
+    };
+    const pdfDocument = await documentTask.promise;
+    if (usedPassword !== null && usedPassword !== savedPassword) {
+      await invoke("save_pdf_password", { filePath, password: usedPassword });
+    }
+
+    if (currentToken !== pdfRenderToken) {
+      return;
+    }
+
+    // Resolve `bindingDirection: "auto"` to a concrete left/right by
+    // probing the document. Explicit "left" / "right" prefs short-circuit
+    // detection. When detection is inconclusive (e.g. pure-image PDFs)
+    // we fall back to "left".
+    let resolvedBinding: "left" | "right";
+    if (viewerSettings.bindingDirection === "auto") {
+      const detected = await detectPdfBindingDirection(
+        pdfDocument,
+        () => currentToken !== pdfRenderToken,
+      );
+      if (currentToken !== pdfRenderToken) return;
+      resolvedBinding = detected ?? "left";
+    } else {
+      resolvedBinding = viewerSettings.bindingDirection;
+    }
+
+    // Margin trimming needs the document's crop boxes before any page size
+    // is known; the pre-pass samples a spread of pages (cached per file).
+    let trimBoxes: TrimBoxes | null = null;
+    if (viewerSettings.trimMode === "auto") {
+      trimBoxes = await resolvePdfTrimBoxes({
+        document: pdfDocument,
+        filePath,
+        deskew: viewerSettings.deskewMode === "auto",
+        analyzer: pdfPageAnalyzer,
+        isCancelled: () => currentToken !== pdfRenderToken,
+        onProgress: (measured, total) => {
+          loadingEl.textContent = `Measuring margins (${measured}/${total})...`;
+        },
+      });
+      if (currentToken !== pdfRenderToken) return;
+    }
+    // Page sizes at scale 1 as laid out: the trimmed extent when trimming.
+    const basePageSize = async (pageNumber: number) => {
+      const viewport = (await pdfDocument.getPage(pageNumber)).getViewport({ scale: 1 });
+      return trimmedPageSize(trimBoxes, pageNumber, viewport);
+    };
+
+    pdfjsViewerEl.innerHTML = "";
+    const layoutSettings = {
+      pageMode: viewerSettings.pageMode,
+      bindingDirection: resolvedBinding,
+      treatFirstPageAsCover: viewerSettings.treatFirstPageAsCover,
+    };
+    const pageGroups = buildPageGroups(pdfDocument.numPages, layoutSettings);
+    const restoreTargetPage = activeReadingPosition?.pageNumber ?? null;
+    const pageGap = viewerSettings.pageMode === "spread" ? 6 : 0;
+    const viewerWidth = Math.max(pdfjsViewerEl.clientWidth, 720);
+    const viewerHeight = Math.max(pdfjsViewerEl.clientHeight, 600);
+    const maxColumns = viewerSettings.pageMode === "spread" ? 2 : 1;
+    const availableWidth = viewerWidth - pageGap * (maxColumns - 1) - 32;
+    const targetHeight = Math.max(260, viewerHeight - 56);
+
+    // Strategy A: in fit-height + spread mode, split any 2-page group whose
+    // combined rendered width would exceed the available viewer width.
+    let layoutGroups = pageGroups;
+    if (viewerSettings.pageMode === "spread" && viewerSettings.zoomMode === "fit-height") {
+      layoutGroups = [];
+      for (const group of pageGroups) {
+        if (group.length === 2 && group[0] !== undefined && group[1] !== undefined) {
+          const g0 = group[0];
+          const g1 = group[1];
+          const vp0 = await basePageSize(g0);
+          if (currentToken !== pdfRenderToken) return;
+          const vp1 = await basePageSize(g1);
+          if (currentToken !== pdfRenderToken) return;
+          const fitScale = targetHeight / Math.max(vp0.height, 1);
+          const combinedWidth = (vp0.width + vp1.width) * fitScale + pageGap;
+          if (combinedWidth > availableWidth) {
+            layoutGroups.push([g0]);
+            layoutGroups.push([g1]);
+            continue;
+          }
+        }
+        layoutGroups.push(group);
+      }
+    }
+
+    const renderPlans: PdfRenderPlan[] = [];
+
+    for (const [groupIndex, group] of layoutGroups.entries()) {
+      if (currentToken !== pdfRenderToken) return;
+      const visualOrder = getVisualPageOrder(group, layoutSettings);
+      const spreadEl = document.createElement("section");
+      spreadEl.className = "pdfjs-spread";
+      spreadEl.dataset.pageCount = String(visualOrder.length);
+      spreadEl.dataset.binding = resolvedBinding;
+      spreadEl.dataset.cover = String(group.length === 1);
+
+      const sampleViewport = await basePageSize(group[0]!);
+      if (currentToken !== pdfRenderToken) return;
+      const targetWidth =
+        viewerSettings.pageMode === "spread"
+          ? Math.max(220, Math.floor(availableWidth / Math.max(visualOrder.length, 1)))
+          : Math.max(320, availableWidth);
+
+      let baseScale = 1;
+      if (viewerSettings.zoomMode === "fit-width") {
+        baseScale = targetWidth / Math.max(sampleViewport.width, 1);
+      } else if (viewerSettings.zoomMode === "fit-height") {
+        baseScale = targetHeight / Math.max(sampleViewport.height, 1);
+      }
+      baseScale *= pdfZoomScale;
+
+      pdfjsViewerEl.style.setProperty("--scale-factor", String(baseScale));
+
+      const pageSlots = new Map<number, HTMLElement>();
+      for (const pageNumber of visualOrder) {
+        const estimatedSize = await basePageSize(pageNumber);
+        if (currentToken !== pdfRenderToken) return;
+        const pageEl = document.createElement("section");
+        pageEl.className = "pdfjs-page page";
+        pageEl.dataset.pageNumber = String(pageNumber);
+        pageEl.style.width = `${estimatedSize.width * baseScale}px`;
+        pageEl.style.height = `${estimatedSize.height * baseScale}px`;
+        spreadEl.appendChild(pageEl);
+        pageSlots.set(pageNumber, pageEl);
+      }
+
+      if (currentToken !== pdfRenderToken) return;
+      pdfjsViewerEl.appendChild(spreadEl);
+      renderPlans.push({
+        groupIndex,
+        visualOrder,
+        spreadEl,
+        pageSlots,
+        baseScale,
+        renderedPages: new Map(),
+      });
+    }
+
+    const targetGroupIndex =
+      restoreTargetPage === null
+        ? 0
+        : Math.max(
+            0,
+            layoutGroups.findIndex((group) => group.includes(restoreTargetPage)),
+          );
+    const session: PdfRenderSession = {
+      token: currentToken,
+      pdfDocument,
+      viewerEl: pdfjsViewerEl,
+      stageEl: viewerStageEl,
+      plans: renderPlans,
+      restoreTargetPage,
+      updateScheduled: false,
+      isUpdating: false,
+      pendingFocusGroupIndex: null,
+      resolvedBindingDirection: resolvedBinding,
+      filePath: viewerState.currentBook?.filePath ?? "",
+      trimBoxes,
+    };
+    activePdfRenderSession = session;
+    // Restore scroll position immediately using placeholder dimensions so
+    // the user's view is preserved before async page rendering begins.
+    // Without this, scroll-snap or stray scroll events during rebuild can
+    // re-anchor the render window to group 0 and lose the target group.
+    if (restoreTargetPage !== null) {
+      restoreReadingPositionAttempt();
+    }
+    schedulePdfRenderWindowUpdate(session, targetGroupIndex);
+
+    // Load PDF outline (TOC) asynchronously so it does not block rendering.
+    tocPanelOpen = false;
+    activePdfOutline = null;
+    syncTocUi();
+    if (pdfDocument.getOutline) {
+      void pdfDocument.getOutline().then((outline) => {
+        if (activePdfRenderSession?.token !== currentToken) return;
+        activePdfOutline = outline ?? null;
+        buildPdfToc();
+        syncTocUi();
+      });
+    }
+  } catch (error) {
+    if (passwordCancelled) {
+      pdfjsViewerEl.innerHTML = "";
+      navigateBack();
+      return;
+    }
+    // A render the token has moved past fails by design: closing its
+    // document destroys the loading task and rejects whatever it awaited.
+    // The viewer now belongs to a newer render, so leave its DOM alone.
+    if (currentToken !== pdfRenderToken) {
+      return;
+    }
+    pdfjsViewerEl.innerHTML = "";
+
+    const errorEl = document.createElement("div");
+    errorEl.className = "pdfjs-loading";
+    const msg = String(error);
+    errorEl.textContent =
+      msg.includes("PasswordException") || msg.includes("No password given")
+        ? "This PDF requires a password."
+        : `Failed to render with PDF.js: ${msg}`;
+    pdfjsViewerEl.appendChild(errorEl);
+  } finally {
+    if (currentToken === pdfRenderToken) {
+      pdfRenderInProgress = false;
+    }
+  }
 }
 
 function viewerNeedsRender(snapshot: LibrarySnapshot) {

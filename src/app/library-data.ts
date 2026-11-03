@@ -38,7 +38,7 @@ export async function refreshShelves() {
   }
 }
 
-export function activeShelfQuery(): string {
+function activeShelfQuery(): string {
   if (!viewerState.activeShelf) return "";
   const shelf = viewerState.shelves.find((s) => s.id === viewerState.activeShelf);
   return shelf?.query ?? "";
@@ -87,7 +87,7 @@ export function resetListSort() {
   if (el) el.value = "default";
 }
 
-export function sortBooks(books: BookSummary[]): BookSummary[] {
+function sortBooks(books: BookSummary[]): BookSummary[] {
   switch (appState.listSort) {
     case "title-asc":
       return [...books].sort((a, b) =>

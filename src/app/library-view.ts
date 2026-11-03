@@ -1,4 +1,4 @@
-// Main-pane library view: header, sorting, bulk selection, and the empty and
+// Main-pane library view: header, sort and view controls, and the empty and
 // welcome states.
 
 import { deriveDirectories, deriveTags, shouldShowLibraryWelcome } from "../library-utils";
@@ -8,37 +8,17 @@ import {
   renderBookList,
   setLibraryViewMode,
 } from "./book-list";
+import { syncBulkActionBar } from "./bulk-selection";
 import { destroyEpubBook } from "./epub-viewer";
 import { renderFulltextResults } from "./fulltext";
 import { destroyImageEpub } from "./image-epub-viewer";
 import { renderApp } from "./library";
 import { hasActiveLibraryFilter, visibleBooks } from "./library-data";
-import { openBookMetadataEditorForBooks } from "./metadata-editor";
 import { loadNoteForCurrentBook, noteState, syncNoteUi } from "./notes";
 import { appState, viewerState } from "./state";
-import { openTagEditorForBooks } from "./tag-editor";
 import type { LibrarySnapshot, ListSortKey } from "./types";
 import { syncViewerSettingsUi } from "./viewer-settings";
 import { renderCurrentPage, syncViewerPageJumpUi, viewerNeedsRender } from "./viewer";
-
-export const bulkSelectState = {
-  selectedFilePaths: new Set<string>(),
-};
-
-export function syncBulkActionBar() {
-  const barEl = document.querySelector<HTMLElement>("#bulk-action-bar");
-  const countEl = document.querySelector<HTMLElement>("#bulk-select-count");
-  const shelfEl = document.querySelector<HTMLElement>("#book-results");
-  const selectAllEl = document.querySelector<HTMLElement>("#bulk-select-all");
-  const n = bulkSelectState.selectedFilePaths.size;
-  if (barEl) barEl.hidden = n === 0;
-  if (countEl) countEl.textContent = `${n} book${n === 1 ? "" : "s"} selected`;
-  shelfEl?.classList.toggle("has-selection", n > 0);
-  if (selectAllEl) {
-    const visible = appState.lastSnapshot ? visibleBooks(appState.lastSnapshot) : [];
-    selectAllEl.hidden = visible.every((b) => bulkSelectState.selectedFilePaths.has(b.filePath));
-  }
-}
 
 export function renderMain(snapshot: LibrarySnapshot) {
   const appShellEl = document.querySelector<HTMLElement>(".two-pane");
@@ -195,42 +175,6 @@ export function renderMain(snapshot: LibrarySnapshot) {
     void renderFulltextResults(viewerState.searchQuery);
     syncBulkActionBar();
   }
-}
-
-export function initBulkSelection() {
-  const bulkSelectAllEl = document.querySelector<HTMLButtonElement>("#bulk-select-all");
-  const bulkEditTagsEl = document.querySelector<HTMLButtonElement>("#bulk-edit-tags");
-  const bulkEditMetadataEl = document.querySelector<HTMLButtonElement>("#bulk-edit-metadata");
-  const bulkDeselectEl = document.querySelector<HTMLButtonElement>("#bulk-deselect");
-
-  bulkSelectAllEl?.addEventListener("click", () => {
-    const visible = appState.lastSnapshot ? visibleBooks(appState.lastSnapshot) : [];
-    for (const book of visible) {
-      bulkSelectState.selectedFilePaths.add(book.filePath);
-    }
-    syncBulkActionBar();
-    renderApp();
-  });
-
-  bulkEditTagsEl?.addEventListener("click", () => {
-    const selected = viewerState.books.filter((b) =>
-      bulkSelectState.selectedFilePaths.has(b.filePath),
-    );
-    if (selected.length > 0) openTagEditorForBooks(selected);
-  });
-
-  bulkEditMetadataEl?.addEventListener("click", () => {
-    const selected = viewerState.books.filter((b) =>
-      bulkSelectState.selectedFilePaths.has(b.filePath),
-    );
-    if (selected.length > 0) void openBookMetadataEditorForBooks(selected);
-  });
-
-  bulkDeselectEl?.addEventListener("click", () => {
-    bulkSelectState.selectedFilePaths.clear();
-    syncBulkActionBar();
-    renderApp();
-  });
 }
 
 export function initLibraryViewControls() {

@@ -23,6 +23,7 @@ import {
   initNavigationControls,
   loadInitialLibraryState,
 } from "./app/navigation";
+import { applyNavigationState } from "./app/navigation-apply";
 import { initNotes } from "./app/notes";
 import { initViewerPageJump } from "./app/page-jump";
 import { initPdfSearch } from "./app/pdf-search";
@@ -43,7 +44,7 @@ import {
 } from "./app/viewer";
 import { initLibraryWelcome, registerLibraryDrops } from "./app/welcome";
 
-installAppShell({ renderApp, renderCurrentPage, navigateViewerToPage });
+installAppShell({ renderApp, renderCurrentPage, navigateViewerToPage, applyNavigationState });
 
 window.addEventListener("DOMContentLoaded", async () => {
   applyStaticTranslations();

@@ -1,9 +1,12 @@
 // Requests that travel up the module layers. A feature module may import only
 // the modules below it, yet an editor has to repaint the whole library, a
-// renderer has to re-render the open book, and the TOC has to jump to a page.
+// renderer has to re-render the open book, the TOC has to jump to a page, and
+// the history stack has to reopen whatever an entry names.
 // Those calls go through here: main.ts installs the real functions at startup,
 // and modules below the owner import the forwarding functions from this file.
 // Modules above the owner import the real function directly.
+
+import type { NavigationState } from "./types";
 
 type AppShell = {
   /** Repaint the sidebar and main pane from the current snapshot (library.ts). */
@@ -12,6 +15,8 @@ type AppShell = {
   renderCurrentPage: () => Promise<void>;
   /** Move the open book to a page, recording history by default (viewer.ts). */
   navigateViewerToPage: (pageNumber: number, options?: { pushHistory?: boolean }) => void;
+  /** Show the library filter and book a history entry names (navigation-apply.ts). */
+  applyNavigationState: (state: NavigationState) => Promise<void>;
 };
 
 let installed: AppShell | null = null;
@@ -37,4 +42,8 @@ export function renderCurrentPage() {
 
 export function navigateViewerToPage(pageNumber: number, options?: { pushHistory?: boolean }) {
   appShell().navigateViewerToPage(pageNumber, options);
+}
+
+export function applyNavigationState(state: NavigationState) {
+  return appShell().applyNavigationState(state);
 }

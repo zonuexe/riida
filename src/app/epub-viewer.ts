@@ -9,12 +9,6 @@ import { loadEpubJs } from "../epub-runtime";
 import { resolveEpubLinkAction } from "../epub-link-routing";
 import { clampEpubFontSize } from "../viewer-shortcuts";
 import { viewerColorPaletteForMode, type ViewerSettingsPayload } from "../viewer-settings-utils";
-import {
-  destroyImageEpub,
-  type EpubImageLayoutPayload,
-  imageEpubLayoutCache,
-  renderImageEpub,
-} from "./image-epub-viewer";
 import { syncNavigationHistory } from "./navigation";
 import { releaseActivePdfDocument } from "./pdf-viewer";
 import { scheduleEpubPositionSave } from "./reading-position";
@@ -378,29 +372,6 @@ export async function renderEpubBook(
   if (!viewerState.currentBook) {
     return;
   }
-
-  // Image-sequence fixed-layout EPUBs (comics / scans: every page a single
-  // image) get the lightweight native image viewer instead of epub.js.
-  const epubFilePath = viewerState.currentBook.filePath;
-  let imageLayout = imageEpubLayoutCache.get(epubFilePath);
-  if (!imageLayout) {
-    try {
-      imageLayout = await invoke<EpubImageLayoutPayload>("epub_image_layout", {
-        filePath: epubFilePath,
-      });
-      imageEpubLayoutCache.set(epubFilePath, imageLayout);
-    } catch (error) {
-      console.warn("[riida] epub_image_layout failed:", error);
-    }
-  }
-  if (viewerState.currentBook?.filePath !== epubFilePath) {
-    return;
-  }
-  if (imageLayout?.is_image_epub) {
-    renderImageEpub(imageLayout);
-    return;
-  }
-  destroyImageEpub();
 
   applyEpubViewerColors(viewerSettings.backgroundMode);
   await maybeShowEpubPreviewNotice();

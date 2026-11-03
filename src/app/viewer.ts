@@ -7,7 +7,13 @@ import { parseRequestedPageNumber } from "../page-jump-utils";
 import { preserveNoteWindowBottomRightOffset } from "../note-window-utils";
 import { DEFAULT_VIEWER_SETTINGS } from "../viewer-settings-utils";
 import { captureEpubCfiForHistory, destroyEpubBook, renderEpubBook } from "./epub-viewer";
-import { destroyImageEpub, fitImageEpubSpread, goToImagePage } from "./image-epub-viewer";
+import {
+  destroyImageEpub,
+  fitImageEpubSpread,
+  goToImagePage,
+  loadImageEpubLayout,
+  renderImageEpub,
+} from "./image-epub-viewer";
 import { renderApp } from "./library";
 import { openBookMetadataEditor } from "./metadata-editor";
 import { syncNavigationHistory } from "./navigation";
@@ -268,6 +274,18 @@ export async function renderCurrentPage() {
   const sourceUrl = convertFileSrc(viewerState.currentBook.filePath);
 
   if (viewerState.currentBook.sourceType === "epub") {
+    // Image-sequence fixed-layout EPUBs (comics / scans: every page a single
+    // image) get the lightweight native image viewer instead of epub.js.
+    const epubFilePath = viewerState.currentBook.filePath;
+    const imageLayout = await loadImageEpubLayout(epubFilePath);
+    if (viewerState.currentBook?.filePath !== epubFilePath) {
+      return;
+    }
+    if (imageLayout?.is_image_epub) {
+      renderImageEpub(imageLayout);
+      return;
+    }
+    destroyImageEpub();
     await renderEpubBook(frame, pdfjsViewerEl, epubViewerEl, sourceUrl);
     return;
   }

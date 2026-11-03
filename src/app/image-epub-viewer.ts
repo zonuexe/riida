@@ -1,5 +1,6 @@
 // Native viewer for image-sequence fixed-layout EPUBs (comics, scans).
 
+import { invoke } from "@tauri-apps/api/core";
 import { clampEpubPageNumber } from "../epub-page-utils";
 import {
   buildImageSpreads,
@@ -33,7 +34,23 @@ export type EpubImageLayoutPayload = {
 };
 // Per-file cache of the parsed layout so detection does not re-parse the zip on
 // every renderCurrentPage (settings changes, re-renders).
-export const imageEpubLayoutCache = new Map<string, EpubImageLayoutPayload>();
+const imageEpubLayoutCache = new Map<string, EpubImageLayoutPayload>();
+
+/** The book's image layout, or undefined when the backend could not parse it. */
+export async function loadImageEpubLayout(
+  filePath: string,
+): Promise<EpubImageLayoutPayload | undefined> {
+  let imageLayout = imageEpubLayoutCache.get(filePath);
+  if (!imageLayout) {
+    try {
+      imageLayout = await invoke<EpubImageLayoutPayload>("epub_image_layout", { filePath });
+      imageEpubLayoutCache.set(filePath, imageLayout);
+    } catch (error) {
+      console.warn("[riida] epub_image_layout failed:", error);
+    }
+  }
+  return imageLayout;
+}
 
 // --- image-sequence fixed-layout EPUB viewer -------------------------------
 

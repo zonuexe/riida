@@ -32,7 +32,7 @@ import { initShelfEditor } from "./app/shelf-editor";
 import { initShellControls, initSidebarControls } from "./app/sidebar";
 import { initTagEditor } from "./app/tag-editor";
 import { initTocToggle } from "./app/toc";
-import { initViewerSettingsPanel } from "./app/viewer-settings";
+import { initViewerSettingsPanel } from "./app/viewer-settings-panel";
 import { initViewerEditorButtons, initViewerPageJump, initViewerResize } from "./app/viewer";
 import { initLibraryWelcome, registerLibraryDrops } from "./app/welcome";
 

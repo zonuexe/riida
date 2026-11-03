@@ -6,13 +6,7 @@ import { clampEpubPageNumber, epubLocationIndexFromPageNumber } from "../epub-pa
 import { parseRequestedPageNumber } from "../page-jump-utils";
 import { preserveNoteWindowBottomRightOffset } from "../note-window-utils";
 import { DEFAULT_VIEWER_SETTINGS } from "../viewer-settings-utils";
-import {
-  applyEpubViewerColors,
-  captureEpubCfiForHistory,
-  destroyEpubBook,
-  renderEpubBook,
-  resizeEpubRendition,
-} from "./epub-viewer";
+import { captureEpubCfiForHistory, destroyEpubBook, renderEpubBook } from "./epub-viewer";
 import { destroyImageEpub, fitImageEpubSpread, goToImagePage } from "./image-epub-viewer";
 import { renderApp } from "./library";
 import { openBookMetadataEditor } from "./metadata-editor";
@@ -46,9 +40,11 @@ import { appState, viewerSettings, viewerState } from "./state";
 import { openTagEditor } from "./tag-editor";
 import type { BookSummary, LibrarySnapshot } from "./types";
 import {
+  applyEpubViewerColors,
   applyPdfViewerBackground,
   applyViewerPreferences,
   loadViewerSettingsForCurrentBook,
+  resizeEpubRendition,
   syncViewerSettingsUi,
 } from "./viewer-settings";
 

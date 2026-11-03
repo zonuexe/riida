@@ -13,7 +13,6 @@ import { cropRectForPage, type TrimBoxes, trimmedPageSize } from "../pdf-trim";
 import { buildPageGroups, getVisualPageOrder } from "../viewer-layout-utils";
 import { buildPdfRenderWindowPlan } from "../pdf-render-window-utils";
 import { planPagedKeyAction } from "../pdf-paged-nav-utils";
-import { applyEpubViewerColors } from "./epub-viewer";
 import { navigateBack } from "./navigation";
 import { applyPdfSearchHighlights, closePdfSearch, pdfSearchState } from "./pdf-search-highlights";
 import {
@@ -24,7 +23,12 @@ import {
 import { appState, viewerSettings, viewerState } from "./state";
 import { buildPdfToc, syncTocUi } from "./toc";
 import type { PdfRenderPlan, PdfRenderSession } from "./types";
-import { applyPdfViewerBackground, applyViewerVerticalGapMode } from "./viewer-settings";
+import {
+  applyEpubViewerColors,
+  applyPdfViewerBackground,
+  applyViewerVerticalGapMode,
+  syncImmediatePdfScrollMode,
+} from "./viewer-settings";
 import { navigateViewerToPage, renderCurrentPage } from "./viewer";
 import { currentViewerStage } from "./dom";
 
@@ -436,14 +440,6 @@ export function schedulePdfRenderWindowUpdate(session: PdfRenderSession, focusGr
     session.updateScheduled = false;
     void updatePdfRenderWindow(session, focusGroupIndex);
   });
-}
-
-export function syncImmediatePdfScrollMode() {
-  const stageEl = currentViewerStage();
-  if (!stageEl) {
-    return;
-  }
-  stageEl.dataset.scrollMode = viewerSettings.scrollMode;
 }
 
 function getPdfPageEls(): HTMLElement[] {

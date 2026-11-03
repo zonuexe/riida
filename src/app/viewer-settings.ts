@@ -7,6 +7,7 @@ import {
   preferredExplicitViewerBackgroundMode,
   switchViewerSettingsScopeInState,
   type ViewerBackgroundMode,
+  type ViewerColorPalette,
   viewerColorPaletteForMode,
   viewerExtraVerticalGap,
   type ViewerSettings,
@@ -14,9 +15,8 @@ import {
   type ViewerSettingsScope,
   type ViewerSourceType,
 } from "../viewer-settings-utils";
-import { applyEpubFontSize, applyEpubViewerColors, resizeEpubRendition } from "./epub-viewer";
+import { currentViewerStage } from "./dom";
 import { rebuildImageEpub } from "./image-epub-viewer";
-import { syncImmediatePdfScrollMode } from "./pdf-viewer";
 import {
   appState,
   currentAppTheme,
@@ -582,4 +582,69 @@ export function initViewerSettingsPanel() {
       syncViewerSettingsUi();
     }
   });
+}
+
+// Applying preferences to the live epub.js rendition and PDF stage. The
+// engines call these while they render, so they sit here below the engines.
+
+export function applyEpubColorsToDocument(doc: Document, palette: ViewerColorPalette) {
+  const root = doc.documentElement;
+  const body = doc.body;
+
+  root?.style.setProperty("background-color", palette.background, "important");
+  root?.style.setProperty("color", palette.foreground, "important");
+  body?.style.setProperty("background-color", palette.background, "important");
+  body?.style.setProperty("color", palette.foreground, "important");
+
+  const linkEls = doc.querySelectorAll<HTMLAnchorElement>("a[href]");
+  for (const linkEl of linkEls) {
+    linkEl.style.setProperty("color", palette.link, "important");
+  }
+}
+
+export function applyEpubViewerColors(backgroundMode: ViewerBackgroundMode) {
+  const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");
+  const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
+  const palette = viewerColorPaletteForMode(backgroundMode, currentAppTheme());
+
+  if (backgroundMode === "inherit-theme") {
+    mainPaneEl?.style.removeProperty("background-color");
+    epubViewerEl?.style.removeProperty("background-color");
+  } else {
+    if (mainPaneEl) {
+      mainPaneEl.style.backgroundColor = palette.background;
+    }
+    if (epubViewerEl) {
+      epubViewerEl.style.backgroundColor = palette.background;
+    }
+  }
+
+  const contentsList = appState.activeEpubRendition
+    ? ((appState.activeEpubRendition.getContents() as unknown as import("epubjs").Contents[]) ?? [])
+    : [];
+  for (const contents of contentsList) {
+    if (contents.document) {
+      applyEpubColorsToDocument(contents.document, palette);
+    }
+  }
+}
+
+export function applyEpubFontSize(fontSize: number) {
+  if (!appState.activeEpubRendition) return;
+  appState.activeEpubRendition.themes.fontSize(`${fontSize}%`);
+}
+
+export function resizeEpubRendition() {
+  if (!appState.activeEpubRendition) return;
+  const el = document.querySelector<HTMLElement>("#epub-viewer");
+  if (!el) return;
+  appState.activeEpubRendition.resize(el.clientWidth, el.clientHeight);
+}
+
+export function syncImmediatePdfScrollMode() {
+  const stageEl = currentViewerStage();
+  if (!stageEl) {
+    return;
+  }
+  stageEl.dataset.scrollMode = viewerSettings.scrollMode;
 }

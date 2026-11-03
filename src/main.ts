@@ -1,29 +1,22 @@
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { getName, getVersion } from "@tauri-apps/api/app";
-import { listen } from "@tauri-apps/api/event";
-import { type DragDropEvent, getCurrentWebview } from "@tauri-apps/api/webview";
-import { homeDir } from "@tauri-apps/api/path";
-import { confirm, message, open } from "@tauri-apps/plugin-dialog";
-import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import "./vendor/fontawesome/css/fontawesome.min.css";
 import "./vendor/fontawesome/css/brands.min.css";
 import "./vendor/fontawesome/css/regular.min.css";
 import "./vendor/fontawesome/css/solid.min.css";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { getName, getVersion } from "@tauri-apps/api/app";
+import { listen } from "@tauri-apps/api/event";
+import { type DragDropEvent, getCurrentWebview } from "@tauri-apps/api/webview";
+import { confirm, message, open } from "@tauri-apps/plugin-dialog";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { NoteEditorHandle } from "./note-editor";
 import {
   addLibraryRoot,
+  type AppTheme,
   buildAppConfigDraft,
   normalizeAppTheme,
-  type AppTheme,
 } from "./app-config-utils";
 import { applyAppTheme, persistAppTheme } from "./app-theme";
-import {
-  describeAddLibraryRootError,
-  isMessageKey,
-  type MessageKey,
-  resolveLocale,
-  translate,
-} from "./i18n";
+import { describeAddLibraryRootError } from "./i18n";
 import { loadPdfJsRuntime, TauriBinaryDataFactory } from "./pdf-runtime";
 import {
   applyBookMetadataImport,
@@ -38,7 +31,7 @@ import {
   parseBookMetadataImport,
   validateBookMetadataDraft,
 } from "./book-metadata-utils";
-import { shouldSyncControlValue, type StatusTone, statusToneAttribute } from "./dom-form-utils";
+import { type StatusTone, statusToneAttribute } from "./dom-form-utils";
 import {
   canStartBuild,
   formatIndexStatusLabel,
@@ -62,9 +55,9 @@ import {
   computeImageFit,
   firstPageNumberOfSpread,
   type ImagePage,
+  type Progression as ImageProgression,
   type ImageSpread,
   normalizeImagePages,
-  type Progression as ImageProgression,
   spreadIndexForPage,
   visualSpreadOrder,
 } from "./epub-image-layout-utils";
@@ -75,6 +68,7 @@ import {
   deriveSources,
   deriveTags,
   describeEmptyLibraryState,
+  type DirectoryNode,
   filterVisibleBooks,
   folderDisplayName,
   formatAuthorByline,
@@ -83,7 +77,6 @@ import {
   formatFileSize,
   formatReleaseYear,
   shouldShowLibraryWelcome,
-  type DirectoryNode,
 } from "./library-utils";
 import {
   buildNavigationUrl,
@@ -114,17 +107,17 @@ import {
   type SearchSuggestion,
 } from "./search-suggestions";
 import {
+  composeShelfQuery,
+  decomposeShelfQuery,
   type ShelfCondition,
   type ShelfFieldKey,
   type ShelfMode,
-  composeShelfQuery,
-  decomposeShelfQuery,
 } from "./shelf-query.ts";
 import {
-  type SidebarSectionKey,
   loadSidebarSectionOrder,
   reorderSidebarSection,
   saveSidebarSectionOrder,
+  type SidebarSectionKey,
 } from "./sidebar-section-order.ts";
 import { countBooksWithTagOrDescendants, validateTagValue } from "./tag-utils";
 import {
@@ -136,17 +129,17 @@ import {
   selectHeadSidePageInSpread,
 } from "./reading-position-utils";
 import { parseRequestedPageNumber } from "./page-jump-utils";
-import { resolvePdfLinkTarget, type PdfAnnotationRecord } from "./pdf-link-utils";
+import { type PdfAnnotationRecord, resolvePdfLinkTarget } from "./pdf-link-utils";
 import {
   clampNoteWindowPosition,
   ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
   preserveNoteWindowBottomRightOffset,
 } from "./note-window-utils";
 import { detectPdfBindingDirection } from "./pdf-binding-detect";
-import { PdfPageAnalyzer, resolvePdfTrimBoxes, type PageSampleSurface } from "./pdf-page-sample";
+import { type PageSampleSurface, PdfPageAnalyzer, resolvePdfTrimBoxes } from "./pdf-page-sample";
 import { applyPdfPageOverlayTransform, pageContentTransform } from "./pdf-page-transform";
 import { createPdfRangeTransport, probePdfRangeSource } from "./pdf-range-source";
-import { cropRectForPage, trimmedPageSize, type TrimBoxes } from "./pdf-trim";
+import { cropRectForPage, type TrimBoxes, trimmedPageSize } from "./pdf-trim";
 import { buildPageGroups, getVisualPageOrder } from "./viewer-layout-utils";
 import { buildPdfRenderWindowPlan } from "./pdf-render-window-utils";
 import { planPagedKeyAction } from "./pdf-paged-nav-utils";
@@ -156,10 +149,10 @@ import {
   normalizeViewerSourceType,
   preferredExplicitViewerBackgroundMode,
   switchViewerSettingsScopeInState,
-  viewerColorPaletteForMode,
-  viewerExtraVerticalGap,
   type ViewerBackgroundMode,
   type ViewerColorPalette,
+  viewerColorPaletteForMode,
+  viewerExtraVerticalGap,
   type ViewerSettings,
   type ViewerSettingsPayload,
   type ViewerSettingsScope,
@@ -169,139 +162,32 @@ import {
   buildPdfSearchPageIndex,
   collectPdfTextLayerItems,
   findPdfSearchMatchesInPage,
-  pickInitialMatchIndex,
-  searchNormalize,
   type PdfSearchMatch,
   type PdfSearchPageIndex,
+  pickInitialMatchIndex,
+  searchNormalize,
 } from "./pdf-search-utils";
-
-type CustomSource = {
-  id: string;
-  name: string;
-  icon: string;
-};
-
-type BookSummary = {
-  fileName: string;
-  title: string | null;
-  filePath: string;
-  fileSize: number;
-  tags: string[];
-  authors: string[];
-  sourceType: string;
-  coverUrl: string | null;
-  locationLabel: string | null;
-  isOpenable: boolean;
-  asin: string | null;
-  url: string | null;
-  publisher: string | null;
-  releaseDate: string | null;
-  language: string | null;
-  lastReadAt: number | null;
-  indexedAt: number;
-};
-
-type LibrarySnapshot = {
-  libraryRoots: string[];
-  existingLibraryRoots: string[];
-  missingLibraryRoots: string[];
-  indexedCount: number;
-  books: BookSummary[];
-  excludedPatterns: string[];
-  pdfRenderer: "native" | "pdfjs";
-  customSources: CustomSource[];
-};
-
-type NoteDocument = {
-  filePath: string;
-  format: string;
-  content: string;
-  updatedAt: number | null;
-};
-
-type BookMetadataPayload = {
-  filePath: string;
-  title: string;
-  authors: string[];
-  description: string;
-  publisher: string;
-  releaseDate: string;
-  language: string;
-  url: string;
-  asin: string;
-  coverUrl: string;
-  updatedAt: number | null;
-};
-
-type ReadingPosition = {
-  filePath: string;
-  pageNumber: number;
-  pageOffsetRatio: number;
-  cfi?: string | null;
-  updatedAt: number | null;
-};
-
-type Shelf = {
-  id: string;
-  name: string;
-  query: string;
-  icon: string | null;
-  sortOrder: number;
-  createdAt: number;
-  updatedAt: number;
-};
-
-type ViewerState = {
-  books: BookSummary[];
-  currentBook: BookSummary | null;
-  activeDirectory: string | null;
-  activeTag: string | null;
-  activeExternalSource: string | null;
-  activeShelf: string | null;
-  activeTagDirectOnly: boolean;
-  searchQuery: string;
-  expandedDirectories: Set<string>;
-  expandedTags: Set<string>;
-  sidebarCollapsed: boolean;
-  isAppSettingsOpen: boolean;
-  isAboutOpen: boolean;
-  /** The welcome screen was opened from Settings while a library exists. */
-  isLibraryWelcomeRequested: boolean;
-  libraryErrorMessage: string | null;
-  shelves: Shelf[];
-};
-
-type AppConfigPayload = {
-  configPath: string;
-  configExists: boolean;
-  libraryRoots: string[];
-  excludedPatterns: string[];
-  pdfRenderer: "native" | "pdfjs";
-  theme: AppTheme;
-  enabledExternalSources: string[];
-};
-
-type ViewerSettingsState = ViewerSettings & {
-  globalDraft: ViewerSettings;
-  fileDraft: ViewerSettings;
-  scope: ViewerSettingsScope;
-  hasFileOverride: boolean;
-  isSettingsOpen: boolean;
-  sourceType: ViewerSourceType;
-};
-
-type NavigationState = {
-  historyIndex: number;
-  bookFilePath: string | null;
-  epubCfi?: string | null;
-  pdfPage?: number | null;
-  activeDirectory: string | null;
-  activeTag: string | null;
-  activeExternalSource: string | null;
-  activeShelf: string | null;
-  activeTagDirectOnly: boolean;
-  searchQuery: string;
-};
+import {
+  applyStatusMessage,
+  finishStartupPhase,
+  isEditableTarget,
+  syncControlValue,
+} from "./app/dom";
+import { cachedHomeDir, collapseHomePath, primeHomeDirCache } from "./app/home-path";
+import { applyStaticTranslations, t, uiLocale } from "./app/locale";
+import { appState, viewerSettings, viewerState } from "./app/state";
+import type {
+  AppConfigPayload,
+  BookMetadataPayload,
+  BookSummary,
+  CustomSource,
+  LibrarySnapshot,
+  NavigationState,
+  NoteDocument,
+  PdfOutlineNode,
+  ReadingPosition,
+  Shelf,
+} from "./app/types";
 
 type NoteState = {
   isOpen: boolean;
@@ -401,12 +287,6 @@ type PdfPageProxyLike = {
   cleanup: (resetStats?: boolean) => boolean;
 };
 
-type PdfOutlineNode = {
-  title: string;
-  dest: string | unknown[] | null;
-  items: PdfOutlineNode[];
-};
-
 type PdfRenderSession = {
   token: number;
   pdfDocument: {
@@ -438,65 +318,6 @@ const pdfPageAnalyzer = new PdfPageAnalyzer((): PageSampleSurface | null => {
   const context = canvas.getContext("2d", { willReadFrequently: true });
   return context ? { canvas, context } : null;
 });
-
-const viewerState: ViewerState = {
-  books: [],
-  currentBook: null,
-  activeDirectory: null,
-  activeTag: null,
-  activeExternalSource: null,
-  activeShelf: null,
-  activeTagDirectOnly: false,
-  searchQuery: "",
-  expandedDirectories: new Set<string>(),
-  expandedTags: new Set<string>(),
-  sidebarCollapsed: false,
-  isAppSettingsOpen: false,
-  isAboutOpen: false,
-  isLibraryWelcomeRequested: false,
-  libraryErrorMessage: null,
-  shelves: [],
-};
-
-const viewerSettings: ViewerSettingsState = {
-  ...DEFAULT_VIEWER_SETTINGS,
-  globalDraft: { ...DEFAULT_VIEWER_SETTINGS },
-  fileDraft: { ...DEFAULT_VIEWER_SETTINGS },
-  scope: "file",
-  hasFileOverride: false,
-  treatFirstPageAsCover: true,
-  isSettingsOpen: false,
-  sourceType: "pdf",
-};
-
-// Mutable state that more than one feature reassigns. State only one feature
-// writes stays with that feature; these are the values shared across them.
-type AppState = {
-  lastSnapshot: LibrarySnapshot | null;
-  lastAppConfig: AppConfigPayload | null;
-  activeReadingPosition: ReadingPosition | null;
-  // One-shot jump target consumed by openBook when a full-text hit opens a book
-  // at a specific location instead of its saved reading position.
-  pendingViewerJump: { filePath: string; page?: number; cfi?: string } | null;
-  activePdfOutline: PdfOutlineNode[] | null;
-  tocPanelOpen: boolean;
-  activeEpubTotalPages: number | null;
-  // True when the active EPUB's spine page-progression-direction is "rtl".
-  // DPFJ guide §ページ進行方向の遵守: page direction is governed by OPF spine, not writing-mode.
-  // In rtl books, ArrowLeft advances the reading order (next page) while ArrowRight goes back.
-  activeEpubIsRtl: boolean;
-};
-
-const appState: AppState = {
-  lastSnapshot: null,
-  lastAppConfig: null,
-  activeReadingPosition: null,
-  pendingViewerJump: null,
-  activePdfOutline: null,
-  tocPanelOpen: false,
-  activeEpubTotalPages: null,
-  activeEpubIsRtl: false,
-};
 
 type ListSortKey =
   | "default"
@@ -614,7 +435,7 @@ let navigationEntries: NavigationState[] = [];
 // ignored when they resolve out of order.
 let fulltextQueryToken = 0;
 let pdfZoomScale = 1;
-let cachedHomeDir: string | null = null;
+
 let cachedAppName = "riida";
 let cachedAppVersion = "0.9.3";
 const buildDate = __BUILD_DATE__;
@@ -872,9 +693,6 @@ function bindViewerBackgroundOptionGroup(
   }
 }
 
-function finishStartupPhase() {
-  document.body.dataset.startup = "ready";
-}
 let isTagEditorComposing = false;
 let noteEditorModulePromise: Promise<typeof import("./note-editor")> | null = null;
 const viewerPageJumpState: ViewerPageJumpState = {
@@ -1044,42 +862,6 @@ let lastViewportSize = {
   width: window.innerWidth,
   height: window.innerHeight,
 };
-
-async function collapseHomePath(path: string) {
-  if (!cachedHomeDir) {
-    try {
-      cachedHomeDir = (await homeDir()).replace(/\/+$/, "");
-    } catch {
-      cachedHomeDir = "";
-    }
-  }
-
-  if (!cachedHomeDir) {
-    return path;
-  }
-
-  if (path === cachedHomeDir) {
-    return "~";
-  }
-
-  if (path.startsWith(`${cachedHomeDir}/`)) {
-    return `~/${path.slice(cachedHomeDir.length + 1)}`;
-  }
-
-  return path;
-}
-
-async function primeHomeDirCache() {
-  if (cachedHomeDir !== null) {
-    return;
-  }
-
-  try {
-    cachedHomeDir = (await homeDir()).replace(/\/+$/, "");
-  } catch {
-    cachedHomeDir = "";
-  }
-}
 
 const EPUB_PREVIEW_NOTICE_STORAGE_KEY = "riida.epub.previewNoticeShown";
 const FULLTEXT_INCLUDE_ONLINE_KEY = "riida.fulltext.includeOnlineOnly";
@@ -2044,43 +1826,6 @@ function renderCustomSourcesList() {
     rowEl.appendChild(editEl);
     rowEl.appendChild(deleteEl);
     listEl.appendChild(rowEl);
-  }
-}
-
-// Write a state value into a form control without disrupting the user: skip
-// while the control is focused, and skip when the value already matches.
-function syncControlValue(
-  element: HTMLInputElement | HTMLTextAreaElement | null,
-  value: string,
-): void {
-  if (!element) {
-    return;
-  }
-  if (
-    shouldSyncControlValue({
-      isFocused: document.activeElement === element,
-      currentValue: element.value,
-      nextValue: value,
-    })
-  ) {
-    element.value = value;
-  }
-}
-
-// Render a status line: hide it when empty, and reflect the tone through the
-// `data-tone` attribute (removed for the neutral default).
-function applyStatusMessage(
-  statusEl: HTMLElement,
-  message: string,
-  tone: StatusTone = "neutral",
-): void {
-  statusEl.hidden = message.length === 0;
-  statusEl.textContent = message;
-  const toneAttr = statusToneAttribute(tone);
-  if (toneAttr === null) {
-    delete statusEl.dataset.tone;
-  } else {
-    statusEl.dataset.tone = toneAttr;
   }
 }
 
@@ -3697,25 +3442,6 @@ async function loadAppConfig() {
   syncAppSettingsUi();
 }
 
-const uiLocale = resolveLocale(
-  navigator.languages.length > 0 ? navigator.languages : [navigator.language],
-);
-
-function t(key: MessageKey, params?: Record<string, string | number>) {
-  return translate(uiLocale, key, params);
-}
-
-/** Replace the English copy of elements marked `data-i18n` in the markup. */
-function applyStaticTranslations() {
-  document.documentElement.lang = uiLocale;
-  for (const element of document.querySelectorAll<HTMLElement>("[data-i18n]")) {
-    const key = element.dataset.i18n;
-    if (key && isMessageKey(key)) {
-      element.textContent = t(key);
-    }
-  }
-}
-
 let libraryRootAddInFlight = false;
 let libraryDropStatusTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -4674,18 +4400,6 @@ function syncNavigationControlsUi() {
   if (forwardButtonEl) {
     forwardButtonEl.disabled = navigationHistoryIndex >= navigationHistoryMax;
   }
-}
-
-function isEditableTarget(target: EventTarget | null) {
-  const element = target instanceof HTMLElement ? target : null;
-
-  if (!element) {
-    return false;
-  }
-
-  return Boolean(
-    element.closest('input, textarea, select, [contenteditable="true"], .ProseMirror, .milkdown'),
-  );
 }
 
 function currentViewerStage() {

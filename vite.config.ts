@@ -59,6 +59,7 @@ export default defineConfig(async () => ({
       include: ["src/**/*.ts"],
       exclude: [
         "src/main.ts",
+        "src/app/**",
         "src/main-viewer.ts",
         "src/note-editor.ts",
         "src/cjk-radical-map.ts",

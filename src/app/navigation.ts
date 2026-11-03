@@ -8,18 +8,13 @@ import {
 } from "../navigation-utils";
 import { activeEpubRendition } from "./epub-viewer";
 import { activeImageEpub, goToImagePage } from "./image-epub-viewer";
+import { bulkSelectState, resetListSort, syncBulkActionBar } from "./library-view";
+import { renderApp } from "./library";
 import { activePdfRenderSession } from "./pdf-viewer";
+import { ensureExpandedPath, ensureExpandedTag } from "./sidebar";
 import { appState, viewerState } from "./state";
 import type { LibrarySnapshot, NavigationState } from "./types";
 import { clearCurrentBookSelection, navigateViewerToPage, openBook } from "./viewer";
-import {
-  bulkSelectState,
-  ensureExpandedPath,
-  ensureExpandedTag,
-  renderApp,
-  resetListSort,
-  syncBulkActionBar,
-} from "../main";
 
 let suppressHistoryUpdates = false;
 let navigationHistoryIndex = 0;

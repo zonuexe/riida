@@ -21,6 +21,7 @@ import {
   fitImageEpubSpread,
   goToImagePage,
 } from "./image-epub-viewer";
+import { renderApp } from "./library";
 import { syncNavigationHistory } from "./navigation";
 import {
   clampNoteWindow,
@@ -55,7 +56,7 @@ import {
   loadViewerSettingsForCurrentBook,
   syncViewerSettingsUi,
 } from "./viewer-settings";
-import { openBookMetadataEditor, openTagEditor, renderApp } from "../main";
+import { openBookMetadataEditor, openTagEditor } from "../main";
 
 type ViewerPageJumpState = {
   input: string;

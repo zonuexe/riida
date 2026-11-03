@@ -2,12 +2,11 @@ import "./vendor/fontawesome/css/fontawesome.min.css";
 import "./vendor/fontawesome/css/brands.min.css";
 import "./vendor/fontawesome/css/regular.min.css";
 import "./vendor/fontawesome/css/solid.min.css";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { getName, getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { type DragDropEvent, getCurrentWebview } from "@tauri-apps/api/webview";
 import { confirm, message, open } from "@tauri-apps/plugin-dialog";
-import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   addLibraryRoot,
   type AppTheme,
@@ -40,29 +39,14 @@ import {
   locationLabel,
 } from "./fulltext-ui";
 import {
-  deriveDirectories,
   deriveLanguages,
   derivePublishers,
   deriveSources,
   deriveTags,
-  describeEmptyLibraryState,
-  type DirectoryNode,
   filterVisibleBooks,
   folderDisplayName,
-  formatAuthorByline,
-  formatBookLocation,
-  formatBookMetaLine,
-  formatFileSize,
-  formatReleaseYear,
-  shouldShowLibraryWelcome,
 } from "./library-utils";
 import { suggestTagCompletions } from "./tag-suggestions";
-import {
-  applySuggestion,
-  buildValueSource,
-  computeSuggestions,
-  type SearchSuggestion,
-} from "./search-suggestions";
 import {
   composeShelfQuery,
   decomposeShelfQuery,
@@ -70,18 +54,22 @@ import {
   type ShelfFieldKey,
   type ShelfMode,
 } from "./shelf-query.ts";
-import {
-  loadSidebarSectionOrder,
-  reorderSidebarSection,
-  saveSidebarSectionOrder,
-  type SidebarSectionKey,
-} from "./sidebar-section-order.ts";
 import { countBooksWithTagOrDescendants, validateTagValue } from "./tag-utils";
+import { registerThumbnailEvents } from "./app/book-list";
 import { applyStatusMessage, finishStartupPhase, syncControlValue } from "./app/dom";
-import { destroyEpubBook, initEpubFocusGuard } from "./app/epub-viewer";
-import { cachedHomeDir, collapseHomePath, primeHomeDirCache } from "./app/home-path";
-import { destroyImageEpub } from "./app/image-epub-viewer";
+import { initEpubFocusGuard } from "./app/epub-viewer";
+import { collapseHomePath, primeHomeDirCache } from "./app/home-path";
 import { initGlobalShortcuts } from "./app/keyboard";
+import { initLibrarySearch } from "./app/library-search";
+import { initBulkSelection, initLibraryViewControls } from "./app/library-view";
+import {
+  hasActiveLibraryFilter,
+  refreshShelves,
+  refreshSnapshot,
+  registerLibraryEvents,
+  renderApp,
+  updateBookTagsInState,
+} from "./app/library";
 import { applyStaticTranslations, t, uiLocale } from "./app/locale";
 import {
   initHistoryPopstate,
@@ -89,10 +77,11 @@ import {
   loadInitialLibraryState,
   navigateToState,
 } from "./app/navigation";
-import { initNotes, loadNoteForCurrentBook, noteState, syncNoteUi } from "./app/notes";
+import { initNotes } from "./app/notes";
 import { initPdfSearch } from "./app/pdf-search";
 import { initPdfStageScroll } from "./app/pdf-viewer";
 import { initFlushOnUnload } from "./app/reading-position";
+import { initShellControls, initSidebarControls } from "./app/sidebar";
 import { appState, viewerState } from "./app/state";
 import { initTocToggle } from "./app/toc";
 import type {
@@ -103,16 +92,8 @@ import type {
   LibrarySnapshot,
   Shelf,
 } from "./app/types";
-import { initViewerSettingsPanel, syncViewerSettingsUi } from "./app/viewer-settings";
-import {
-  clearCurrentBookSelection,
-  initViewerEditorButtons,
-  initViewerPageJump,
-  initViewerResize,
-  renderCurrentPage,
-  syncViewerPageJumpUi,
-  viewerNeedsRender,
-} from "./app/viewer";
+import { initViewerSettingsPanel } from "./app/viewer-settings";
+import { initViewerEditorButtons, initViewerPageJump, initViewerResize } from "./app/viewer";
 
 type BookTagsPayload = {
   filePath: string;
@@ -162,48 +143,6 @@ type BookMetadataEditorState = {
   statusMessage: string;
   loadToken: number;
 };
-
-type ListSortKey =
-  | "default"
-  | "title-asc"
-  | "title-desc"
-  | "last-read"
-  | "file-size"
-  | "added-desc"
-  | "added-asc";
-let currentListSort: ListSortKey = "default";
-
-export function resetListSort() {
-  currentListSort = "default";
-  const el = document.querySelector<HTMLSelectElement>("#library-sort");
-  if (el) el.value = "default";
-}
-
-function sortBooks(books: BookSummary[]): BookSummary[] {
-  switch (currentListSort) {
-    case "title-asc":
-      return [...books].sort((a, b) =>
-        (a.title ?? a.fileName).localeCompare(b.title ?? b.fileName, "ja"),
-      );
-    case "title-desc":
-      return [...books].sort((a, b) =>
-        (b.title ?? b.fileName).localeCompare(a.title ?? a.fileName, "ja"),
-      );
-    case "last-read":
-      return [...books].sort((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0));
-    case "file-size":
-      return [...books].sort((a, b) => b.fileSize - a.fileSize);
-    case "added-desc":
-      return [...books].sort((a, b) => b.indexedAt - a.indexedAt);
-    case "added-asc":
-      return [...books].sort((a, b) => a.indexedAt - b.indexedAt);
-    default:
-      return books;
-  }
-}
-const thumbnailUrls = new Map<string, string>();
-let thumbnailObserver: IntersectionObserver | null = null;
-const thumbnailBookByImage = new WeakMap<HTMLImageElement, BookSummary>();
 
 // Monotonic token so stale async full-text results from a superseded query are
 // ignored when they resolve out of order.
@@ -260,10 +199,6 @@ const bookMetadataEditorState: BookMetadataEditorState = {
   importText: "",
   statusMessage: "",
   loadToken: 0,
-};
-
-export const bulkSelectState = {
-  selectedFilePaths: new Set<string>(),
 };
 
 type CustomSourceEditorState = {
@@ -372,135 +307,6 @@ const CUSTOM_SOURCE_ICONS: Array<{ cls: string; label: string }> = [
 ];
 
 const FULLTEXT_INCLUDE_ONLINE_KEY = "riida.fulltext.includeOnlineOnly";
-
-function applyThumbnail(filePath: string, thumbnailPath: string) {
-  const thumbnailUrl = convertFileSrc(thumbnailPath);
-  thumbnailUrls.set(filePath, thumbnailUrl);
-
-  const imageEls = document.querySelectorAll<HTMLImageElement>(
-    `.book-thumb[data-file-path="${CSS.escape(filePath)}"]`,
-  );
-
-  for (const imageEl of imageEls) {
-    imageEl.src = thumbnailUrl;
-    imageEl.dataset.loaded = "true";
-  }
-}
-
-async function loadThumbnail(book: BookSummary, imageEl: HTMLImageElement) {
-  if (book.coverUrl) {
-    imageEl.src = book.coverUrl;
-    imageEl.dataset.loaded = "true";
-    return;
-  }
-
-  if (book.sourceType !== "pdf") {
-    imageEl.dataset.loaded = "true";
-    return;
-  }
-
-  if (thumbnailUrls.has(book.filePath)) {
-    imageEl.src = thumbnailUrls.get(book.filePath) ?? "";
-    imageEl.dataset.loaded = "true";
-    return;
-  }
-
-  const thumbnailPath = await invoke<string | null>("book_thumbnail", {
-    filePath: book.filePath,
-  });
-
-  if (!thumbnailPath) {
-    return;
-  }
-
-  applyThumbnail(book.filePath, thumbnailPath);
-}
-
-function ensureThumbnailObserver() {
-  if (thumbnailObserver) {
-    return thumbnailObserver;
-  }
-
-  thumbnailObserver = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) {
-          continue;
-        }
-
-        const imageEl = entry.target as HTMLImageElement;
-        const book = thumbnailBookByImage.get(imageEl);
-
-        if (book && imageEl.dataset.loaded !== "true") {
-          void loadThumbnail(book, imageEl);
-        }
-
-        thumbnailObserver?.unobserve(imageEl);
-      }
-    },
-    {
-      rootMargin: "120px 0px",
-    },
-  );
-
-  return thumbnailObserver;
-}
-
-export function ensureExpandedPath(path: string | null) {
-  if (!path) {
-    return;
-  }
-
-  let currentPath = path;
-  while (true) {
-    const separator = currentPath.lastIndexOf("/");
-    if (separator <= 0) {
-      break;
-    }
-
-    currentPath = currentPath.slice(0, separator);
-    viewerState.expandedDirectories.add(currentPath);
-  }
-}
-
-function isNodeVisible(node: DirectoryNode) {
-  if (node.depth === 0) {
-    return true;
-  }
-
-  return node.parentPath ? viewerState.expandedDirectories.has(node.parentPath) : true;
-}
-
-function parentTagId(tagId: string) {
-  const separator = tagId.lastIndexOf("/");
-  return separator >= 0 ? tagId.slice(0, separator) : null;
-}
-
-export function ensureExpandedTag(tagId: string | null) {
-  if (!tagId) {
-    return;
-  }
-
-  let currentTag = tagId;
-  while (true) {
-    const parent = parentTagId(currentTag);
-    if (!parent) {
-      break;
-    }
-
-    viewerState.expandedTags.add(parent);
-    currentTag = parent;
-  }
-}
-
-function isTagVisible(tagId: string, depth: number) {
-  if (depth === 0) {
-    return true;
-  }
-
-  const parent = parentTagId(tagId);
-  return parent ? viewerState.expandedTags.has(parent) : true;
-}
 
 function renderLibraryRootsList() {
   const listEl = document.querySelector<HTMLElement>("#config-library-roots-list");
@@ -679,7 +485,7 @@ function syncCustomSourceEditorUi() {
   }
 }
 
-function openCustomSourceEditor(source?: CustomSource) {
+export function openCustomSourceEditor(source?: CustomSource) {
   customSourceEditorState.isOpen = true;
   customSourceEditorState.id = source?.id ?? null;
   customSourceEditorState.name = source?.name ?? "";
@@ -1008,7 +814,7 @@ function setShelfEditorMode(nextMode: ShelfMode) {
   syncShelfEditorUi();
 }
 
-function openShelfEditor(shelf?: Shelf, presetQuery?: string) {
+export function openShelfEditor(shelf?: Shelf, presetQuery?: string) {
   shelfEditorState.isOpen = true;
   shelfEditorState.id = shelf?.id ?? null;
   shelfEditorState.name = shelf?.name ?? "";
@@ -1142,7 +948,7 @@ function setBookMetadataStatus(message: string, tone: StatusTone = "neutral") {
   applyStatusMessage(statusEl, message, tone);
 }
 
-function syncTagEditorUi() {
+export function syncTagEditorUi() {
   const modalEl = document.querySelector<HTMLElement>("#tag-editor-modal");
   const bookEl = document.querySelector<HTMLElement>("#tag-editor-book");
   const multiInfoEl = document.querySelector<HTMLElement>("#tag-editor-multi-info");
@@ -1232,7 +1038,7 @@ function syncTagEditorUi() {
   }
 }
 
-function openTagManager(tagId: string) {
+export function openTagManager(tagId: string) {
   const books = appState.lastSnapshot?.books ?? viewerState.books;
   const stats = countBooksWithTagOrDescendants(books, tagId);
   tagManagerState.isOpen = true;
@@ -1394,7 +1200,7 @@ function clearActiveTagAfterDelete(tag: string) {
   }
 }
 
-function syncBookMetadataEditorUi() {
+export function syncBookMetadataEditorUi() {
   const modalEl = document.querySelector<HTMLElement>("#book-metadata-modal");
   const bookEl = document.querySelector<HTMLElement>("#book-metadata-book");
   const titleEl = document.querySelector<HTMLInputElement>("#book-metadata-title");
@@ -1558,22 +1364,6 @@ function clearMultiMetadataFieldPolicies() {
   }
 }
 
-function updateBookTagsInState(filePath: string, tags: string[]) {
-  const apply = (book: BookSummary) =>
-    book.filePath === filePath ? { ...book, tags: [...tags] } : book;
-
-  viewerState.books = viewerState.books.map(apply);
-  if (appState.lastSnapshot) {
-    appState.lastSnapshot = {
-      ...appState.lastSnapshot,
-      books: appState.lastSnapshot.books.map(apply),
-    };
-  }
-  if (viewerState.currentBook?.filePath === filePath) {
-    viewerState.currentBook = { ...viewerState.currentBook, tags: [...tags] };
-  }
-}
-
 function bookSourceDisplayName(sourceType: string): string {
   if (sourceType === "kindle") return "Kindle";
   const custom = appState.lastSnapshot?.customSources.find((s) => s.id === sourceType);
@@ -1683,22 +1473,7 @@ function openNewCustomBookEditor(source: CustomSource) {
   syncBookMetadataEditorUi();
 }
 
-export function syncBulkActionBar() {
-  const barEl = document.querySelector<HTMLElement>("#bulk-action-bar");
-  const countEl = document.querySelector<HTMLElement>("#bulk-select-count");
-  const shelfEl = document.querySelector<HTMLElement>("#book-results");
-  const selectAllEl = document.querySelector<HTMLElement>("#bulk-select-all");
-  const n = bulkSelectState.selectedFilePaths.size;
-  if (barEl) barEl.hidden = n === 0;
-  if (countEl) countEl.textContent = `${n} book${n === 1 ? "" : "s"} selected`;
-  shelfEl?.classList.toggle("has-selection", n > 0);
-  if (selectAllEl) {
-    const visible = appState.lastSnapshot ? visibleBooks(appState.lastSnapshot) : [];
-    selectAllEl.hidden = visible.every((b) => bulkSelectState.selectedFilePaths.has(b.filePath));
-  }
-}
-
-function openTagEditorForBooks(books: BookSummary[]) {
+export function openTagEditorForBooks(books: BookSummary[]) {
   tagEditorState.isOpen = true;
   tagEditorState.filePath = null;
   tagEditorState.books = books;
@@ -1709,7 +1484,7 @@ function openTagEditorForBooks(books: BookSummary[]) {
   syncTagEditorUi();
 }
 
-async function openBookMetadataEditorForBooks(books: BookSummary[]) {
+export async function openBookMetadataEditorForBooks(books: BookSummary[]) {
   const loadToken = bookMetadataEditorState.loadToken + 1;
   bookMetadataEditorState.loadToken = loadToken;
   bookMetadataEditorState.isOpen = true;
@@ -1925,22 +1700,6 @@ function buildBookMetadataDraftForSave():
   }
 
   return { ok: true, draft };
-}
-
-async function refreshSnapshot() {
-  const snapshot = await invoke<LibrarySnapshot>("load_library_snapshot");
-  appState.lastSnapshot = snapshot;
-  viewerState.books = snapshot.books;
-  viewerState.libraryErrorMessage = null;
-  renderApp();
-}
-
-async function refreshShelves() {
-  try {
-    viewerState.shelves = await invoke<Shelf[]>("list_shelves");
-  } catch {
-    viewerState.shelves = [];
-  }
 }
 
 async function saveTagEditorChanges() {
@@ -2449,1060 +2208,6 @@ async function saveAppSettingsFromForm() {
   }
 }
 
-function activeShelfQuery(): string {
-  if (!viewerState.activeShelf) return "";
-  const shelf = viewerState.shelves.find((s) => s.id === viewerState.activeShelf);
-  return shelf?.query ?? "";
-}
-
-function visibleBooks(snapshot: LibrarySnapshot) {
-  const shelfQuery = activeShelfQuery();
-  const userQuery = viewerState.searchQuery.trim();
-  const combinedQuery =
-    shelfQuery && userQuery ? `(${shelfQuery}) AND (${userQuery})` : shelfQuery || userQuery;
-  const filtered = filterVisibleBooks(
-    snapshot.books,
-    viewerState.activeDirectory,
-    viewerState.activeTag,
-    viewerState.activeExternalSource,
-    viewerState.activeTagDirectOnly,
-    combinedQuery,
-  );
-  return sortBooks(filtered);
-}
-
-function hasActiveLibraryFilter() {
-  return Boolean(
-    viewerState.searchQuery ||
-    viewerState.activeDirectory ||
-    viewerState.activeTag ||
-    viewerState.activeExternalSource ||
-    viewerState.activeShelf,
-  );
-}
-
-function describeCurrentEmptyLibraryState(snapshot: LibrarySnapshot, books: BookSummary[]) {
-  return describeEmptyLibraryState({
-    libraryRoots: snapshot.libraryRoots,
-    existingLibraryRoots: snapshot.existingLibraryRoots,
-    missingLibraryRoots: snapshot.missingLibraryRoots,
-    bookCount: books.length,
-    hasFilter: hasActiveLibraryFilter(),
-    libraryErrorMessage: viewerState.libraryErrorMessage,
-  });
-}
-
-function renderSidebar(snapshot: LibrarySnapshot) {
-  const navEl = document.querySelector<HTMLElement>("#sidebar-nav");
-  if (!navEl) {
-    return;
-  }
-
-  navEl.innerHTML = "";
-
-  const sections: Record<SidebarSectionKey, HTMLElement> = {
-    directories: createSidebarSection("directories"),
-    tags: createSidebarSection("tags"),
-    external: createSidebarSection("external"),
-    shelves: createSidebarSection("shelves"),
-  };
-
-  populateDirectoriesSection(sections.directories, snapshot);
-  populateTagsSection(sections.tags, snapshot);
-  populateExternalSection(sections.external, snapshot);
-  populateShelvesSection(sections.shelves, navEl);
-
-  const order = loadSidebarSectionOrder(localStorage);
-  for (const key of order) {
-    const sectionEl = sections[key];
-    if (!sectionEl.dataset.empty) {
-      navEl.appendChild(sectionEl);
-    }
-  }
-}
-
-function createSidebarSection(key: SidebarSectionKey): HTMLElement {
-  const sectionEl = document.createElement("section");
-  sectionEl.className = "sidebar-section";
-  sectionEl.dataset.section = key;
-  return sectionEl;
-}
-
-function attachSidebarSectionDnd(headerEl: HTMLElement, sectionEl: HTMLElement) {
-  headerEl.draggable = true;
-  headerEl.classList.add("sidebar-section-drag-handle");
-  headerEl.addEventListener("dragstart", (event) => {
-    sidebarSectionDragKey = (sectionEl.dataset.section as SidebarSectionKey | undefined) ?? null;
-    sectionEl.classList.add("is-dragging");
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = "move";
-      event.dataTransfer.setData("text/plain", sectionEl.dataset.section ?? "");
-    }
-  });
-  headerEl.addEventListener("dragend", () => {
-    sidebarSectionDragKey = null;
-    sectionEl.classList.remove("is-dragging");
-    document
-      .querySelectorAll<HTMLElement>(".sidebar-section")
-      .forEach((el) => el.classList.remove("is-drop-before", "is-drop-after"));
-  });
-  sectionEl.addEventListener("dragover", (event) => {
-    if (!sidebarSectionDragKey) return;
-    const targetKey = sectionEl.dataset.section as SidebarSectionKey | undefined;
-    if (!targetKey || targetKey === sidebarSectionDragKey) return;
-    event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-    const rect = sectionEl.getBoundingClientRect();
-    const above = event.clientY < rect.top + rect.height / 2;
-    sectionEl.classList.toggle("is-drop-before", above);
-    sectionEl.classList.toggle("is-drop-after", !above);
-  });
-  sectionEl.addEventListener("dragleave", (event) => {
-    // Only clear when actually leaving the section (not its children).
-    const related = event.relatedTarget as Node | null;
-    if (related && sectionEl.contains(related)) return;
-    sectionEl.classList.remove("is-drop-before", "is-drop-after");
-  });
-  sectionEl.addEventListener("drop", (event) => {
-    event.preventDefault();
-    const sourceKey = sidebarSectionDragKey;
-    sidebarSectionDragKey = null;
-    const placement = sectionEl.classList.contains("is-drop-after") ? "after" : "before";
-    sectionEl.classList.remove("is-drop-before", "is-drop-after");
-    const targetKey = sectionEl.dataset.section as SidebarSectionKey | undefined;
-    if (!sourceKey || !targetKey || sourceKey === targetKey) return;
-    const current = loadSidebarSectionOrder(localStorage);
-    const next = reorderSidebarSection(current, sourceKey, targetKey, placement);
-    saveSidebarSectionOrder(localStorage, next);
-    renderApp();
-  });
-}
-
-function populateDirectoriesSection(sectionEl: HTMLElement, snapshot: LibrarySnapshot) {
-  const directoryHeader = document.createElement("p");
-  directoryHeader.className = "nav-section-title";
-  directoryHeader.innerHTML =
-    '<i class="fa-solid fa-folder" aria-hidden="true"></i><span>Directories</span>';
-  sectionEl.appendChild(directoryHeader);
-  attachSidebarSectionDnd(directoryHeader, sectionEl);
-
-  let appended = 0;
-  for (const node of deriveDirectories(snapshot)) {
-    if (!isNodeVisible(node)) {
-      continue;
-    }
-
-    const row = document.createElement("div");
-    row.className = "nav-tree-row";
-    row.style.setProperty("--depth", String(node.depth));
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "nav-link nav-tree-link";
-    button.classList.toggle("is-active", viewerState.activeDirectory === node.path);
-
-    const labelEl = document.createElement("span");
-    labelEl.textContent = node.label;
-
-    const countEl = document.createElement("small");
-    countEl.textContent = String(node.count);
-
-    button.appendChild(labelEl);
-    button.appendChild(countEl);
-    button.addEventListener("click", () => {
-      void navigateToState(
-        {
-          bookFilePath: null,
-          activeDirectory: node.path,
-          activeTag: null,
-          activeExternalSource: null,
-          activeShelf: null,
-          activeTagDirectOnly: false,
-          searchQuery: "",
-        },
-        "push",
-      );
-      ensureExpandedPath(node.path);
-    });
-
-    if (node.hasChildren) {
-      const toggle = document.createElement("button");
-      toggle.type = "button";
-      toggle.className = "nav-toggle";
-      toggle.textContent = viewerState.expandedDirectories.has(node.path) ? "▾" : "▸";
-      toggle.setAttribute("aria-label", `Expand or collapse ${node.label}`);
-      toggle.addEventListener("click", (event) => {
-        event.stopPropagation();
-        if (viewerState.expandedDirectories.has(node.path)) {
-          viewerState.expandedDirectories.delete(node.path);
-        } else {
-          viewerState.expandedDirectories.add(node.path);
-        }
-        renderApp();
-      });
-      row.appendChild(toggle);
-    } else {
-      const spacer = document.createElement("span");
-      spacer.className = "nav-toggle-spacer";
-      spacer.setAttribute("aria-hidden", "true");
-      row.appendChild(spacer);
-    }
-
-    row.appendChild(button);
-    sectionEl.appendChild(row);
-    appended += 1;
-  }
-
-  // Directories header is always rendered, even when empty.
-  void appended;
-}
-
-function populateTagsSection(sectionEl: HTMLElement, snapshot: LibrarySnapshot) {
-  const tagsHeader = document.createElement("p");
-  tagsHeader.className = "nav-section-title";
-  tagsHeader.innerHTML = '<i class="fa-solid fa-tags" aria-hidden="true"></i><span>Tags</span>';
-  sectionEl.appendChild(tagsHeader);
-  attachSidebarSectionDnd(tagsHeader, sectionEl);
-
-  for (const tag of deriveTags(snapshot.books)) {
-    if (!isTagVisible(tag.id, tag.depth)) {
-      continue;
-    }
-
-    const row = document.createElement("div");
-    row.className = "nav-tree-row";
-    row.style.setProperty("--depth", String(tag.depth));
-
-    const labelEl = document.createElement("span");
-    labelEl.textContent = tag.label;
-
-    const countEl = document.createElement("small");
-    countEl.textContent = String(tag.count);
-
-    if (tag.hasChildren) {
-      const toggle = document.createElement("button");
-      toggle.type = "button";
-      toggle.className = "nav-toggle";
-      toggle.textContent = viewerState.expandedTags.has(tag.id) ? "▾" : "▸";
-      toggle.setAttribute("aria-label", `Expand or collapse ${tag.id}`);
-      toggle.addEventListener("click", (event) => {
-        event.stopPropagation();
-        if (viewerState.expandedTags.has(tag.id)) {
-          viewerState.expandedTags.delete(tag.id);
-        } else {
-          viewerState.expandedTags.add(tag.id);
-        }
-        renderApp();
-      });
-      row.appendChild(toggle);
-    } else {
-      const spacer = document.createElement("span");
-      spacer.className = "nav-toggle-spacer";
-      spacer.setAttribute("aria-hidden", "true");
-      row.appendChild(spacer);
-    }
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "nav-link nav-tree-link";
-    button.classList.toggle("nav-placeholder", !tag.explicit);
-    button.classList.toggle("is-active", viewerState.activeTag === tag.id);
-    button.title = tag.id;
-    button.appendChild(labelEl);
-    button.appendChild(countEl);
-    button.addEventListener("click", () => {
-      void navigateToState(
-        {
-          bookFilePath: null,
-          activeDirectory: null,
-          activeTag: tag.id,
-          activeExternalSource: null,
-          activeShelf: null,
-          activeTagDirectOnly: false,
-          searchQuery: viewerState.searchQuery,
-        },
-        "push",
-      );
-      ensureExpandedTag(tag.id);
-    });
-    button.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      openTagManager(tag.id);
-    });
-    row.appendChild(button);
-
-    sectionEl.appendChild(row);
-  }
-}
-
-function populateExternalSection(sectionEl: HTMLElement, snapshot: LibrarySnapshot) {
-  const enabledExternalSources = appState.lastAppConfig?.enabledExternalSources ?? [];
-  const kindleEnabled = enabledExternalSources.includes("kindle");
-  const externalBooks = snapshot.books.filter((book) => book.sourceType !== "pdf");
-  const kindleCount = externalBooks.filter((book) => book.sourceType === "kindle").length;
-  const customSources = snapshot.customSources ?? [];
-
-  const externalHeader = document.createElement("p");
-  externalHeader.className = "nav-section-title nav-section-title-with-action";
-  const externalHeaderLabel = document.createElement("span");
-  externalHeaderLabel.className = "nav-section-title-label";
-  const externalHeaderIcon = document.createElement("i");
-  externalHeaderIcon.className = "fa-solid fa-up-right-from-square";
-  externalHeaderIcon.setAttribute("aria-hidden", "true");
-  externalHeaderLabel.appendChild(externalHeaderIcon);
-  const externalHeaderText = document.createElement("span");
-  externalHeaderText.textContent = "EXTERNAL";
-  externalHeaderLabel.appendChild(externalHeaderText);
-  externalHeader.appendChild(externalHeaderLabel);
-  const externalAddBtn = document.createElement("button");
-  externalAddBtn.type = "button";
-  externalAddBtn.className = "nav-section-action";
-  externalAddBtn.setAttribute("aria-label", "Create a new external source");
-  externalAddBtn.title = "Create a new external source";
-  externalAddBtn.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i>';
-  externalAddBtn.addEventListener("click", () => {
-    openCustomSourceEditor();
-  });
-  externalHeader.appendChild(externalAddBtn);
-  sectionEl.appendChild(externalHeader);
-  attachSidebarSectionDnd(externalHeader, sectionEl);
-
-  if (kindleEnabled && kindleCount > 0) {
-    const row = document.createElement("div");
-    row.className = "nav-tree-row";
-    row.style.setProperty("--depth", "0");
-    const spacer = document.createElement("span");
-    spacer.className = "nav-toggle-spacer";
-    spacer.setAttribute("aria-hidden", "true");
-    row.appendChild(spacer);
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "nav-link nav-tree-link";
-    button.classList.toggle("is-active", viewerState.activeExternalSource === "kindle");
-    button.innerHTML =
-      '<span><i class="fa-brands fa-amazon" aria-hidden="true"></i> Kindle</span><small>' +
-      String(kindleCount) +
-      "</small>";
-    button.addEventListener("click", () => {
-      void navigateToState(
-        {
-          bookFilePath: null,
-          activeDirectory: null,
-          activeTag: null,
-          activeExternalSource: "kindle",
-          activeShelf: null,
-          activeTagDirectOnly: false,
-          searchQuery: viewerState.searchQuery,
-        },
-        "push",
-      );
-    });
-    row.appendChild(button);
-    sectionEl.appendChild(row);
-  }
-
-  for (const source of customSources) {
-    const count = externalBooks.filter((book) => book.sourceType === source.id).length;
-    const row = document.createElement("div");
-    row.className = "nav-tree-row";
-    row.style.setProperty("--depth", "0");
-    const spacer = document.createElement("span");
-    spacer.className = "nav-toggle-spacer";
-    spacer.setAttribute("aria-hidden", "true");
-    row.appendChild(spacer);
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "nav-link nav-tree-link";
-    button.classList.toggle("is-active", viewerState.activeExternalSource === source.id);
-    button.innerHTML =
-      `<span><i class="${source.icon}" aria-hidden="true"></i> ${source.name}</span><small>` +
-      String(count) +
-      "</small>";
-    button.addEventListener("click", () => {
-      void navigateToState(
-        {
-          bookFilePath: null,
-          activeDirectory: null,
-          activeTag: null,
-          activeExternalSource: source.id,
-          activeShelf: null,
-          activeTagDirectOnly: false,
-          searchQuery: viewerState.searchQuery,
-        },
-        "push",
-      );
-    });
-    button.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      openCustomSourceEditor(source);
-    });
-    row.appendChild(button);
-    sectionEl.appendChild(row);
-  }
-}
-
-function populateShelvesSection(sectionEl: HTMLElement, navEl: HTMLElement) {
-  const shelvesHeader = document.createElement("p");
-  shelvesHeader.className = "nav-section-title nav-section-title-with-action";
-  const shelvesHeaderLabel = document.createElement("span");
-  shelvesHeaderLabel.className = "nav-section-title-label";
-  const shelvesHeaderIcon = document.createElement("i");
-  shelvesHeaderIcon.className = "fa-solid fa-bookmark";
-  shelvesHeaderIcon.setAttribute("aria-hidden", "true");
-  shelvesHeaderLabel.appendChild(shelvesHeaderIcon);
-  const shelvesHeaderText = document.createElement("span");
-  shelvesHeaderText.textContent = "SHELVES";
-  shelvesHeaderLabel.appendChild(shelvesHeaderText);
-  shelvesHeader.appendChild(shelvesHeaderLabel);
-  const shelvesAddBtn = document.createElement("button");
-  shelvesAddBtn.type = "button";
-  shelvesAddBtn.className = "nav-section-action";
-  shelvesAddBtn.setAttribute("aria-label", "Create a new shelf");
-  shelvesAddBtn.title = "Create a new shelf";
-  shelvesAddBtn.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i>';
-  shelvesAddBtn.addEventListener("click", () => {
-    openShelfEditor(undefined, viewerState.searchQuery);
-  });
-  shelvesHeader.appendChild(shelvesAddBtn);
-  sectionEl.appendChild(shelvesHeader);
-  attachSidebarSectionDnd(shelvesHeader, sectionEl);
-
-  for (const shelf of viewerState.shelves) {
-    const row = document.createElement("div");
-    row.className = "nav-tree-row shelf-row";
-    row.style.setProperty("--depth", "0");
-    row.draggable = true;
-    row.dataset.shelfId = shelf.id;
-    row.addEventListener("dragstart", (event) => {
-      shelfDragId = shelf.id;
-      row.classList.add("is-dragging");
-      if (event.dataTransfer) {
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", shelf.id);
-      }
-    });
-    row.addEventListener("dragend", () => {
-      shelfDragId = null;
-      row.classList.remove("is-dragging");
-      navEl.querySelectorAll(".shelf-row").forEach((el) => el.classList.remove("is-drop-target"));
-    });
-    row.addEventListener("dragover", (event) => {
-      if (!shelfDragId || shelfDragId === shelf.id) return;
-      event.preventDefault();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-      row.classList.add("is-drop-target");
-    });
-    row.addEventListener("dragleave", () => {
-      row.classList.remove("is-drop-target");
-    });
-    row.addEventListener("drop", (event) => {
-      event.preventDefault();
-      row.classList.remove("is-drop-target");
-      const sourceId = shelfDragId;
-      shelfDragId = null;
-      if (!sourceId || sourceId === shelf.id) return;
-      void reorderShelvesByDrop(sourceId, shelf.id);
-    });
-    const spacer = document.createElement("span");
-    spacer.className = "nav-toggle-spacer";
-    spacer.setAttribute("aria-hidden", "true");
-    row.appendChild(spacer);
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "nav-link nav-tree-link";
-    button.classList.toggle("is-active", viewerState.activeShelf === shelf.id);
-    const iconClass = shelf.icon ?? "fa-solid fa-bookmark";
-    const labelEl = document.createElement("span");
-    const iconEl = document.createElement("i");
-    iconEl.className = iconClass;
-    iconEl.setAttribute("aria-hidden", "true");
-    labelEl.appendChild(iconEl);
-    labelEl.append(` ${shelf.name}`);
-    button.appendChild(labelEl);
-    button.addEventListener("click", () => {
-      void navigateToState(
-        {
-          bookFilePath: null,
-          activeDirectory: null,
-          activeTag: null,
-          activeExternalSource: null,
-          activeShelf: shelf.id,
-          activeTagDirectOnly: false,
-          searchQuery: "",
-        },
-        "push",
-      );
-    });
-    button.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      openShelfEditor(shelf);
-    });
-    row.appendChild(button);
-    sectionEl.appendChild(row);
-  }
-}
-
-let shelfDragId: string | null = null;
-let sidebarSectionDragKey: SidebarSectionKey | null = null;
-
-async function reorderShelvesByDrop(sourceId: string, targetId: string) {
-  const ids = viewerState.shelves.map((s) => s.id);
-  const sourceIndex = ids.indexOf(sourceId);
-  const targetIndex = ids.indexOf(targetId);
-  if (sourceIndex < 0 || targetIndex < 0) return;
-  ids.splice(sourceIndex, 1);
-  const insertAt = targetIndex < sourceIndex ? targetIndex : targetIndex;
-  ids.splice(insertAt, 0, sourceId);
-  // Optimistic local reorder for instant feedback.
-  const byId = new Map(viewerState.shelves.map((s) => [s.id, s]));
-  viewerState.shelves = ids.map((id) => byId.get(id)!).filter(Boolean);
-  renderApp();
-  try {
-    await invoke("reorder_shelves", { ids });
-  } catch (error) {
-    console.error("failed to reorder shelves", error);
-    await refreshShelves();
-    renderApp();
-  }
-}
-
-type LibraryViewMode = "list" | "grid";
-
-function getLibraryViewMode(): LibraryViewMode {
-  return localStorage.getItem("riida.libraryViewMode") === "grid" ? "grid" : "list";
-}
-
-function setLibraryViewMode(mode: LibraryViewMode) {
-  localStorage.setItem("riida.libraryViewMode", mode);
-}
-
-let bookGridPopupEl: HTMLElement | null = null;
-let bookGridPopupHideTimer: ReturnType<typeof setTimeout> | null = null;
-
-function ensureBookGridPopup(): HTMLElement {
-  if (!bookGridPopupEl) {
-    const el = document.createElement("div");
-    el.className = "book-grid-popup";
-    document.body.appendChild(el);
-    bookGridPopupEl = el;
-  }
-  return bookGridPopupEl;
-}
-
-function showBookGridPopup(
-  anchorEl: HTMLElement,
-  book: BookSummary,
-  onTagClick: (tag: string) => void,
-  onEditTags: () => void,
-  onEditMetadata: () => void,
-  onClickBook: () => void,
-  onOpenUrl: ((url: string) => void) | null,
-) {
-  if (bookGridPopupHideTimer !== null) {
-    clearTimeout(bookGridPopupHideTimer);
-    bookGridPopupHideTimer = null;
-  }
-
-  const popup = ensureBookGridPopup();
-
-  const copyEl = document.createElement("div");
-  copyEl.className = "book-copy";
-
-  const titleEl = document.createElement("strong");
-  titleEl.textContent = book.title ?? book.fileName;
-  titleEl.style.cursor = "pointer";
-  titleEl.addEventListener("click", onClickBook);
-
-  const byline = formatAuthorByline(book.authors);
-  let bylineEl: HTMLElement | null = null;
-  if (byline) {
-    bylineEl = document.createElement("span");
-    bylineEl.className = "book-byline";
-    bylineEl.textContent = byline;
-  }
-
-  const metaEl = document.createElement("small");
-  metaEl.className = "book-meta";
-  metaEl.textContent = formatBookMetaLine([
-    book.publisher,
-    formatReleaseYear(book.releaseDate),
-    book.sourceType === "pdf" ? formatFileSize(book.fileSize) : null,
-  ]);
-
-  const tagsRowEl = document.createElement("div");
-  tagsRowEl.className = "book-tags-row";
-
-  const tagsEl = document.createElement("div");
-  tagsEl.className = "book-tag-list";
-  const actionsEl = document.createElement("div");
-  actionsEl.className = "book-action-list";
-
-  if (book.tags.length === 0) {
-    tagsEl.hidden = true;
-  } else {
-    for (const tag of book.tags) {
-      const tagEl = document.createElement("button");
-      tagEl.type = "button";
-      tagEl.className = "book-tag";
-      tagEl.innerHTML = `<i class="fa-solid fa-tag" aria-hidden="true"></i><span>${tag}</span>`;
-      tagEl.addEventListener("click", (e) => {
-        e.stopPropagation();
-        hideBookGridPopup(true);
-        onTagClick(tag);
-      });
-      tagsEl.appendChild(tagEl);
-    }
-  }
-
-  const editTagsEl = document.createElement("button");
-  editTagsEl.type = "button";
-  editTagsEl.className = "book-tags-edit";
-  editTagsEl.textContent = book.tags.length > 0 ? "Edit tags" : "Add tags";
-  editTagsEl.addEventListener("click", (e) => {
-    e.stopPropagation();
-    hideBookGridPopup(true);
-    onEditTags();
-  });
-
-  const editMetadataEl = document.createElement("button");
-  editMetadataEl.type = "button";
-  editMetadataEl.className = "book-tags-edit";
-  editMetadataEl.textContent = "Edit metadata";
-  editMetadataEl.addEventListener("click", (e) => {
-    e.stopPropagation();
-    hideBookGridPopup(true);
-    onEditMetadata();
-  });
-
-  tagsRowEl.appendChild(tagsEl);
-  actionsEl.appendChild(editMetadataEl);
-  actionsEl.appendChild(editTagsEl);
-  tagsRowEl.appendChild(actionsEl);
-
-  copyEl.appendChild(titleEl);
-  if (bylineEl) {
-    copyEl.appendChild(bylineEl);
-  }
-  if (metaEl.textContent) {
-    copyEl.appendChild(metaEl);
-  }
-  copyEl.appendChild(tagsRowEl);
-
-  if (book.asin || book.url) {
-    const linksEl = document.createElement("div");
-    linksEl.className = "book-links";
-    if (book.asin) {
-      const amazonEl = document.createElement("button");
-      amazonEl.type = "button";
-      amazonEl.className = "book-link";
-      amazonEl.innerHTML = `<i class="fa-brands fa-amazon" aria-hidden="true"></i><span>Amazon</span>`;
-      amazonEl.addEventListener("click", (e) => {
-        e.stopPropagation();
-        void openUrl(`https://www.amazon.co.jp/dp/${book.asin}`);
-      });
-      linksEl.appendChild(amazonEl);
-    }
-    if (book.url && onOpenUrl) {
-      let label: string;
-      try {
-        label = new URL(book.url).hostname;
-      } catch {
-        label = book.url;
-      }
-      const urlEl = document.createElement("button");
-      urlEl.type = "button";
-      urlEl.className = "book-link";
-      urlEl.innerHTML = `<i class="fa-solid fa-globe" aria-hidden="true"></i><span>${label}</span>`;
-      urlEl.addEventListener("click", (e) => {
-        e.stopPropagation();
-        onOpenUrl(book.url!);
-      });
-      linksEl.appendChild(urlEl);
-    }
-    copyEl.appendChild(linksEl);
-  }
-
-  popup.innerHTML = "";
-  popup.appendChild(copyEl);
-
-  const rect = anchorEl.getBoundingClientRect();
-  const popupWidth = 420;
-  const margin = 8;
-  let left = rect.right + margin;
-  if (left + popupWidth > window.innerWidth - margin) {
-    left = rect.left - popupWidth - margin;
-  }
-  if (left < margin) {
-    left = margin;
-  }
-  let top = rect.top;
-  popup.style.left = `${left}px`;
-  popup.style.top = `${top}px`;
-  popup.style.width = `${popupWidth}px`;
-
-  popup.classList.add("is-visible");
-
-  popup.onmouseenter = () => {
-    if (bookGridPopupHideTimer !== null) {
-      clearTimeout(bookGridPopupHideTimer);
-      bookGridPopupHideTimer = null;
-    }
-  };
-  popup.onmouseleave = () => {
-    hideBookGridPopup(false);
-  };
-}
-
-function hideBookGridPopup(immediate: boolean) {
-  if (bookGridPopupHideTimer !== null) {
-    clearTimeout(bookGridPopupHideTimer);
-    bookGridPopupHideTimer = null;
-  }
-  if (immediate) {
-    bookGridPopupEl?.classList.remove("is-visible");
-    return;
-  }
-  bookGridPopupHideTimer = setTimeout(() => {
-    bookGridPopupEl?.classList.remove("is-visible");
-    bookGridPopupHideTimer = null;
-  }, 160);
-}
-
-function renderBookList(books: BookSummary[], container: HTMLElement) {
-  container.innerHTML = "";
-
-  if (books.length === 0) {
-    const snapshot = appState.lastSnapshot;
-    const emptyEl = document.createElement("div");
-    emptyEl.className = "empty-state";
-    const state = snapshot
-      ? describeCurrentEmptyLibraryState(snapshot, books)
-      : { message: "Loading library...", detail: null as string | null };
-    const messageEl = document.createElement("p");
-    messageEl.textContent = state.message;
-    emptyEl.appendChild(messageEl);
-
-    if (state.detail) {
-      const detailEl = document.createElement("p");
-      detailEl.className = "empty-state-detail";
-      detailEl.textContent = state.detail;
-      emptyEl.appendChild(detailEl);
-    }
-
-    container.appendChild(emptyEl);
-    return;
-  }
-
-  const viewMode = getLibraryViewMode();
-  const listEl = document.createElement("ul");
-  listEl.className = viewMode === "grid" ? "books grid-view" : "books";
-
-  for (const book of books) {
-    const itemEl = document.createElement("li");
-    itemEl.className = "book-item";
-    itemEl.tabIndex = 0;
-    itemEl.dataset.filePath = book.filePath;
-    itemEl.classList.toggle("is-selected", viewerState.currentBook?.filePath === book.filePath);
-    itemEl.classList.toggle(
-      "is-bulk-selected",
-      bulkSelectState.selectedFilePaths.has(book.filePath),
-    );
-
-    const checkboxEl = document.createElement("input");
-    checkboxEl.type = "checkbox";
-    checkboxEl.className = "book-select-checkbox";
-    checkboxEl.checked = bulkSelectState.selectedFilePaths.has(book.filePath);
-    checkboxEl.setAttribute("aria-label", `Select ${book.title ?? book.fileName}`);
-    checkboxEl.addEventListener("click", (event) => {
-      event.stopPropagation();
-    });
-    checkboxEl.addEventListener("change", () => {
-      if (checkboxEl.checked) {
-        bulkSelectState.selectedFilePaths.add(book.filePath);
-        itemEl.classList.add("is-bulk-selected");
-      } else {
-        bulkSelectState.selectedFilePaths.delete(book.filePath);
-        itemEl.classList.remove("is-bulk-selected");
-      }
-      syncBulkActionBar();
-    });
-
-    const thumbEl = document.createElement("img");
-    thumbEl.className = "book-thumb";
-    thumbEl.alt = `${book.fileName} cover thumbnail`;
-    thumbEl.dataset.filePath = book.filePath;
-    thumbEl.dataset.loaded = "false";
-    thumbEl.width = 72;
-    thumbEl.height = 102;
-    thumbEl.decoding = "async";
-    thumbEl.loading = "lazy";
-
-    const bodyEl = document.createElement("div");
-    bodyEl.className = "book-copy";
-
-    const titleEl = document.createElement("strong");
-    titleEl.textContent = book.title ?? book.fileName;
-
-    const byline = formatAuthorByline(book.authors);
-    let bylineEl: HTMLElement | null = null;
-    if (byline) {
-      bylineEl = document.createElement("span");
-      bylineEl.className = "book-byline";
-      bylineEl.textContent = byline;
-    }
-
-    const locationLabel = book.locationLabel ?? formatBookLocation(book.filePath, cachedHomeDir);
-    const metaEl = document.createElement("small");
-    metaEl.className = "book-meta";
-    metaEl.textContent = formatBookMetaLine([
-      book.publisher,
-      formatReleaseYear(book.releaseDate),
-      locationLabel,
-      book.sourceType === "pdf" ? formatFileSize(book.fileSize) : null,
-    ]);
-
-    const tagsRowEl = document.createElement("div");
-    tagsRowEl.className = "book-tags-row";
-
-    const tagsEl = document.createElement("div");
-    tagsEl.className = "book-tag-list";
-    const actionsEl = document.createElement("div");
-    actionsEl.className = "book-action-list";
-    if (book.tags.length === 0) {
-      tagsEl.hidden = true;
-    } else {
-      for (const tag of book.tags) {
-        const tagEl = document.createElement("button");
-        tagEl.type = "button";
-        tagEl.className = "book-tag";
-        tagEl.innerHTML = `<i class="fa-solid fa-tag" aria-hidden="true"></i><span>${tag}</span>`;
-        tagEl.addEventListener("click", (event) => {
-          event.stopPropagation();
-          void navigateToState(
-            {
-              bookFilePath: null,
-              activeDirectory: null,
-              activeTag: tag,
-              activeExternalSource: null,
-              activeShelf: null,
-              activeTagDirectOnly: false,
-              searchQuery: viewerState.searchQuery,
-            },
-            "push",
-          );
-        });
-        tagsEl.appendChild(tagEl);
-      }
-    }
-
-    const editTagsEl = document.createElement("button");
-    editTagsEl.type = "button";
-    editTagsEl.className = "book-tags-edit";
-    editTagsEl.textContent = book.tags.length > 0 ? "Edit tags" : "Add tags";
-    editTagsEl.addEventListener("click", (event) => {
-      event.stopPropagation();
-      openTagEditor(book);
-    });
-
-    const editMetadataEl = document.createElement("button");
-    editMetadataEl.type = "button";
-    editMetadataEl.className = "book-tags-edit";
-    editMetadataEl.textContent = "Edit metadata";
-    editMetadataEl.addEventListener("click", (event) => {
-      event.stopPropagation();
-      void openBookMetadataEditor(book);
-    });
-
-    bodyEl.appendChild(titleEl);
-    if (bylineEl) {
-      bodyEl.appendChild(bylineEl);
-    }
-    bodyEl.appendChild(metaEl);
-    tagsRowEl.appendChild(tagsEl);
-    actionsEl.appendChild(editMetadataEl);
-    actionsEl.appendChild(editTagsEl);
-    tagsRowEl.appendChild(actionsEl);
-    bodyEl.appendChild(tagsRowEl);
-
-    if (book.asin || book.url) {
-      const linksEl = document.createElement("div");
-      linksEl.className = "book-links";
-      if (book.asin) {
-        const amazonEl = document.createElement("button");
-        amazonEl.type = "button";
-        amazonEl.className = "book-link";
-        amazonEl.innerHTML = `<i class="fa-brands fa-amazon" aria-hidden="true"></i><span>Amazon</span>`;
-        amazonEl.addEventListener("click", (e) => {
-          e.stopPropagation();
-          void openUrl(`https://www.amazon.co.jp/dp/${book.asin}`);
-        });
-        linksEl.appendChild(amazonEl);
-      }
-      if (book.url) {
-        let label: string;
-        try {
-          label = new URL(book.url).hostname;
-        } catch {
-          label = book.url;
-        }
-        const urlEl = document.createElement("button");
-        urlEl.type = "button";
-        urlEl.className = "book-link";
-        urlEl.innerHTML = `<i class="fa-solid fa-globe" aria-hidden="true"></i><span>${label}</span>`;
-        urlEl.addEventListener("click", (e) => {
-          e.stopPropagation();
-          void openUrl(book.url!);
-        });
-        linksEl.appendChild(urlEl);
-      }
-      bodyEl.appendChild(linksEl);
-    }
-    itemEl.appendChild(checkboxEl);
-    itemEl.appendChild(thumbEl);
-    itemEl.appendChild(bodyEl);
-
-    if (book.sourceType === "pdf" || book.sourceType === "epub") {
-      const revealEl = document.createElement("button");
-      revealEl.type = "button";
-      revealEl.className = "book-reveal-btn";
-      revealEl.title = navigator.platform.startsWith("Win") ? "Show in Explorer" : "Show in Finder";
-      revealEl.innerHTML = `<i class="fa-solid fa-folder" aria-hidden="true"></i>`;
-      revealEl.addEventListener("mouseenter", () => {
-        revealEl.innerHTML = `<i class="fa-solid fa-folder-open" aria-hidden="true"></i>`;
-      });
-      revealEl.addEventListener("mouseleave", () => {
-        revealEl.innerHTML = `<i class="fa-solid fa-folder" aria-hidden="true"></i>`;
-      });
-      revealEl.addEventListener("click", (event) => {
-        event.stopPropagation();
-        void revealItemInDir(book.filePath);
-      });
-      itemEl.appendChild(revealEl);
-    }
-
-    if (viewMode === "grid") {
-      const gridTitleEl = document.createElement("span");
-      gridTitleEl.className = "book-item-grid-title";
-      gridTitleEl.textContent = book.title ?? book.fileName;
-      itemEl.appendChild(gridTitleEl);
-
-      const openBook = () => {
-        if (!book.isOpenable) {
-          void openBookMetadataEditor(book);
-          return;
-        }
-        void navigateToState(
-          {
-            bookFilePath: book.filePath,
-            activeDirectory: viewerState.activeDirectory,
-            activeTag: viewerState.activeTag,
-            activeExternalSource: viewerState.activeExternalSource,
-            activeShelf: viewerState.activeShelf,
-            activeTagDirectOnly: viewerState.activeTagDirectOnly,
-            searchQuery: viewerState.searchQuery,
-          },
-          "push",
-        );
-      };
-
-      itemEl.addEventListener("mouseenter", () => {
-        showBookGridPopup(
-          itemEl,
-          book,
-          (tag) => {
-            void navigateToState(
-              {
-                bookFilePath: null,
-                activeDirectory: null,
-                activeTag: tag,
-                activeExternalSource: null,
-                activeShelf: null,
-                activeTagDirectOnly: false,
-                searchQuery: viewerState.searchQuery,
-              },
-              "push",
-            );
-          },
-          () => openTagEditor(book),
-          () => void openBookMetadataEditor(book),
-          openBook,
-          book.url ? (url) => void openUrl(url) : null,
-        );
-      });
-      itemEl.addEventListener("mouseleave", () => {
-        hideBookGridPopup(false);
-      });
-    }
-
-    const openBookInNewWindow = () => {
-      void invoke("open_viewer_window", {
-        filePath: book.filePath,
-        source: viewerState.activeExternalSource ?? null,
-      }).catch((error: unknown) => {
-        console.error("Failed to open viewer window:", error);
-      });
-    };
-    const openBookInPlace = () => {
-      void navigateToState(
-        {
-          bookFilePath: book.filePath,
-          activeDirectory: viewerState.activeDirectory,
-          activeTag: viewerState.activeTag,
-          activeExternalSource: viewerState.activeExternalSource,
-          activeShelf: viewerState.activeShelf,
-          activeTagDirectOnly: viewerState.activeTagDirectOnly,
-          searchQuery: viewerState.searchQuery,
-        },
-        "push",
-      );
-    };
-    // Use the platform-conventional modifier for "open in new window": Cmd
-    // on macOS, Ctrl elsewhere. Ctrl on macOS is reserved for the system
-    // context menu so we must not treat it as a new-window trigger.
-    const isMacPlatform = navigator.platform.toUpperCase().includes("MAC");
-    const wantsNewWindow = (event: MouseEvent | KeyboardEvent): boolean =>
-      isMacPlatform ? event.metaKey : event.ctrlKey;
-
-    itemEl.addEventListener("click", (event) => {
-      if (!book.isOpenable) {
-        void openBookMetadataEditor(book);
-        return;
-      }
-      if (wantsNewWindow(event)) {
-        openBookInNewWindow();
-        return;
-      }
-      openBookInPlace();
-    });
-    itemEl.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        if (!book.isOpenable) {
-          void openBookMetadataEditor(book);
-          return;
-        }
-        if (wantsNewWindow(event)) {
-          openBookInNewWindow();
-          return;
-        }
-        openBookInPlace();
-      }
-    });
-    itemEl.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      if (!book.isOpenable) {
-        void openBookMetadataEditor(book);
-      }
-    });
-
-    listEl.appendChild(itemEl);
-    thumbnailBookByImage.set(thumbEl, book);
-    ensureThumbnailObserver().observe(thumbEl);
-  }
-
-  container.appendChild(listEl);
-}
-
 // Whether the full-text index has been built (opt-in). Kept in sync from the
 // status command at startup, on build completion, and when settings open. Used
 // to skip backend search calls entirely until the user has built the index.
@@ -3539,7 +2244,7 @@ function openFulltextHit(
 }
 
 /** Fetch and render in-content search hits for the current query. */
-async function renderFulltextResults(query: string) {
+export async function renderFulltextResults(query: string) {
   const containerEl = document.querySelector<HTMLElement>("#fulltext-results");
   const listEl = document.querySelector<HTMLElement>("#fulltext-results-list");
   const countEl = document.querySelector<HTMLElement>("#fulltext-results-count");
@@ -3659,483 +2364,6 @@ async function refreshFulltextStatus() {
   }
 }
 
-function renderMain(snapshot: LibrarySnapshot) {
-  const appShellEl = document.querySelector<HTMLElement>(".two-pane");
-  const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
-  const sidebarHomeOpenEl = document.querySelector<HTMLButtonElement>("#sidebar-home-open");
-  const homeViewEl = document.querySelector<HTMLElement>("#home-view");
-  const pdfViewEl = document.querySelector<HTMLElement>("#pdf-view");
-  const shelfEl = document.querySelector<HTMLElement>("#book-results");
-  const searchInput = document.querySelector<HTMLInputElement>("#library-search");
-  const homeCountEl = document.querySelector<HTMLElement>("#indexed-count");
-  const tagDirectFilterEl = document.querySelector<HTMLElement>("#tag-direct-filter");
-  const tagDirectOnlyEl = document.querySelector<HTMLInputElement>("#tag-direct-only");
-  const viewerOverlayControlsEl = document.querySelector<HTMLElement>("#viewer-overlay-controls");
-
-  const books = visibleBooks(snapshot);
-  const directoryNodes = deriveDirectories({
-    libraryRoots: snapshot.libraryRoots,
-    books: snapshot.books,
-  });
-  const selectedDirectoryNode = viewerState.activeDirectory
-    ? (directoryNodes.find((node) => node.path === viewerState.activeDirectory) ?? null)
-    : null;
-  const tagNodes = deriveTags(snapshot.books);
-  const selectedTagNode = viewerState.activeTag
-    ? (tagNodes.find((tag) => tag.id === viewerState.activeTag) ?? null)
-    : null;
-  const displayedBookCount = viewerState.searchQuery
-    ? books.length
-    : viewerState.activeTag
-      ? viewerState.activeTagDirectOnly
-        ? books.length
-        : (selectedTagNode?.count ?? books.length)
-      : viewerState.activeExternalSource
-        ? books.length
-        : viewerState.activeDirectory
-          ? (selectedDirectoryNode?.count ?? books.length)
-          : snapshot.indexedCount;
-
-  appShellEl?.classList.toggle("sidebar-collapsed", viewerState.sidebarCollapsed);
-  if (sidebarToggleEl) {
-    sidebarToggleEl.textContent = viewerState.sidebarCollapsed ? "≫" : "≪";
-    sidebarToggleEl.setAttribute(
-      "aria-label",
-      viewerState.sidebarCollapsed ? "Show sidebar" : "Hide sidebar",
-    );
-    sidebarToggleEl.setAttribute("aria-expanded", String(!viewerState.sidebarCollapsed));
-  }
-  sidebarHomeOpenEl?.classList.toggle(
-    "is-active",
-    viewerState.currentBook === null &&
-      viewerState.activeDirectory === null &&
-      viewerState.activeTag === null &&
-      viewerState.activeExternalSource === null &&
-      viewerState.searchQuery === "",
-  );
-  syncViewerSettingsUi();
-  syncViewerPageJumpUi();
-
-  if (searchInput && searchInput.value !== viewerState.searchQuery) {
-    searchInput.value = viewerState.searchQuery;
-  }
-
-  const searchActionsEl = document.querySelector<HTMLElement>("#sidebar-search-actions");
-  if (searchActionsEl) {
-    searchActionsEl.hidden = viewerState.searchQuery.trim().length === 0;
-  }
-
-  if (tagDirectFilterEl && tagDirectOnlyEl) {
-    const shouldShow = Boolean(viewerState.activeTag && selectedTagNode?.hasChildren);
-    tagDirectFilterEl.hidden = !shouldShow;
-    tagDirectOnlyEl.checked = viewerState.activeTagDirectOnly;
-  }
-
-  const libraryAddKindleEl = document.querySelector<HTMLButtonElement>("#library-add-kindle");
-  if (libraryAddKindleEl) {
-    libraryAddKindleEl.hidden = viewerState.activeExternalSource !== "kindle";
-  }
-  const libraryAddCustomEl = document.querySelector<HTMLButtonElement>("#library-add-custom");
-  if (libraryAddCustomEl) {
-    const activeCustomSource =
-      viewerState.activeExternalSource && viewerState.activeExternalSource !== "kindle"
-        ? ((appState.lastSnapshot?.customSources ?? []).find(
-            (s) => s.id === viewerState.activeExternalSource,
-          ) ?? null)
-        : null;
-    libraryAddCustomEl.hidden = !activeCustomSource;
-    if (activeCustomSource) {
-      libraryAddCustomEl.textContent = `Add book to ${activeCustomSource.name}`;
-    }
-  }
-
-  if (viewerOverlayControlsEl) {
-    viewerOverlayControlsEl.hidden = !viewerState.currentBook;
-  }
-
-  // Opening a book or narrowing the library leaves a requested welcome screen.
-  if (viewerState.currentBook || hasActiveLibraryFilter()) {
-    viewerState.isLibraryWelcomeRequested = false;
-  }
-  const isFirstRun = shouldShowLibraryWelcome({
-    libraryRoots: snapshot.libraryRoots,
-    totalBookCount: snapshot.books.length,
-    hasFilter: hasActiveLibraryFilter(),
-    libraryErrorMessage: viewerState.libraryErrorMessage,
-  });
-  const showWelcome = isFirstRun || viewerState.isLibraryWelcomeRequested;
-  const welcomeEl = document.querySelector<HTMLElement>("#library-welcome");
-  const welcomeCloseEl = document.querySelector<HTMLElement>("#library-welcome-close");
-  const libraryHomeEl = document.querySelector<HTMLElement>("#library-home");
-  if (welcomeEl) {
-    welcomeEl.hidden = !showWelcome;
-  }
-  if (welcomeCloseEl) {
-    welcomeCloseEl.hidden = isFirstRun;
-  }
-  if (libraryHomeEl) {
-    libraryHomeEl.hidden = showWelcome;
-  }
-
-  if (homeCountEl) {
-    homeCountEl.textContent = String(displayedBookCount);
-  }
-
-  if (viewerState.currentBook) {
-    homeViewEl?.setAttribute("hidden", "true");
-    pdfViewEl?.removeAttribute("hidden");
-    if (viewerNeedsRender(snapshot)) {
-      void renderCurrentPage();
-    }
-    syncNoteUi();
-    if (noteState.isOpen) {
-      void loadNoteForCurrentBook();
-    }
-  } else {
-    pdfViewEl?.setAttribute("hidden", "true");
-    homeViewEl?.removeAttribute("hidden");
-    const frame = document.querySelector<HTMLIFrameElement>("#pdf-frame");
-    const pdfjsViewerEl = document.querySelector<HTMLElement>("#pdfjs-viewer");
-    if (frame) {
-      frame.src = "about:blank";
-      frame.hidden = false;
-      frame.dataset.filePath = "";
-    }
-    if (pdfjsViewerEl) {
-      pdfjsViewerEl.innerHTML = "";
-      pdfjsViewerEl.hidden = true;
-    }
-    destroyEpubBook();
-    destroyImageEpub();
-    syncNoteUi();
-    if (shelfEl) {
-      renderBookList(books, shelfEl);
-    }
-    void renderFulltextResults(viewerState.searchQuery);
-    syncBulkActionBar();
-  }
-}
-
-export function renderApp() {
-  if (!appState.lastSnapshot) {
-    return;
-  }
-
-  renderSidebar(appState.lastSnapshot);
-  renderMain(appState.lastSnapshot);
-  syncTagEditorUi();
-  syncBookMetadataEditorUi();
-}
-
-function initBulkSelection() {
-  const bulkSelectAllEl = document.querySelector<HTMLButtonElement>("#bulk-select-all");
-  const bulkEditTagsEl = document.querySelector<HTMLButtonElement>("#bulk-edit-tags");
-  const bulkEditMetadataEl = document.querySelector<HTMLButtonElement>("#bulk-edit-metadata");
-  const bulkDeselectEl = document.querySelector<HTMLButtonElement>("#bulk-deselect");
-
-  bulkSelectAllEl?.addEventListener("click", () => {
-    const visible = appState.lastSnapshot ? visibleBooks(appState.lastSnapshot) : [];
-    for (const book of visible) {
-      bulkSelectState.selectedFilePaths.add(book.filePath);
-    }
-    syncBulkActionBar();
-    renderApp();
-  });
-
-  bulkEditTagsEl?.addEventListener("click", () => {
-    const selected = viewerState.books.filter((b) =>
-      bulkSelectState.selectedFilePaths.has(b.filePath),
-    );
-    if (selected.length > 0) openTagEditorForBooks(selected);
-  });
-
-  bulkEditMetadataEl?.addEventListener("click", () => {
-    const selected = viewerState.books.filter((b) =>
-      bulkSelectState.selectedFilePaths.has(b.filePath),
-    );
-    if (selected.length > 0) void openBookMetadataEditorForBooks(selected);
-  });
-
-  bulkDeselectEl?.addEventListener("click", () => {
-    bulkSelectState.selectedFilePaths.clear();
-    syncBulkActionBar();
-    renderApp();
-  });
-}
-
-function initLibrarySearch() {
-  const searchInput = document.querySelector<HTMLInputElement>("#library-search");
-  const searchSuggestionsEl = document.querySelector<HTMLElement>("#library-search-suggestions");
-  const sidebarSearchSaveEl = document.querySelector<HTMLButtonElement>("#sidebar-search-save");
-  const sidebarSearchClearEl = document.querySelector<HTMLButtonElement>("#sidebar-search-clear");
-
-  let activeSuggestionIndex = -1;
-  let currentSuggestions: SearchSuggestion[] = [];
-
-  function renderSearchSuggestions() {
-    if (!searchInput || !searchSuggestionsEl) return;
-    const cursor = searchInput.selectionStart ?? searchInput.value.length;
-    const valueSource = buildValueSource(appState.lastSnapshot?.books ?? []);
-    currentSuggestions = computeSuggestions(searchInput.value, cursor, valueSource);
-    activeSuggestionIndex = -1;
-
-    searchSuggestionsEl.innerHTML = "";
-    const hasSuggestions = currentSuggestions.length > 0;
-    searchSuggestionsEl.hidden = !hasSuggestions;
-    searchInput.setAttribute("aria-expanded", hasSuggestions ? "true" : "false");
-
-    for (let i = 0; i < currentSuggestions.length; i++) {
-      const s = currentSuggestions[i];
-      if (!s) continue;
-      const li = document.createElement("li");
-      li.role = "option";
-      li.setAttribute("aria-selected", "false");
-
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "library-search-suggestion";
-
-      const label = document.createElement("span");
-      label.className = "library-search-suggestion-label";
-
-      if (s.kind === "field") {
-        label.textContent = s.completion;
-        const hint = document.createElement("span");
-        hint.className = "library-search-suggestion-hint";
-        hint.textContent = "field";
-        btn.append(label, hint);
-      } else {
-        label.textContent = s.completion;
-        const hint = document.createElement("span");
-        hint.className = "library-search-suggestion-hint";
-        hint.textContent = s.field;
-        btn.append(label, hint);
-      }
-
-      btn.addEventListener("mousedown", (e) => {
-        e.preventDefault(); // keep input focus
-        applySearchSuggestion(i);
-      });
-
-      li.appendChild(btn);
-      searchSuggestionsEl.appendChild(li);
-    }
-  }
-
-  function applySearchSuggestion(index: number) {
-    if (!searchInput || index < 0 || index >= currentSuggestions.length) return;
-    const suggestion = currentSuggestions[index];
-    if (!suggestion) return;
-    const { value } = applySuggestion(
-      searchInput.value,
-      searchInput.selectionStart ?? searchInput.value.length,
-      suggestion,
-    );
-    // Field completions end with ":" — don't add a space so the user can type the value directly.
-    // Value completions end with the value itself — add a space to start the next token.
-    const isFieldCompletion = suggestion.kind === "field";
-    const finalValue = isFieldCompletion || value.endsWith(" ") ? value : `${value} `;
-    searchInput.value = finalValue;
-    searchInput.setSelectionRange(finalValue.length, finalValue.length);
-    closeSearchSuggestions();
-    void navigateToState(
-      {
-        bookFilePath: null,
-        activeDirectory: null,
-        activeTag: null,
-        activeExternalSource: null,
-        activeShelf: null,
-        activeTagDirectOnly: false,
-        searchQuery: searchInput.value,
-      },
-      "replace",
-    );
-    renderSearchSuggestions();
-  }
-
-  function setActiveSuggestion(index: number) {
-    if (!searchSuggestionsEl) return;
-    const items = searchSuggestionsEl.querySelectorAll<HTMLButtonElement>(
-      ".library-search-suggestion",
-    );
-    items.forEach((btn, i) => {
-      const selected = i === index;
-      btn.setAttribute("aria-selected", selected ? "true" : "false");
-      btn.parentElement?.setAttribute("aria-selected", selected ? "true" : "false");
-    });
-    activeSuggestionIndex = index;
-  }
-
-  function closeSearchSuggestions() {
-    if (!searchSuggestionsEl || !searchInput) return;
-    searchSuggestionsEl.hidden = true;
-    searchInput.setAttribute("aria-expanded", "false");
-    currentSuggestions = [];
-    activeSuggestionIndex = -1;
-  }
-
-  let librarySearchTimer: number | null = null;
-
-  searchInput?.addEventListener("input", () => {
-    renderSearchSuggestions();
-    if (librarySearchTimer !== null) window.clearTimeout(librarySearchTimer);
-    librarySearchTimer = window.setTimeout(() => {
-      librarySearchTimer = null;
-      void navigateToState(
-        {
-          bookFilePath: null,
-          activeDirectory: null,
-          activeTag: null,
-          activeExternalSource: null,
-          activeShelf: null,
-          activeTagDirectOnly: false,
-          searchQuery: searchInput.value,
-        },
-        "replace",
-      );
-    }, 150);
-  });
-
-  searchInput?.addEventListener("keydown", (e) => {
-    if (searchSuggestionsEl?.hidden) return;
-    const count = currentSuggestions.length;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveSuggestion((activeSuggestionIndex + 1) % count);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveSuggestion((activeSuggestionIndex - 1 + count) % count);
-    } else if (e.key === "Enter" && activeSuggestionIndex >= 0) {
-      e.preventDefault();
-      applySearchSuggestion(activeSuggestionIndex);
-    } else if (e.key === "Escape") {
-      closeSearchSuggestions();
-    }
-  });
-
-  searchInput?.addEventListener("blur", () => {
-    // Delay so mousedown on suggestion fires first
-    setTimeout(closeSearchSuggestions, 150);
-  });
-
-  searchInput?.addEventListener("focus", () => {
-    if (searchInput.value) renderSearchSuggestions();
-  });
-
-  searchInput?.addEventListener("click", () => {
-    renderSearchSuggestions();
-  });
-  sidebarSearchSaveEl?.addEventListener("click", () => {
-    const presetQuery = viewerState.searchQuery.trim();
-    if (presetQuery.length === 0) return;
-    openShelfEditor(undefined, presetQuery);
-  });
-  sidebarSearchClearEl?.addEventListener("click", () => {
-    if (librarySearchTimer !== null) {
-      window.clearTimeout(librarySearchTimer);
-      librarySearchTimer = null;
-    }
-    if (searchInput) {
-      searchInput.value = "";
-      closeSearchSuggestions();
-      searchInput.focus();
-    }
-    void navigateToState(
-      {
-        bookFilePath: null,
-        activeDirectory: null,
-        activeTag: null,
-        activeExternalSource: null,
-        activeShelf: null,
-        activeTagDirectOnly: false,
-        searchQuery: "",
-      },
-      "replace",
-    );
-  });
-}
-
-function initShellControls() {
-  const sidebarToggleEl = document.querySelector<HTMLButtonElement>("#sidebar-toggle");
-  const sidebarHomeOpenEl = document.querySelector<HTMLButtonElement>("#sidebar-home-open");
-  const mainPaneScrollEl = document.querySelector<HTMLElement>("#main-pane");
-  if (mainPaneScrollEl) {
-    let scrollIdleTimer: number | null = null;
-    mainPaneScrollEl.addEventListener(
-      "scroll",
-      () => {
-        document.documentElement.classList.add("is-scrolling");
-        if (scrollIdleTimer !== null) {
-          window.clearTimeout(scrollIdleTimer);
-        }
-        scrollIdleTimer = window.setTimeout(() => {
-          document.documentElement.classList.remove("is-scrolling");
-          scrollIdleTimer = null;
-        }, 160);
-      },
-      { passive: true },
-    );
-  }
-
-  sidebarToggleEl?.addEventListener("click", () => {
-    viewerState.sidebarCollapsed = !viewerState.sidebarCollapsed;
-    renderApp();
-  });
-
-  sidebarHomeOpenEl?.addEventListener("click", () => {
-    viewerState.isLibraryWelcomeRequested = false;
-    void navigateToState(
-      {
-        bookFilePath: null,
-        activeDirectory: null,
-        activeTag: null,
-        activeExternalSource: null,
-        activeShelf: null,
-        activeTagDirectOnly: false,
-        searchQuery: "",
-      },
-      "push",
-    );
-  });
-}
-
-function initLibraryViewControls() {
-  const librarySortEl = document.querySelector<HTMLSelectElement>("#library-sort");
-  const libraryViewToggleEl = document.querySelector<HTMLButtonElement>("#library-view-toggle");
-  if (librarySortEl) {
-    librarySortEl.addEventListener("change", () => {
-      currentListSort = (librarySortEl.value as ListSortKey) ?? "default";
-      if (appState.lastSnapshot) {
-        renderApp();
-      }
-    });
-  }
-  if (libraryViewToggleEl) {
-    const updateToggleState = () => {
-      const mode = getLibraryViewMode();
-      libraryViewToggleEl.classList.toggle("is-active", mode === "grid");
-      libraryViewToggleEl.setAttribute(
-        "aria-label",
-        mode === "grid" ? "リスト表示に切り替え" : "グリッド表示に切り替え",
-      );
-      libraryViewToggleEl.innerHTML =
-        mode === "grid"
-          ? `<i class="fa-solid fa-list" aria-hidden="true"></i>`
-          : `<i class="fa-solid fa-table-cells-large" aria-hidden="true"></i>`;
-    };
-    updateToggleState();
-    libraryViewToggleEl.addEventListener("click", () => {
-      const next = getLibraryViewMode() === "grid" ? "list" : "grid";
-      setLibraryViewMode(next);
-      updateToggleState();
-      hideBookGridPopup(true);
-      if (appState.lastSnapshot) {
-        renderApp();
-      }
-    });
-  }
-}
-
 function initLibraryAddButtons() {
   const libraryAddKindleEl = document.querySelector<HTMLButtonElement>("#library-add-kindle");
   const libraryAddCustomEl2 = document.querySelector<HTMLButtonElement>("#library-add-custom");
@@ -4193,25 +2421,6 @@ function initCustomSourceEditor() {
       iconPickerEl.appendChild(btn);
     }
   }
-}
-
-function initSidebarControls() {
-  const tagDirectOnlyEl = document.querySelector<HTMLInputElement>("#tag-direct-only");
-
-  tagDirectOnlyEl?.addEventListener("change", () => {
-    void navigateToState(
-      {
-        bookFilePath: null,
-        activeDirectory: null,
-        activeTag: viewerState.activeTag,
-        activeExternalSource: viewerState.activeExternalSource,
-        activeShelf: viewerState.activeShelf,
-        activeTagDirectOnly: tagDirectOnlyEl.checked,
-        searchQuery: viewerState.searchQuery,
-      },
-      "replace",
-    );
-  });
 }
 
 export const closeAppSettings = () => {
@@ -4616,28 +2825,6 @@ function initBookMetadataEditor() {
   });
 }
 
-async function registerLibraryEvents() {
-  await listen<LibrarySnapshot>("library-updated", (event) => {
-    appState.lastSnapshot = event.payload;
-    viewerState.libraryErrorMessage = null;
-    viewerState.books = event.payload.books;
-    if (
-      viewerState.currentBook &&
-      !event.payload.books.some((book) => book.filePath === viewerState.currentBook?.filePath)
-    ) {
-      void clearCurrentBookSelection().then(() => {
-        renderApp();
-      });
-      return;
-    }
-    renderApp();
-  });
-
-  await listen<string>("library-watch-error", (event) => {
-    console.error("library-watch-error", event.payload);
-  });
-}
-
 async function registerLibraryDrops() {
   await getCurrentWebview().onDragDropEvent((event) => {
     handleLibraryDragDrop(event.payload);
@@ -4658,12 +2845,6 @@ async function registerLibraryDrops() {
     } catch (error) {
       reportLibraryAddStatus(t("status.chooseFailed", { error: String(error) }), "error");
     }
-  });
-}
-
-async function registerThumbnailEvents() {
-  await listen<{ filePath: string; thumbnailPath: string }>("thumbnail-ready", (event) => {
-    applyThumbnail(event.payload.filePath, event.payload.thumbnailPath);
   });
 }
 

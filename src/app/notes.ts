@@ -6,9 +6,9 @@ import {
   clampNoteWindowPosition,
   ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
 } from "../note-window-utils";
+import { renderApp } from "./library";
 import { viewerSettings, viewerState } from "./state";
 import type { NoteDocument } from "./types";
-import { renderApp } from "../main";
 
 type NoteState = {
   isOpen: boolean;

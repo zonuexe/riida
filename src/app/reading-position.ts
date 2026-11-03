@@ -10,11 +10,11 @@ import {
   selectHeadSidePageInSpread,
 } from "../reading-position-utils";
 import { activeImageEpub } from "./image-epub-viewer";
+import { noteSaveTimer } from "./notes";
 import { pdfRenderInProgress } from "./pdf-viewer";
 import { appState, viewerState } from "./state";
 import type { ReadingPosition } from "./types";
 import { currentViewerStage, syncViewerPageJumpUi } from "./viewer";
-import { noteSaveTimer } from "../main";
 
 let readingPositionSaveTimer: number | null = null;
 

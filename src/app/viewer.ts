@@ -21,6 +21,15 @@ import {
   fitImageEpubSpread,
   goToImagePage,
 } from "./image-epub-viewer";
+import {
+  clampNoteWindow,
+  destroyNoteEditor,
+  flushPendingNoteSave,
+  loadNoteForCurrentBook,
+  noteState,
+  shouldAnchorNoteWindowToBottomRight,
+  syncNoteUi,
+} from "./notes";
 import { closePdfSearch } from "./pdf-search";
 import {
   activePdfRenderSession,
@@ -45,19 +54,7 @@ import {
   loadViewerSettingsForCurrentBook,
   syncViewerSettingsUi,
 } from "./viewer-settings";
-import {
-  clampNoteWindow,
-  destroyNoteEditor,
-  flushPendingNoteSave,
-  loadNoteForCurrentBook,
-  noteState,
-  openBookMetadataEditor,
-  openTagEditor,
-  renderApp,
-  shouldAnchorNoteWindowToBottomRight,
-  syncNavigationHistory,
-  syncNoteUi,
-} from "../main";
+import { openBookMetadataEditor, openTagEditor, renderApp, syncNavigationHistory } from "../main";
 
 type ViewerPageJumpState = {
   input: string;

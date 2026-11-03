@@ -13,11 +13,11 @@ import { cropRectForPage, type TrimBoxes, trimmedPageSize } from "../pdf-trim";
 import { buildPageGroups, getVisualPageOrder } from "../viewer-layout-utils";
 import { buildPdfRenderWindowPlan } from "../pdf-render-window-utils";
 import { planPagedKeyAction } from "../pdf-paged-nav-utils";
+import { applyEpubViewerColors } from "./epub-viewer";
 import { applyPdfSearchHighlights, closePdfSearch, pdfSearchState } from "./pdf-search";
 import { appState, viewerSettings, viewerState } from "./state";
 import type { PdfOutlineNode } from "./types";
 import {
-  applyEpubViewerColors,
   applyPdfViewerBackground,
   applyViewerVerticalGapMode,
   buildPdfToc,

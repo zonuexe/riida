@@ -23,6 +23,7 @@ import {
 import { syncNavigationHistory } from "./navigation";
 import { releaseActivePdfDocument } from "./pdf-viewer";
 import { scheduleEpubPositionSave } from "./reading-position";
+import { currentAppTheme } from "./settings";
 import { appState, viewerSettings, viewerState } from "./state";
 import { buildEpubToc, syncTocUi } from "./toc";
 import {
@@ -34,7 +35,6 @@ import {
   syncViewerSettingsUi,
 } from "./viewer-settings";
 import { syncViewerPageJumpUi } from "./viewer";
-import { currentAppTheme } from "../main";
 
 let epubRenderToken = 0;
 export let activeEpubBook: import("epubjs").Book | null = null;

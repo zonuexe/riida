@@ -3,17 +3,8 @@ import "./vendor/fontawesome/css/brands.min.css";
 import "./vendor/fontawesome/css/regular.min.css";
 import "./vendor/fontawesome/css/solid.min.css";
 import { invoke } from "@tauri-apps/api/core";
-import { getName, getVersion } from "@tauri-apps/api/app";
-import { type DragDropEvent, getCurrentWebview } from "@tauri-apps/api/webview";
-import { confirm, message, open } from "@tauri-apps/plugin-dialog";
-import {
-  addLibraryRoot,
-  type AppTheme,
-  buildAppConfigDraft,
-  normalizeAppTheme,
-} from "./app-config-utils";
-import { applyAppTheme, persistAppTheme } from "./app-theme";
-import { describeAddLibraryRootError } from "./i18n";
+import { confirm, message } from "@tauri-apps/plugin-dialog";
+import { applyAppTheme } from "./app-theme";
 import {
   applyBookMetadataImport,
   BOOK_METADATA_DRAFT_KEYS,
@@ -27,14 +18,13 @@ import {
   parseBookMetadataImport,
   validateBookMetadataDraft,
 } from "./book-metadata-utils";
-import { type StatusTone, statusToneAttribute } from "./dom-form-utils";
+import type { StatusTone } from "./dom-form-utils";
 import {
   deriveLanguages,
   derivePublishers,
   deriveSources,
   deriveTags,
   filterVisibleBooks,
-  folderDisplayName,
 } from "./library-utils";
 import { suggestTagCompletions } from "./tag-suggestions";
 import {
@@ -45,27 +35,24 @@ import {
   type ShelfMode,
 } from "./shelf-query.ts";
 import { countBooksWithTagOrDescendants, validateTagValue } from "./tag-utils";
+import { initAbout, loadAppMetadata } from "./app/about";
 import { registerThumbnailEvents } from "./app/book-list";
+import { initCustomSourceEditor } from "./app/custom-sources";
 import { applyStatusMessage, finishStartupPhase, syncControlValue } from "./app/dom";
 import { initEpubFocusGuard } from "./app/epub-viewer";
-import {
-  initFulltextSettings,
-  refreshFulltextStatus,
-  registerFulltextEvents,
-} from "./app/fulltext";
-import { collapseHomePath, primeHomeDirCache } from "./app/home-path";
+import { initFulltextSettings, registerFulltextEvents } from "./app/fulltext";
+import { primeHomeDirCache } from "./app/home-path";
 import { initGlobalShortcuts } from "./app/keyboard";
 import { initLibrarySearch } from "./app/library-search";
 import { initBulkSelection, initLibraryViewControls } from "./app/library-view";
 import {
-  hasActiveLibraryFilter,
   refreshShelves,
   refreshSnapshot,
   registerLibraryEvents,
   renderApp,
   updateBookTagsInState,
 } from "./app/library";
-import { applyStaticTranslations, t, uiLocale } from "./app/locale";
+import { applyStaticTranslations } from "./app/locale";
 import {
   initHistoryPopstate,
   initNavigationControls,
@@ -76,19 +63,14 @@ import { initNotes } from "./app/notes";
 import { initPdfSearch } from "./app/pdf-search";
 import { initPdfStageScroll } from "./app/pdf-viewer";
 import { initFlushOnUnload } from "./app/reading-position";
+import { initAppSettings, loadAppConfig } from "./app/settings";
 import { initShellControls, initSidebarControls } from "./app/sidebar";
 import { appState, viewerState } from "./app/state";
 import { initTocToggle } from "./app/toc";
-import type {
-  AppConfigPayload,
-  BookMetadataPayload,
-  BookSummary,
-  CustomSource,
-  LibrarySnapshot,
-  Shelf,
-} from "./app/types";
+import type { BookMetadataPayload, BookSummary, CustomSource, Shelf } from "./app/types";
 import { initViewerSettingsPanel } from "./app/viewer-settings";
 import { initViewerEditorButtons, initViewerPageJump, initViewerResize } from "./app/viewer";
+import { initLibraryWelcome, registerLibraryDrops } from "./app/welcome";
 
 type BookTagsPayload = {
   filePath: string;
@@ -139,16 +121,6 @@ type BookMetadataEditorState = {
   loadToken: number;
 };
 
-let cachedAppName = "riida";
-let cachedAppVersion = "0.9.3";
-const buildDate = __BUILD_DATE__;
-let cachedLicenseText = "Loading license text...";
-let cachedThirdPartyRustText = "Loading Rust notices...";
-let cachedThirdPartyJsText = "Loading JavaScript notices...";
-export function currentAppTheme(): AppTheme {
-  return normalizeAppTheme(appState.lastAppConfig?.theme ?? "default");
-}
-
 let isTagEditorComposing = false;
 
 export const tagEditorState: TagEditorState = {
@@ -190,22 +162,6 @@ const bookMetadataEditorState: BookMetadataEditorState = {
   importText: "",
   statusMessage: "",
   loadToken: 0,
-};
-
-type CustomSourceEditorState = {
-  isOpen: boolean;
-  id: string | null;
-  name: string;
-  icon: string;
-  statusMessage: string;
-};
-
-const customSourceEditorState: CustomSourceEditorState = {
-  isOpen: false,
-  id: null,
-  name: "",
-  icon: "fa-solid fa-book",
-  statusMessage: "",
 };
 
 type ShelfEditorState = {
@@ -264,295 +220,6 @@ const shelfEditorState: ShelfEditorState = {
   statusMessage: "",
   statusTone: "info",
 };
-
-const CUSTOM_SOURCE_ICONS: Array<{ cls: string; label: string }> = [
-  { cls: "fa-regular fa-building", label: "Building" },
-  { cls: "fa-solid fa-building", label: "Building (solid)" },
-  { cls: "fa-solid fa-house", label: "House" },
-  { cls: "fa-regular fa-house", label: "House (regular)" },
-  { cls: "fa-solid fa-book", label: "Book" },
-  { cls: "fa-solid fa-school", label: "School" },
-  { cls: "fa-solid fa-suitcase", label: "Suitcase" },
-  { cls: "fa-solid fa-shop", label: "Shop" },
-  { cls: "fa-solid fa-mobile-screen", label: "Mobile" },
-  { cls: "fa-solid fa-tablet-screen-button", label: "Tablet" },
-  { cls: "fa-solid fa-computer", label: "Computer" },
-  { cls: "fa-solid fa-floppy-disk", label: "Floppy disk" },
-  { cls: "fa-solid fa-house-laptop", label: "House + laptop" },
-  { cls: "fa-solid fa-laptop", label: "Laptop" },
-  { cls: "fa-solid fa-laptop-file", label: "Laptop + file" },
-  { cls: "fa-solid fa-bus", label: "Bus" },
-  { cls: "fa-solid fa-train", label: "Train" },
-  { cls: "fa-solid fa-square-rss", label: "RSS" },
-  { cls: "fa-solid fa-bed", label: "Bed" },
-  { cls: "fa-solid fa-bag-shopping", label: "Shopping bag" },
-  ...Array.from({ length: 10 }, (_, i) => ({
-    cls: `fa-solid fa-${i}`,
-    label: String(i),
-  })),
-  ...Array.from({ length: 26 }, (_, i) => ({
-    cls: `fa-solid fa-${String.fromCharCode(97 + i)}`,
-    label: String.fromCharCode(65 + i),
-  })),
-  { cls: "fa-brands fa-pixiv", label: "Pixiv" },
-];
-
-function renderLibraryRootsList() {
-  const listEl = document.querySelector<HTMLElement>("#config-library-roots-list");
-  if (!listEl) {
-    return;
-  }
-
-  listEl.innerHTML = "";
-  const roots = appState.lastAppConfig?.libraryRoots ?? [];
-
-  if (roots.length === 0) {
-    const emptyEl = document.createElement("div");
-    emptyEl.className = "settings-root-empty";
-    emptyEl.textContent = "No library folders selected yet.";
-    listEl.appendChild(emptyEl);
-    return;
-  }
-
-  roots.forEach((root, index) => {
-    const itemEl = document.createElement("div");
-    itemEl.className = "settings-root-item";
-
-    const codeEl = document.createElement("code");
-    codeEl.textContent = root;
-
-    const removeEl = document.createElement("button");
-    removeEl.type = "button";
-    removeEl.className = "settings-root-remove";
-    removeEl.textContent = "Remove";
-    removeEl.disabled = roots.length <= 1;
-    removeEl.addEventListener("click", () => {
-      if (!appState.lastAppConfig) {
-        return;
-      }
-
-      if (appState.lastAppConfig.libraryRoots.length <= 1) {
-        setAppSettingsStatus("At least one library root is required.", "error");
-        return;
-      }
-
-      appState.lastAppConfig = {
-        ...appState.lastAppConfig,
-        libraryRoots: appState.lastAppConfig.libraryRoots.filter(
-          (_, candidateIndex) => candidateIndex !== index,
-        ),
-      };
-      setAppSettingsStatus("");
-      syncAppSettingsUi();
-    });
-
-    itemEl.appendChild(codeEl);
-    itemEl.appendChild(removeEl);
-    listEl.appendChild(itemEl);
-  });
-}
-
-function setAppSettingsStatus(message: string, tone: StatusTone = "neutral") {
-  const statusEl = document.querySelector<HTMLElement>("#app-settings-status");
-  if (!statusEl) {
-    return;
-  }
-
-  applyStatusMessage(statusEl, message, tone);
-}
-
-function syncAppSettingsUi() {
-  const modalEl = document.querySelector<HTMLElement>("#app-settings-modal");
-  const excludedPatternsEl = document.querySelector<HTMLTextAreaElement>(
-    "#config-excluded-patterns",
-  );
-  const pdfRendererEl = document.querySelector<HTMLSelectElement>("#config-pdf-renderer");
-  const themeEl = document.querySelector<HTMLSelectElement>("#config-theme");
-  const configPathEl = document.querySelector<HTMLElement>("#app-settings-config-path");
-  const kindleEnabledEl = document.querySelector<HTMLInputElement>("#config-kindle-enabled");
-
-  if (modalEl) {
-    modalEl.hidden = !viewerState.isAppSettingsOpen;
-  }
-
-  if (appState.lastAppConfig) {
-    if (excludedPatternsEl) {
-      excludedPatternsEl.value = appState.lastAppConfig.excludedPatterns.join("\n");
-    }
-    if (pdfRendererEl) {
-      pdfRendererEl.value = appState.lastAppConfig.pdfRenderer;
-    }
-    if (themeEl) {
-      themeEl.value = appState.lastAppConfig.theme;
-    }
-    if (configPathEl) {
-      configPathEl.innerHTML = `Config file: <code>${appState.lastAppConfig.configPath}</code>`;
-    }
-    if (kindleEnabledEl) {
-      kindleEnabledEl.checked = appState.lastAppConfig.enabledExternalSources.includes("kindle");
-    }
-  } else if (configPathEl) {
-    configPathEl.textContent = "";
-  }
-
-  renderLibraryRootsList();
-  renderCustomSourcesList();
-}
-
-function renderCustomSourcesList() {
-  const listEl = document.querySelector<HTMLElement>("#config-custom-sources-list");
-  if (!listEl) {
-    return;
-  }
-  listEl.innerHTML = "";
-  const sources = appState.lastSnapshot?.customSources ?? [];
-  if (sources.length === 0) {
-    const emptyEl = document.createElement("p");
-    emptyEl.className = "config-custom-sources-empty";
-    emptyEl.textContent = "No custom sources yet.";
-    listEl.appendChild(emptyEl);
-    return;
-  }
-  for (const source of sources) {
-    const rowEl = document.createElement("div");
-    rowEl.className = "config-custom-source-row";
-
-    const iconEl = document.createElement("i");
-    iconEl.className = `${source.icon} config-custom-source-icon`;
-    iconEl.setAttribute("aria-hidden", "true");
-
-    const nameEl = document.createElement("span");
-    nameEl.className = "config-custom-source-name";
-    nameEl.textContent = source.name;
-
-    const editEl = document.createElement("button");
-    editEl.type = "button";
-    editEl.className = "config-custom-source-action";
-    editEl.textContent = "Edit";
-    editEl.addEventListener("click", () => openCustomSourceEditor(source));
-
-    const deleteEl = document.createElement("button");
-    deleteEl.type = "button";
-    deleteEl.className = "config-custom-source-action config-custom-source-action--delete";
-    deleteEl.textContent = "Delete";
-    deleteEl.addEventListener("click", () => void deleteCustomSource(source));
-
-    rowEl.appendChild(iconEl);
-    rowEl.appendChild(nameEl);
-    rowEl.appendChild(editEl);
-    rowEl.appendChild(deleteEl);
-    listEl.appendChild(rowEl);
-  }
-}
-
-function syncCustomSourceEditorUi() {
-  const modalEl = document.querySelector<HTMLElement>("#custom-source-editor-modal");
-  const titleEl = document.querySelector<HTMLElement>("#custom-source-editor-heading");
-  const nameEl = document.querySelector<HTMLInputElement>("#custom-source-name");
-  const statusEl = document.querySelector<HTMLElement>("#custom-source-status");
-  const deleteEl = document.querySelector<HTMLButtonElement>("#custom-source-delete");
-  if (modalEl) {
-    modalEl.hidden = !customSourceEditorState.isOpen;
-  }
-  if (titleEl) {
-    titleEl.textContent = customSourceEditorState.id ? "Edit source" : "New source";
-  }
-  if (deleteEl) {
-    deleteEl.hidden = !customSourceEditorState.id;
-  }
-  syncControlValue(nameEl, customSourceEditorState.name);
-  // Update icon picker selection
-  const pickerEl = document.querySelector<HTMLElement>("#custom-source-icon-picker");
-  if (pickerEl) {
-    for (const btn of pickerEl.querySelectorAll<HTMLButtonElement>("[data-icon]")) {
-      btn.classList.toggle("is-selected", btn.dataset.icon === customSourceEditorState.icon);
-    }
-  }
-  if (statusEl) {
-    statusEl.hidden = customSourceEditorState.statusMessage.length === 0;
-    statusEl.textContent = customSourceEditorState.statusMessage;
-  }
-}
-
-export function openCustomSourceEditor(source?: CustomSource) {
-  customSourceEditorState.isOpen = true;
-  customSourceEditorState.id = source?.id ?? null;
-  customSourceEditorState.name = source?.name ?? "";
-  customSourceEditorState.icon = source?.icon ?? "fa-solid fa-book";
-  customSourceEditorState.statusMessage = "";
-  syncCustomSourceEditorUi();
-}
-
-function closeCustomSourceEditor() {
-  customSourceEditorState.isOpen = false;
-  syncCustomSourceEditorUi();
-}
-
-async function saveCustomSource() {
-  const nameEl = document.querySelector<HTMLInputElement>("#custom-source-name");
-  const name = nameEl?.value.trim() ?? customSourceEditorState.name.trim();
-  if (!name) {
-    customSourceEditorState.statusMessage = "Name is required.";
-    syncCustomSourceEditorUi();
-    return;
-  }
-  try {
-    await invoke<CustomSource>("save_custom_source", {
-      id: customSourceEditorState.id ?? null,
-      name,
-      icon: customSourceEditorState.icon,
-    });
-    const snapshot = await invoke<LibrarySnapshot>("load_library_snapshot");
-    appState.lastSnapshot = snapshot;
-    viewerState.books = snapshot.books;
-    renderApp();
-    closeCustomSourceEditor();
-  } catch (error) {
-    customSourceEditorState.statusMessage = `Failed to save: ${String(error)}`;
-    syncCustomSourceEditorUi();
-  }
-}
-
-async function deleteCustomSource(source: CustomSource) {
-  const confirmed = await confirm(`Delete "${source.name}" and all its books?`, {
-    title: "Delete source",
-    kind: "warning",
-    okLabel: "Delete",
-    cancelLabel: "Cancel",
-  });
-  if (!confirmed) {
-    return;
-  }
-  try {
-    await invoke("delete_custom_source", { id: source.id });
-    const snapshot = await invoke<LibrarySnapshot>("load_library_snapshot");
-    appState.lastSnapshot = snapshot;
-    viewerState.books = snapshot.books;
-    if (viewerState.activeExternalSource === source.id) {
-      viewerState.activeExternalSource = null;
-    }
-    renderApp();
-    syncAppSettingsUi();
-  } catch (error) {
-    await message(`Failed to delete: ${String(error)}`, { kind: "error" });
-  }
-}
-
-async function deleteCustomSourceFromEditor() {
-  const id = customSourceEditorState.id;
-  if (!id) return;
-  const source: CustomSource = {
-    id,
-    name: customSourceEditorState.name,
-    icon: customSourceEditorState.icon,
-  };
-  await deleteCustomSource(source);
-  if (!viewerState.activeExternalSource || viewerState.activeExternalSource !== id) {
-    closeCustomSourceEditor();
-  } else {
-    closeCustomSourceEditor();
-  }
-}
 
 const SHELF_FIELD_OPTIONS: ReadonlyArray<{ value: ShelfFieldKey; label: string }> = [
   { value: "free", label: "Any field" },
@@ -1946,257 +1613,6 @@ async function deleteBookMetadataChanges() {
   }
 }
 
-function syncAboutUi() {
-  const modalEl = document.querySelector<HTMLElement>("#app-about-modal");
-  const nameEl = document.querySelector<HTMLElement>("#app-about-name");
-  const versionEl = document.querySelector<HTMLElement>("#app-about-version");
-  const buildDateEl = document.querySelector<HTMLElement>("#app-about-build-date");
-  const licenseEl = document.querySelector<HTMLElement>("#app-license-text");
-  const thirdPartyRustEl = document.querySelector<HTMLElement>("#app-third-party-rust-text");
-  const thirdPartyJsEl = document.querySelector<HTMLElement>("#app-third-party-js-text");
-
-  if (modalEl) {
-    modalEl.hidden = !viewerState.isAboutOpen;
-  }
-
-  if (nameEl) {
-    nameEl.textContent = cachedAppName;
-  }
-
-  if (versionEl) {
-    versionEl.textContent = cachedAppVersion;
-  }
-
-  if (buildDateEl) {
-    buildDateEl.textContent = `(built ${buildDate})`;
-  }
-
-  if (licenseEl) {
-    licenseEl.textContent = cachedLicenseText;
-  }
-
-  if (thirdPartyRustEl) {
-    thirdPartyRustEl.textContent = cachedThirdPartyRustText;
-  }
-
-  if (thirdPartyJsEl) {
-    thirdPartyJsEl.textContent = cachedThirdPartyJsText;
-  }
-}
-
-async function loadThirdPartyLicenses() {
-  try {
-    const [licenseModule, rustModule, jsModule] = await Promise.all([
-      import("../LICENSE?raw"),
-      import("../THIRD-PARTY-LICENSES-rust.md?raw"),
-      import("../THIRD-PARTY-LICENSES-js.md?raw"),
-    ]);
-
-    cachedLicenseText = licenseModule.default.trim();
-    cachedThirdPartyRustText = rustModule.default.trim();
-    cachedThirdPartyJsText = jsModule.default.trim();
-  } catch (error) {
-    const message = `Failed to load third-party notices: ${String(error)}`;
-    cachedLicenseText = message;
-    cachedThirdPartyRustText = message;
-    cachedThirdPartyJsText = message;
-  }
-}
-
-async function loadAppConfig() {
-  appState.lastAppConfig = await invoke<AppConfigPayload>("load_app_config");
-  const theme = normalizeAppTheme(appState.lastAppConfig.theme);
-  applyAppTheme(theme);
-  persistAppTheme(theme);
-  syncAppSettingsUi();
-}
-
-let libraryRootAddInFlight = false;
-let libraryDropStatusTimer: ReturnType<typeof setTimeout> | null = null;
-
-function isLibraryWelcomeVisible() {
-  const welcomeEl = document.querySelector<HTMLElement>("#library-welcome");
-  return Boolean(welcomeEl && !welcomeEl.hidden && !viewerState.currentBook);
-}
-
-function setLibraryDropOverlay(
-  state: { phase: "drag" | "status"; message: string; tone?: StatusTone } | null,
-) {
-  const overlayEl = document.querySelector<HTMLElement>("#library-drop-overlay");
-  const messageEl = document.querySelector<HTMLElement>("#library-drop-overlay-message");
-  if (libraryDropStatusTimer !== null) {
-    clearTimeout(libraryDropStatusTimer);
-    libraryDropStatusTimer = null;
-  }
-  if (state?.phase === "drag") {
-    document.body.dataset.libraryDrag = "active";
-  } else {
-    delete document.body.dataset.libraryDrag;
-  }
-  if (!overlayEl || !messageEl) {
-    return;
-  }
-  if (!state) {
-    overlayEl.hidden = true;
-    return;
-  }
-  overlayEl.hidden = false;
-  overlayEl.dataset.phase = state.phase;
-  const toneAttr = statusToneAttribute(state.tone ?? "neutral");
-  if (toneAttr === null) {
-    delete overlayEl.dataset.tone;
-  } else {
-    overlayEl.dataset.tone = toneAttr;
-  }
-  messageEl.textContent = state.message;
-}
-
-// The welcome screen carries its own status line; elsewhere the overlay
-// shrinks to a status pill that fades out once the outcome is known.
-function reportLibraryAddStatus(message: string, tone: StatusTone) {
-  const welcomeStatusEl = document.querySelector<HTMLElement>("#library-welcome-status");
-  if (isLibraryWelcomeVisible() && welcomeStatusEl) {
-    setLibraryDropOverlay(null);
-    applyStatusMessage(welcomeStatusEl, message, tone);
-    return;
-  }
-  setLibraryDropOverlay({ phase: "status", message, tone });
-  if (tone !== "neutral") {
-    libraryDropStatusTimer = setTimeout(
-      () => {
-        libraryDropStatusTimer = null;
-        setLibraryDropOverlay(null);
-      },
-      tone === "error" ? 6000 : 3000,
-    );
-  }
-}
-
-function syncLibraryWelcomeControls() {
-  const chooseEl = document.querySelector<HTMLButtonElement>("#library-welcome-choose");
-  if (chooseEl) {
-    chooseEl.disabled = libraryRootAddInFlight;
-  }
-}
-
-/** Adds dropped or chosen folders as library roots, scanning each one. */
-async function addLibraryRoots(paths: string[]) {
-  if (libraryRootAddInFlight || paths.length === 0) {
-    return;
-  }
-  libraryRootAddInFlight = true;
-  syncLibraryWelcomeControls();
-  const errors: string[] = [];
-  const added: string[] = [];
-  try {
-    for (const path of paths) {
-      const name = folderDisplayName(path);
-      reportLibraryAddStatus(t("status.scanning", { name }), "neutral");
-      try {
-        appState.lastAppConfig = await invoke<AppConfigPayload>("add_library_root", { path });
-        added.push(path);
-      } catch (error) {
-        errors.push(describeAddLibraryRootError(uiLocale, error, name));
-      }
-    }
-  } finally {
-    libraryRootAddInFlight = false;
-    syncLibraryWelcomeControls();
-  }
-
-  if (added.length > 0 && viewerState.isLibraryWelcomeRequested) {
-    viewerState.isLibraryWelcomeRequested = false;
-    renderApp();
-  }
-
-  // The scan's `library-updated` event has already re-rendered the library.
-  const [onlyAdded] = added;
-  if (errors.length > 0) {
-    reportLibraryAddStatus(errors.join(" "), "error");
-  } else if (added.length === 1 && onlyAdded) {
-    reportLibraryAddStatus(t("status.addedOne", { name: folderDisplayName(onlyAdded) }), "success");
-  } else {
-    reportLibraryAddStatus(t("status.addedMany", { count: added.length }), "success");
-  }
-}
-
-function handleLibraryDragDrop(event: DragDropEvent) {
-  // The Settings form edits its own draft of the root list; a drop would
-  // silently replace it, so drops are ignored while it is open.
-  if (viewerState.isAppSettingsOpen || libraryRootAddInFlight) {
-    return;
-  }
-  switch (event.type) {
-    case "enter":
-      if (event.paths.length > 0) {
-        setLibraryDropOverlay({
-          phase: "drag",
-          message:
-            event.paths.length === 1
-              ? t("drop.one")
-              : t("drop.many", { count: event.paths.length }),
-        });
-      }
-      break;
-    case "over":
-      break;
-    case "leave":
-      if (document.body.dataset.libraryDrag === "active") {
-        setLibraryDropOverlay(null);
-      }
-      break;
-    case "drop":
-      setLibraryDropOverlay(null);
-      void addLibraryRoots(event.paths);
-      break;
-  }
-}
-
-async function saveAppSettingsFromForm() {
-  const excludedPatternsEl = document.querySelector<HTMLTextAreaElement>(
-    "#config-excluded-patterns",
-  );
-  const pdfRendererEl = document.querySelector<HTMLSelectElement>("#config-pdf-renderer");
-  const themeEl = document.querySelector<HTMLSelectElement>("#config-theme");
-  const kindleEnabledEl = document.querySelector<HTMLInputElement>("#config-kindle-enabled");
-
-  const libraryRoots = [...(appState.lastAppConfig?.libraryRoots ?? [])];
-
-  if (libraryRoots.length === 0) {
-    setAppSettingsStatus("At least one library root is required.", "error");
-    return;
-  }
-
-  const enabledExternalSources = kindleEnabledEl?.checked ? ["kindle"] : [];
-
-  try {
-    const payload = await invoke<AppConfigPayload>("save_app_config", {
-      input: {
-        ...buildAppConfigDraft(
-          libraryRoots,
-          excludedPatternsEl?.value ?? "",
-          pdfRendererEl?.value,
-          themeEl?.value,
-          enabledExternalSources,
-        ),
-      },
-    });
-
-    appState.lastAppConfig = payload;
-    applyAppTheme(payload.theme);
-    persistAppTheme(payload.theme);
-    const snapshot = await invoke<LibrarySnapshot>("load_library_snapshot");
-    appState.lastSnapshot = snapshot;
-    viewerState.books = snapshot.books;
-    renderApp();
-    viewerState.isAppSettingsOpen = false;
-    setAppSettingsStatus("");
-    syncAppSettingsUi();
-  } catch (error) {
-    setAppSettingsStatus(`Failed to save settings: ${String(error)}`, "error");
-  }
-}
-
 function initLibraryAddButtons() {
   const libraryAddKindleEl = document.querySelector<HTMLButtonElement>("#library-add-kindle");
   const libraryAddCustomEl2 = document.querySelector<HTMLButtonElement>("#library-add-custom");
@@ -2215,185 +1631,6 @@ function initLibraryAddButtons() {
       openNewCustomBookEditor(source);
     }
   });
-}
-
-function initCustomSourceEditor() {
-  const configAddCustomSourceEl = document.querySelector<HTMLButtonElement>(
-    "#config-add-custom-source",
-  );
-  const customSourceSaveEl = document.querySelector<HTMLButtonElement>("#custom-source-save");
-  const customSourceCancelEl = document.querySelector<HTMLButtonElement>("#custom-source-cancel");
-  const customSourceCloseEl = document.querySelector<HTMLButtonElement>("#custom-source-close");
-  const customSourceBackdropEl = document.querySelector<HTMLElement>("#custom-source-backdrop");
-  const customSourceDeleteEl = document.querySelector<HTMLButtonElement>("#custom-source-delete");
-  const customSourceNameEl = document.querySelector<HTMLInputElement>("#custom-source-name");
-  const iconPickerEl = document.querySelector<HTMLElement>("#custom-source-icon-picker");
-  configAddCustomSourceEl?.addEventListener("click", () => openCustomSourceEditor());
-  customSourceSaveEl?.addEventListener("click", () => void saveCustomSource());
-  customSourceCancelEl?.addEventListener("click", () => closeCustomSourceEditor());
-  customSourceCloseEl?.addEventListener("click", () => closeCustomSourceEditor());
-  customSourceBackdropEl?.addEventListener("click", () => closeCustomSourceEditor());
-  customSourceDeleteEl?.addEventListener("click", () => {
-    void deleteCustomSourceFromEditor();
-  });
-  customSourceNameEl?.addEventListener("input", () => {
-    customSourceEditorState.name = customSourceNameEl.value;
-  });
-  if (iconPickerEl && iconPickerEl.childElementCount === 0) {
-    for (const icon of CUSTOM_SOURCE_ICONS) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "custom-source-icon-option";
-      btn.dataset.icon = icon.cls;
-      btn.title = icon.label;
-      btn.innerHTML = `<i class="${icon.cls}" aria-hidden="true"></i>`;
-      btn.addEventListener("click", () => {
-        customSourceEditorState.icon = icon.cls;
-        syncCustomSourceEditorUi();
-      });
-      iconPickerEl.appendChild(btn);
-    }
-  }
-}
-
-export const closeAppSettings = () => {
-  viewerState.isAppSettingsOpen = false;
-  setAppSettingsStatus("");
-  syncAppSettingsUi();
-};
-export const closeAbout = () => {
-  viewerState.isAboutOpen = false;
-  syncAboutUi();
-};
-function initAppSettings() {
-  const appSettingsOpenEl = document.querySelector<HTMLButtonElement>("#app-settings-open");
-  const appSettingsCloseEl = document.querySelector<HTMLButtonElement>("#app-settings-close");
-  const appSettingsCancelEl = document.querySelector<HTMLButtonElement>("#app-settings-cancel");
-  const appSettingsSaveEl = document.querySelector<HTMLButtonElement>("#app-settings-save");
-  const appSettingsBackdropEl = document.querySelector<HTMLElement>("#app-settings-backdrop");
-  const appSettingsAddRootEl = document.querySelector<HTMLButtonElement>(
-    "#config-library-roots-add",
-  );
-
-  appSettingsOpenEl?.addEventListener("click", async () => {
-    viewerState.isAppSettingsOpen = true;
-    setAppSettingsStatus("");
-    syncAppSettingsUi();
-    void refreshFulltextStatus();
-    try {
-      await loadAppConfig();
-    } catch (error) {
-      setAppSettingsStatus(`Failed to load settings: ${String(error)}`, "error");
-    }
-  });
-
-  appSettingsCloseEl?.addEventListener("click", closeAppSettings);
-  appSettingsCancelEl?.addEventListener("click", closeAppSettings);
-  appSettingsBackdropEl?.addEventListener("click", closeAppSettings);
-  appSettingsSaveEl?.addEventListener("click", () => {
-    void saveAppSettingsFromForm();
-  });
-
-  appSettingsAddRootEl?.addEventListener("click", async () => {
-    const defaultPath =
-      appState.lastAppConfig?.libraryRoots[appState.lastAppConfig.libraryRoots.length - 1] ?? "~/";
-
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        defaultPath,
-        title: "Choose a library folder",
-      });
-
-      if (!selected) {
-        return;
-      }
-
-      const normalizedSelection = Array.isArray(selected) ? selected[0] : selected;
-      if (!normalizedSelection) {
-        return;
-      }
-
-      const collapsedSelection = await collapseHomePath(normalizedSelection);
-      const currentRoots = addLibraryRoot(
-        appState.lastAppConfig?.libraryRoots ?? [],
-        collapsedSelection,
-      );
-      appState.lastAppConfig = {
-        configPath: appState.lastAppConfig?.configPath ?? "",
-        configExists: appState.lastAppConfig?.configExists ?? false,
-        libraryRoots: currentRoots,
-        excludedPatterns: appState.lastAppConfig?.excludedPatterns ?? [],
-        pdfRenderer: appState.lastAppConfig?.pdfRenderer ?? "native",
-        theme: appState.lastAppConfig?.theme ?? "default",
-        enabledExternalSources: appState.lastAppConfig?.enabledExternalSources ?? ["kindle"],
-      };
-      syncAppSettingsUi();
-    } catch (error) {
-      setAppSettingsStatus(`Failed to choose a folder: ${String(error)}`, "error");
-    }
-  });
-}
-
-function initLibraryWelcome() {
-  document.querySelector("#config-library-welcome-open")?.addEventListener("click", () => {
-    closeAppSettings();
-    viewerState.isLibraryWelcomeRequested = true;
-    const welcomeStatusEl = document.querySelector<HTMLElement>("#library-welcome-status");
-    if (welcomeStatusEl) {
-      applyStatusMessage(welcomeStatusEl, "");
-    }
-    if (viewerState.currentBook || hasActiveLibraryFilter()) {
-      // Leaving the book or filter would otherwise cancel the request.
-      void navigateToState(
-        {
-          bookFilePath: null,
-          activeDirectory: null,
-          activeTag: null,
-          activeExternalSource: null,
-          activeShelf: null,
-          activeTagDirectOnly: false,
-          searchQuery: "",
-        },
-        "push",
-      ).then(() => {
-        viewerState.isLibraryWelcomeRequested = true;
-        renderApp();
-      });
-      return;
-    }
-    renderApp();
-  });
-
-  document.querySelector("#library-welcome-close")?.addEventListener("click", () => {
-    viewerState.isLibraryWelcomeRequested = false;
-    renderApp();
-  });
-}
-
-function initAbout() {
-  const appAboutOpenEl = document.querySelector<HTMLButtonElement>("#app-about-open");
-  const appAboutCloseEl = document.querySelector<HTMLButtonElement>("#app-about-close");
-  const appAboutDoneEl = document.querySelector<HTMLButtonElement>("#app-about-done");
-  const appAboutBackdropEl = document.querySelector<HTMLElement>("#app-about-backdrop");
-
-  appAboutOpenEl?.addEventListener("click", () => {
-    viewerState.isAboutOpen = true;
-    syncAboutUi();
-    if (
-      cachedThirdPartyRustText === "Loading Rust notices..." ||
-      cachedThirdPartyJsText === "Loading JavaScript notices..."
-    ) {
-      void loadThirdPartyLicenses().then(() => {
-        syncAboutUi();
-      });
-    }
-  });
-
-  appAboutCloseEl?.addEventListener("click", closeAbout);
-  appAboutDoneEl?.addEventListener("click", closeAbout);
-  appAboutBackdropEl?.addEventListener("click", closeAbout);
 }
 
 function initShelfEditor() {
@@ -2615,39 +1852,6 @@ function initBookMetadataEditor() {
   bookMetadataCoverUrlEl?.addEventListener("input", () => {
     bookMetadataEditorState.coverUrl = bookMetadataCoverUrlEl.value;
   });
-}
-
-async function registerLibraryDrops() {
-  await getCurrentWebview().onDragDropEvent((event) => {
-    handleLibraryDragDrop(event.payload);
-  });
-
-  document.querySelector("#library-welcome-choose")?.addEventListener("click", async () => {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        defaultPath: "~/",
-        title: t("welcome.dialogTitle"),
-      });
-      const path = Array.isArray(selected) ? selected[0] : selected;
-      if (path) {
-        await addLibraryRoots([path]);
-      }
-    } catch (error) {
-      reportLibraryAddStatus(t("status.chooseFailed", { error: String(error) }), "error");
-    }
-  });
-}
-
-async function loadAppMetadata() {
-  try {
-    cachedAppName = await getName();
-    cachedAppVersion = await getVersion();
-  } catch (error) {
-    console.error("failed to load app metadata", error);
-  }
-  syncAboutUi();
 }
 
 window.addEventListener("DOMContentLoaded", async () => {

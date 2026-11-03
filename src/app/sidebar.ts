@@ -9,11 +9,12 @@ import {
   saveSidebarSectionOrder,
   type SidebarSectionKey,
 } from "../sidebar-section-order.ts";
+import { openCustomSourceEditor } from "./custom-sources";
 import { refreshShelves, renderApp } from "./library";
 import { navigateToState } from "./navigation";
 import { appState, viewerState } from "./state";
 import type { LibrarySnapshot } from "./types";
-import { openCustomSourceEditor, openShelfEditor, openTagManager } from "../main";
+import { openShelfEditor, openTagManager } from "../main";
 
 export function ensureExpandedPath(path: string | null) {
   if (!path) {

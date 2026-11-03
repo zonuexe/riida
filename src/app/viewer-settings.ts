@@ -23,10 +23,10 @@ import {
 } from "./epub-viewer";
 import { rebuildImageEpub } from "./image-epub-viewer";
 import { syncImmediatePdfScrollMode } from "./pdf-viewer";
+import { currentAppTheme } from "./settings";
 import { appState, viewerSettings, viewerState } from "./state";
 import { syncTocUi } from "./toc";
 import { renderCurrentPage } from "./viewer";
-import { currentAppTheme } from "../main";
 
 let viewerSettingsLoadToken = 0;
 

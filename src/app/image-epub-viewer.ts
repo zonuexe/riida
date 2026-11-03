@@ -17,9 +17,9 @@ import { destroyEpubBook } from "./epub-viewer";
 import { syncNavigationHistory } from "./navigation";
 import { releaseActivePdfDocument } from "./pdf-viewer";
 import { cacheReadingPosition, scheduleEpubPositionSave } from "./reading-position";
+import { currentAppTheme } from "./settings";
 import { appState, viewerSettings, viewerState } from "./state";
 import { syncViewerPageJumpUi } from "./viewer";
-import { currentAppTheme } from "../main";
 
 // Raw payload from the `epub_image_layout` Rust command.
 export type EpubImageLayoutPayload = {

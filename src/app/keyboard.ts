@@ -15,6 +15,7 @@ import {
   nextViewerZoomIn,
   nextViewerZoomOut,
 } from "../viewer-shortcuts";
+import { closeAbout } from "./about";
 import { isEditableTarget } from "./dom";
 import {
   activeEpubRendition,
@@ -32,9 +33,10 @@ import {
   pdfZoomScale,
   setPdfZoomScale,
 } from "./pdf-viewer";
+import { closeAppSettings } from "./settings";
 import { appState, viewerState } from "./state";
 import { currentViewerTotalPages, navigateViewerToPage } from "./viewer";
-import { closeAbout, closeAppSettings, closeTagEditor, tagEditorState } from "../main";
+import { closeTagEditor, tagEditorState } from "../main";
 
 export function initGlobalShortcuts() {
   window.addEventListener("keydown", (event) => {

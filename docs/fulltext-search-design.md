@@ -17,7 +17,7 @@ Today there is **no content search**. What exists:
   `field:value`, parentheses, quotes) and matched with NFKC-normalized
   `includes()` over title / author / publisher / tag / language / path / etc.
 - **PDF body text is only extracted at view time**, per open file, via pdf.js
-  (`buildPdfSearchPageIndex` in [`main.ts`](../src/main.ts)). It never leaves
+  (`buildPdfSearchPageIndex` in [`pdf-search-utils.ts`](../src/pdf-search-utils.ts)). It never leaves
   the webview and is never persisted.
 - **EPUB extraction is OPF metadata only** (`extract_epub_metadata`, quick-xml +
   zip). Section text is never extracted.
@@ -303,6 +303,6 @@ Implementation status (v0.7.0 work, branch `feature/fulltext-search`):
   gate.
 - [`src/library-utils.ts`](../src/library-utils.ts) /
   [`search-query-ast.ts`](../src/search-query-ast.ts) /
-  [`main.ts`](../src/main.ts) — hybrid query execution, result group, jump.
+  [`app/fulltext.ts`](../src/app/fulltext.ts) — hybrid query execution, result group, jump.
 - [AGENTS.md](../AGENTS.md) — document the new index once built.
 ```

@@ -21,8 +21,8 @@ import {
   currentViewerSettingsSourceType,
 } from "./state";
 import { buildEpubToc, syncTocUi } from "./toc";
+import { applyEpubColorsToDocument } from "../viewer-color-dom";
 import {
-  applyEpubColorsToDocument,
   applyEpubFontSize,
   applyEpubViewerColors,
   applyViewerSettingsPayload,

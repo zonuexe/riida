@@ -60,6 +60,10 @@ import {
   selectAnchorPageIndex,
 } from "./reading-position-utils";
 import { validateTagValue } from "./tag-utils";
+import {
+  applyEpubColorsToDocument,
+  applyPdfViewerBackground as applyPdfViewerBackgroundForTheme,
+} from "./viewer-color-dom";
 import { resolveViewerKeyboardNav } from "./viewer-shortcuts";
 import {
   buildPageGroups,
@@ -71,7 +75,6 @@ import {
   preferredExplicitViewerBackgroundMode,
   viewerColorPaletteForMode,
   type ViewerBackgroundMode,
-  type ViewerColorPalette,
   type ViewerSettings,
   type ViewerSettingsPayload,
   type ViewerSettingsScope,
@@ -1528,29 +1531,9 @@ async function loadEffectiveViewerSettings(
 
 // Paint the PDF reading surface with the resolved viewer background. The pages
 // themselves are opaque canvases; this colours the empty space around them
-// (see DESIGN.md). "inherit-theme" clears the override so the app theme shows.
+// (see DESIGN.md).
 function applyPdfViewerBackground(backgroundMode: ViewerBackgroundMode): void {
-  const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
-  if (!mainPaneEl) return;
-  if (backgroundMode === "inherit-theme") {
-    mainPaneEl.style.removeProperty("background-color");
-    return;
-  }
-  const palette = viewerColorPaletteForMode(backgroundMode, loadPersistedAppTheme());
-  mainPaneEl.style.backgroundColor = palette.background;
-}
-
-// Paint an EPUB section document with the viewer colour palette — background,
-// body text, and link colours — all !important so the book's own CSS does not
-// win. Re-applied per section through a content hook.
-function applyEpubColorsToDocument(doc: Document, palette: ViewerColorPalette): void {
-  for (const el of [doc.documentElement, doc.body]) {
-    el?.style.setProperty("background-color", palette.background, "important");
-    el?.style.setProperty("color", palette.foreground, "important");
-  }
-  for (const linkEl of doc.querySelectorAll<HTMLElement>("a[href]")) {
-    linkEl.style.setProperty("color", palette.link, "important");
-  }
+  applyPdfViewerBackgroundForTheme(backgroundMode, loadPersistedAppTheme());
 }
 
 // WKWebView caches the backdrop sampled by translucent `backdrop-filter`

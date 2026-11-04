@@ -244,3 +244,15 @@ export async function resolvePdfTrimBoxes(
   }
   return boxes;
 }
+
+/**
+ * The analyzer both viewers use: one scratch canvas serves every page, and
+ * `willReadFrequently` keeps the pixel read-back on the CPU path.
+ */
+export function createCanvasPdfPageAnalyzer(): PdfPageAnalyzer {
+  return new PdfPageAnalyzer((): PageSampleSurface | null => {
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    return context ? { canvas, context } : null;
+  });
+}

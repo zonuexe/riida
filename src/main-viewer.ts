@@ -35,7 +35,7 @@ import {
 } from "./note-window-utils";
 import { parseRequestedPageNumber } from "./page-jump-utils";
 import { detectPdfBindingDirection } from "./pdf-binding-detect";
-import { PdfPageAnalyzer, resolvePdfTrimBoxes, type PageSampleSurface } from "./pdf-page-sample";
+import { createCanvasPdfPageAnalyzer, resolvePdfTrimBoxes } from "./pdf-page-sample";
 import {
   applyPdfPageOverlayTransform,
   canvasRenderScale,
@@ -202,12 +202,8 @@ const PDF_RENDER_RADIUS = 1;
 const PDF_KEEP_RADIUS = 2;
 
 // Scan analysis for deskew and margin trimming (viewer settings "deskewMode"
-// and "trimMode"); mirrors the in-app viewer's analyzer in src/main.ts.
-const pdfPageAnalyzer = new PdfPageAnalyzer((): PageSampleSurface | null => {
-  const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  return context ? { canvas, context } : null;
-});
+// and "trimMode"), memoised per page of the open document.
+const pdfPageAnalyzer = createCanvasPdfPageAnalyzer();
 
 async function renderPdfPageCanvas(
   page: PdfPage,

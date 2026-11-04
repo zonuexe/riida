@@ -6,7 +6,7 @@ import { loadPdfJsRuntime, TauriBinaryDataFactory } from "../pdf-runtime";
 import { convertPdfRectToViewport } from "../pdf-rect-utils";
 import { type PdfAnnotationRecord, resolvePdfLinkTarget } from "../pdf-link-utils";
 import { detectPdfBindingDirection } from "../pdf-binding-detect";
-import { type PageSampleSurface, PdfPageAnalyzer, resolvePdfTrimBoxes } from "../pdf-page-sample";
+import { createCanvasPdfPageAnalyzer, resolvePdfTrimBoxes } from "../pdf-page-sample";
 import { applyPdfPageOverlayTransform, pageContentTransform } from "../pdf-page-transform";
 import { createPdfRangeTransport, probePdfRangeSource } from "../pdf-range-source";
 import { cropRectForPage, type TrimBoxes, trimmedPageSize } from "../pdf-trim";
@@ -33,14 +33,8 @@ import {
 } from "./viewer-settings";
 
 // Scan analysis for deskew and margin trimming (viewer settings "deskewMode"
-// and "trimMode"). One scratch canvas serves every page; `willReadFrequently`
-// keeps the pixel read-back on the CPU path, and the analyzer memoises each
-// page's measurements per document.
-const pdfPageAnalyzer = new PdfPageAnalyzer((): PageSampleSurface | null => {
-  const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  return context ? { canvas, context } : null;
-});
+// and "trimMode"), memoised per page of the open document.
+const pdfPageAnalyzer = createCanvasPdfPageAnalyzer();
 
 let pdfRenderToken = 0;
 

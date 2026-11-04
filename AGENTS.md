@@ -998,6 +998,17 @@ jsdom boot test ([src/main.boot.test.ts](src/main.boot.test.ts)) is what
 exercises the wiring. Logic that can be tested without the DOM still belongs
 in a helper module next to its tests.
 
+### Standalone viewer window
+
+[src/main-viewer.ts](src/main-viewer.ts) is a separate entry point
+(`viewer.html`) with its own state, and it value-imports nothing from
+`src/app/`: those modules assume the library shell's state and the shell
+`main.ts` installs. Logic both viewers need lives in a flat helper module
+that each imports, for example `note-window-utils.ts` (note window placement,
+drag and resize), `viewer-color-dom.ts` (viewer background appliers) and
+`pdf-page-sample.ts` (`createCanvasPdfPageAnalyzer`). Type-only imports from
+[src/app/types.ts](src/app/types.ts) are fine.
+
 ## Frontend Naming Conventions
 
 Interactive HTML elements that are referenced from both JavaScript and CSS

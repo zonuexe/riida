@@ -5,6 +5,10 @@ import type { NoteEditorHandle } from "../note-editor";
 import {
   clampNoteWindowPosition,
   ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
+  beginNoteWindowInteraction,
+  idleNoteWindowInteraction,
+  noteWindowFrameForPointer,
+  type NoteWindowInteraction,
 } from "../note-window-utils";
 import { renderApp } from "./shell";
 import { viewerSettings, viewerState } from "./state";
@@ -22,17 +26,6 @@ type NoteState = {
   y: number | null;
   width: number;
   height: number;
-};
-
-type NoteInteractionState = {
-  mode: "drag" | "resize" | null;
-  edge: string | null;
-  startX: number;
-  startY: number;
-  startLeft: number;
-  startTop: number;
-  startWidth: number;
-  startHeight: number;
 };
 
 let noteEditor: NoteEditorHandle | null = null;
@@ -67,19 +60,7 @@ export const noteState: NoteState = {
   height: 540,
 };
 
-const noteInteractionState: NoteInteractionState = {
-  mode: null,
-  edge: null,
-  startX: 0,
-  startY: 0,
-  startLeft: 0,
-  startTop: 0,
-  startWidth: 0,
-  startHeight: 0,
-};
-
-const MIN_NOTE_WIDTH = 280;
-const MIN_NOTE_HEIGHT = 220;
+const noteInteractionState: NoteWindowInteraction = idleNoteWindowInteraction();
 
 export function clampNoteWindow() {
   const nextState = clampNoteWindowPosition(noteState, {
@@ -267,87 +248,38 @@ function beginNoteDrag(event: PointerEvent) {
   event.preventDefault();
   ensureNoteWindowPlacement();
 
-  noteInteractionState.mode = "drag";
-  noteInteractionState.edge = null;
-  noteInteractionState.startX = event.clientX;
-  noteInteractionState.startY = event.clientY;
-  noteInteractionState.startLeft = noteState.x ?? 0;
-  noteInteractionState.startTop = noteState.y ?? 0;
+  Object.assign(
+    noteInteractionState,
+    beginNoteWindowInteraction(noteState, null, event.clientX, event.clientY),
+  );
 }
 
 function beginNoteResize(event: PointerEvent, edge: string) {
   event.preventDefault();
   ensureNoteWindowPlacement();
 
-  noteInteractionState.mode = "resize";
-  noteInteractionState.edge = edge;
-  noteInteractionState.startX = event.clientX;
-  noteInteractionState.startY = event.clientY;
-  noteInteractionState.startLeft = noteState.x ?? 0;
-  noteInteractionState.startTop = noteState.y ?? 0;
-  noteInteractionState.startWidth = noteState.width;
-  noteInteractionState.startHeight = noteState.height;
+  Object.assign(
+    noteInteractionState,
+    beginNoteWindowInteraction(noteState, edge, event.clientX, event.clientY),
+  );
 }
 
 function updateNoteInteraction(event: PointerEvent) {
-  if (!noteInteractionState.mode) {
+  const frame = noteWindowFrameForPointer(noteInteractionState, event.clientX, event.clientY, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+  if (!frame) {
     return;
   }
 
-  const dx = event.clientX - noteInteractionState.startX;
-  const dy = event.clientY - noteInteractionState.startY;
-
-  if (noteInteractionState.mode === "drag") {
-    noteState.x = noteInteractionState.startLeft + dx;
-    noteState.y = noteInteractionState.startTop + dy;
-    clampNoteWindow();
-    syncNoteUi();
-    return;
-  }
-
-  const edge = noteInteractionState.edge ?? "";
-  let nextLeft = noteInteractionState.startLeft;
-  let nextTop = noteInteractionState.startTop;
-  let nextWidth = noteInteractionState.startWidth;
-  let nextHeight = noteInteractionState.startHeight;
-
-  if (edge.includes("e")) {
-    nextWidth = Math.max(MIN_NOTE_WIDTH, noteInteractionState.startWidth + dx);
-  }
-
-  if (edge.includes("s")) {
-    nextHeight = Math.max(MIN_NOTE_HEIGHT, noteInteractionState.startHeight + dy);
-  }
-
-  if (edge.includes("w")) {
-    nextWidth = Math.max(MIN_NOTE_WIDTH, noteInteractionState.startWidth - dx);
-    nextLeft = noteInteractionState.startLeft + dx;
-    if (nextWidth === MIN_NOTE_WIDTH) {
-      nextLeft =
-        noteInteractionState.startLeft + (noteInteractionState.startWidth - MIN_NOTE_WIDTH);
-    }
-  }
-
-  if (edge.includes("n")) {
-    nextHeight = Math.max(MIN_NOTE_HEIGHT, noteInteractionState.startHeight - dy);
-    nextTop = noteInteractionState.startTop + dy;
-    if (nextHeight === MIN_NOTE_HEIGHT) {
-      nextTop =
-        noteInteractionState.startTop + (noteInteractionState.startHeight - MIN_NOTE_HEIGHT);
-    }
-  }
-
-  noteState.width = Math.min(nextWidth, window.innerWidth - 24);
-  noteState.height = Math.min(nextHeight, window.innerHeight - 24);
-  noteState.x = nextLeft;
-  noteState.y = nextTop;
+  Object.assign(noteState, frame);
   clampNoteWindow();
   syncNoteUi();
 }
 
 function endNoteInteraction() {
-  noteInteractionState.mode = null;
-  noteInteractionState.edge = null;
+  Object.assign(noteInteractionState, idleNoteWindowInteraction());
 }
 
 export function initNotes() {

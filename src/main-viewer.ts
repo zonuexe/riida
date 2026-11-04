@@ -60,6 +60,7 @@ import {
   selectAnchorPageIndex,
 } from "./reading-position-utils";
 import { validateTagValue } from "./tag-utils";
+import type { BookMetadataPayload, NoteDocument, PdfOutlineNode } from "./app/types";
 import {
   applyEpubColorsToDocument,
   applyPdfViewerBackground as applyPdfViewerBackgroundForTheme,
@@ -481,12 +482,6 @@ function createPdfNavigation(
 
   return { jumpToPage };
 }
-
-type PdfOutlineNode = {
-  title: string;
-  dest: string | unknown[] | null;
-  items: PdfOutlineNode[];
-};
 
 type EpubTocItem = {
   label: string;
@@ -1061,20 +1056,6 @@ function installTagEditor(filePath: string): void {
   backdropEl.addEventListener("click", close);
   saveEl.addEventListener("click", () => void save());
 }
-
-type BookMetadataPayload = {
-  filePath: string;
-  title: string;
-  authors: string[];
-  description: string;
-  publisher: string;
-  releaseDate: string;
-  language: string;
-  url: string;
-  asin: string;
-  coverUrl: string;
-  updatedAt: number | null;
-};
 
 const EMPTY_BOOK_METADATA_DRAFT: BookMetadataDraft = {
   title: "",
@@ -1958,13 +1939,6 @@ function installEpubKeyboardNavigation(
     }
   });
 }
-
-type NoteDocument = {
-  filePath: string;
-  format: string;
-  content: string;
-  updatedAt: number | null;
-};
 
 type NoteState = {
   isOpen: boolean;

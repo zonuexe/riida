@@ -7,7 +7,6 @@ import {
   DEFAULT_VIEWER_SETTINGS,
   preferredExplicitViewerBackgroundMode,
   type ViewerBackgroundMode,
-  type ViewerColorPalette,
   viewerColorPaletteForMode,
   viewerExtraVerticalGap,
   type ViewerSettings,
@@ -15,6 +14,10 @@ import {
   type ViewerSettingsScope,
   type ViewerSourceType,
 } from "../viewer-settings-utils";
+import {
+  applyEpubColorsToDocument,
+  applyPdfViewerBackground as applyPdfViewerBackgroundForTheme,
+} from "../viewer-color-dom";
 import { currentViewerStage } from "./dom";
 import {
   appState,
@@ -28,23 +31,7 @@ import { syncTocUi } from "./toc";
 let viewerSettingsLoadToken = 0;
 
 export function applyPdfViewerBackground(backgroundMode: ViewerBackgroundMode) {
-  const palette = viewerColorPaletteForMode(backgroundMode, currentAppTheme());
-
-  const applyBackgroundStyles = (el: HTMLElement | null) => {
-    if (!el) {
-      return;
-    }
-
-    el.style.backgroundColor = palette.background;
-  };
-
-  const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
-  if (backgroundMode === "inherit-theme") {
-    mainPaneEl?.style.removeProperty("background-color");
-    return;
-  }
-
-  applyBackgroundStyles(mainPaneEl);
+  applyPdfViewerBackgroundForTheme(backgroundMode, currentAppTheme());
 }
 
 export function applyViewerVerticalGapMode(mode: ViewerSettings["verticalGapMode"]) {
@@ -297,21 +284,6 @@ export async function loadViewerSettingsForCurrentBook() {
 
 // Applying preferences to the live epub.js rendition and PDF stage. The
 // engines call these while they render, so they sit here below the engines.
-
-export function applyEpubColorsToDocument(doc: Document, palette: ViewerColorPalette) {
-  const root = doc.documentElement;
-  const body = doc.body;
-
-  root?.style.setProperty("background-color", palette.background, "important");
-  root?.style.setProperty("color", palette.foreground, "important");
-  body?.style.setProperty("background-color", palette.background, "important");
-  body?.style.setProperty("color", palette.foreground, "important");
-
-  const linkEls = doc.querySelectorAll<HTMLAnchorElement>("a[href]");
-  for (const linkEl of linkEls) {
-    linkEl.style.setProperty("color", palette.link, "important");
-  }
-}
 
 export function applyEpubViewerColors(backgroundMode: ViewerBackgroundMode) {
   const epubViewerEl = document.querySelector<HTMLElement>("#epub-viewer");

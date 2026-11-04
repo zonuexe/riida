@@ -28,10 +28,14 @@ import {
   clampNoteWindowPosition,
   ensureNoteWindowPlacement as ensureNoteWindowPlacementForViewport,
   preserveNoteWindowBottomRightOffset,
+  beginNoteWindowInteraction,
+  idleNoteWindowInteraction,
+  noteWindowFrameForPointer,
+  type NoteWindowInteraction,
 } from "./note-window-utils";
 import { parseRequestedPageNumber } from "./page-jump-utils";
 import { detectPdfBindingDirection } from "./pdf-binding-detect";
-import { PdfPageAnalyzer, resolvePdfTrimBoxes, type PageSampleSurface } from "./pdf-page-sample";
+import { createCanvasPdfPageAnalyzer, resolvePdfTrimBoxes } from "./pdf-page-sample";
 import {
   applyPdfPageOverlayTransform,
   canvasRenderScale,
@@ -56,6 +60,11 @@ import {
   selectAnchorPageIndex,
 } from "./reading-position-utils";
 import { validateTagValue } from "./tag-utils";
+import type { BookMetadataPayload, NoteDocument, PdfOutlineNode } from "./app/types";
+import {
+  applyEpubColorsToDocument,
+  applyPdfViewerBackground as applyPdfViewerBackgroundForTheme,
+} from "./viewer-color-dom";
 import { resolveViewerKeyboardNav } from "./viewer-shortcuts";
 import {
   buildPageGroups,
@@ -67,7 +76,6 @@ import {
   preferredExplicitViewerBackgroundMode,
   viewerColorPaletteForMode,
   type ViewerBackgroundMode,
-  type ViewerColorPalette,
   type ViewerSettings,
   type ViewerSettingsPayload,
   type ViewerSettingsScope,
@@ -195,12 +203,8 @@ const PDF_RENDER_RADIUS = 1;
 const PDF_KEEP_RADIUS = 2;
 
 // Scan analysis for deskew and margin trimming (viewer settings "deskewMode"
-// and "trimMode"); mirrors the in-app viewer's analyzer in src/main.ts.
-const pdfPageAnalyzer = new PdfPageAnalyzer((): PageSampleSurface | null => {
-  const canvas = document.createElement("canvas");
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  return context ? { canvas, context } : null;
-});
+// and "trimMode"), memoised per page of the open document.
+const pdfPageAnalyzer = createCanvasPdfPageAnalyzer();
 
 async function renderPdfPageCanvas(
   page: PdfPage,
@@ -478,12 +482,6 @@ function createPdfNavigation(
 
   return { jumpToPage };
 }
-
-type PdfOutlineNode = {
-  title: string;
-  dest: string | unknown[] | null;
-  items: PdfOutlineNode[];
-};
 
 type EpubTocItem = {
   label: string;
@@ -1059,20 +1057,6 @@ function installTagEditor(filePath: string): void {
   saveEl.addEventListener("click", () => void save());
 }
 
-type BookMetadataPayload = {
-  filePath: string;
-  title: string;
-  authors: string[];
-  description: string;
-  publisher: string;
-  releaseDate: string;
-  language: string;
-  url: string;
-  asin: string;
-  coverUrl: string;
-  updatedAt: number | null;
-};
-
 const EMPTY_BOOK_METADATA_DRAFT: BookMetadataDraft = {
   title: "",
   authorsText: "",
@@ -1524,29 +1508,9 @@ async function loadEffectiveViewerSettings(
 
 // Paint the PDF reading surface with the resolved viewer background. The pages
 // themselves are opaque canvases; this colours the empty space around them
-// (see DESIGN.md). "inherit-theme" clears the override so the app theme shows.
+// (see DESIGN.md).
 function applyPdfViewerBackground(backgroundMode: ViewerBackgroundMode): void {
-  const mainPaneEl = document.querySelector<HTMLElement>("#main-pane");
-  if (!mainPaneEl) return;
-  if (backgroundMode === "inherit-theme") {
-    mainPaneEl.style.removeProperty("background-color");
-    return;
-  }
-  const palette = viewerColorPaletteForMode(backgroundMode, loadPersistedAppTheme());
-  mainPaneEl.style.backgroundColor = palette.background;
-}
-
-// Paint an EPUB section document with the viewer colour palette — background,
-// body text, and link colours — all !important so the book's own CSS does not
-// win. Re-applied per section through a content hook.
-function applyEpubColorsToDocument(doc: Document, palette: ViewerColorPalette): void {
-  for (const el of [doc.documentElement, doc.body]) {
-    el?.style.setProperty("background-color", palette.background, "important");
-    el?.style.setProperty("color", palette.foreground, "important");
-  }
-  for (const linkEl of doc.querySelectorAll<HTMLElement>("a[href]")) {
-    linkEl.style.setProperty("color", palette.link, "important");
-  }
+  applyPdfViewerBackgroundForTheme(backgroundMode, loadPersistedAppTheme());
 }
 
 // WKWebView caches the backdrop sampled by translucent `backdrop-filter`
@@ -1976,13 +1940,6 @@ function installEpubKeyboardNavigation(
   });
 }
 
-type NoteDocument = {
-  filePath: string;
-  format: string;
-  content: string;
-  updatedAt: number | null;
-};
-
 type NoteState = {
   isOpen: boolean;
   isLoading: boolean;
@@ -1994,19 +1951,6 @@ type NoteState = {
   height: number;
 };
 
-type NoteInteractionState = {
-  mode: "drag" | "resize" | null;
-  edge: string | null;
-  startX: number;
-  startY: number;
-  startLeft: number;
-  startTop: number;
-  startWidth: number;
-  startHeight: number;
-};
-
-const NOTE_MIN_WIDTH = 280;
-const NOTE_MIN_HEIGHT = 220;
 const NOTE_SAVE_DEBOUNCE_MS = 800;
 
 const noteState: NoteState = {
@@ -2020,16 +1964,7 @@ const noteState: NoteState = {
   height: 540,
 };
 
-const noteInteractionState: NoteInteractionState = {
-  mode: null,
-  edge: null,
-  startX: 0,
-  startY: 0,
-  startLeft: 0,
-  startTop: 0,
-  startWidth: 0,
-  startHeight: 0,
-};
+const noteInteractionState: NoteWindowInteraction = idleNoteWindowInteraction();
 
 let noteEditor: NoteEditorHandle | null = null;
 let noteEditorModulePromise: Promise<typeof import("./note-editor")> | null = null;
@@ -2171,80 +2106,34 @@ function beginNoteDrag(event: PointerEvent): void {
   if (!target || target.closest("#note-close")) return;
   event.preventDefault();
   ensureNoteWindowPlacement();
-  noteInteractionState.mode = "drag";
-  noteInteractionState.edge = null;
-  noteInteractionState.startX = event.clientX;
-  noteInteractionState.startY = event.clientY;
-  noteInteractionState.startLeft = noteState.x ?? 0;
-  noteInteractionState.startTop = noteState.y ?? 0;
+  Object.assign(
+    noteInteractionState,
+    beginNoteWindowInteraction(noteState, null, event.clientX, event.clientY),
+  );
 }
 
 function beginNoteResize(event: PointerEvent, edge: string): void {
   event.preventDefault();
   ensureNoteWindowPlacement();
-  noteInteractionState.mode = "resize";
-  noteInteractionState.edge = edge;
-  noteInteractionState.startX = event.clientX;
-  noteInteractionState.startY = event.clientY;
-  noteInteractionState.startLeft = noteState.x ?? 0;
-  noteInteractionState.startTop = noteState.y ?? 0;
-  noteInteractionState.startWidth = noteState.width;
-  noteInteractionState.startHeight = noteState.height;
+  Object.assign(
+    noteInteractionState,
+    beginNoteWindowInteraction(noteState, edge, event.clientX, event.clientY),
+  );
 }
 
 function updateNoteInteraction(event: PointerEvent): void {
-  if (!noteInteractionState.mode) return;
-  const dx = event.clientX - noteInteractionState.startX;
-  const dy = event.clientY - noteInteractionState.startY;
-
-  if (noteInteractionState.mode === "drag") {
-    noteState.x = noteInteractionState.startLeft + dx;
-    noteState.y = noteInteractionState.startTop + dy;
-    clampNoteWindow();
-    syncNoteUi();
-    return;
-  }
-
-  const edge = noteInteractionState.edge ?? "";
-  let nextLeft = noteInteractionState.startLeft;
-  let nextTop = noteInteractionState.startTop;
-  let nextWidth = noteInteractionState.startWidth;
-  let nextHeight = noteInteractionState.startHeight;
-
-  if (edge.includes("e")) {
-    nextWidth = Math.max(NOTE_MIN_WIDTH, noteInteractionState.startWidth + dx);
-  }
-  if (edge.includes("s")) {
-    nextHeight = Math.max(NOTE_MIN_HEIGHT, noteInteractionState.startHeight + dy);
-  }
-  if (edge.includes("w")) {
-    nextWidth = Math.max(NOTE_MIN_WIDTH, noteInteractionState.startWidth - dx);
-    nextLeft = noteInteractionState.startLeft + dx;
-    if (nextWidth === NOTE_MIN_WIDTH) {
-      nextLeft =
-        noteInteractionState.startLeft + (noteInteractionState.startWidth - NOTE_MIN_WIDTH);
-    }
-  }
-  if (edge.includes("n")) {
-    nextHeight = Math.max(NOTE_MIN_HEIGHT, noteInteractionState.startHeight - dy);
-    nextTop = noteInteractionState.startTop + dy;
-    if (nextHeight === NOTE_MIN_HEIGHT) {
-      nextTop =
-        noteInteractionState.startTop + (noteInteractionState.startHeight - NOTE_MIN_HEIGHT);
-    }
-  }
-
-  noteState.width = Math.min(nextWidth, window.innerWidth - 24);
-  noteState.height = Math.min(nextHeight, window.innerHeight - 24);
-  noteState.x = nextLeft;
-  noteState.y = nextTop;
+  const frame = noteWindowFrameForPointer(noteInteractionState, event.clientX, event.clientY, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+  if (!frame) return;
+  Object.assign(noteState, frame);
   clampNoteWindow();
   syncNoteUi();
 }
 
 function endNoteInteraction(): void {
-  noteInteractionState.mode = null;
-  noteInteractionState.edge = null;
+  Object.assign(noteInteractionState, idleNoteWindowInteraction());
 }
 
 function attachNotePanelInteractions(): void {

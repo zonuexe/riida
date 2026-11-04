@@ -3,6 +3,7 @@ import {
   PAGE_SAMPLE_LONG_EDGE,
   PdfPageAnalyzer,
   analyzePageSample,
+  createCanvasPdfPageAnalyzer,
   pageSampleSize,
   renderPageSample,
   resolvePdfTrimBoxes,
@@ -73,6 +74,12 @@ describe("analyzePageSample", () => {
       width: 480,
       height: 640,
     });
+  });
+});
+
+describe("createCanvasPdfPageAnalyzer", () => {
+  it("creates an analyzer without touching the DOM until a page is measured", () => {
+    expect(createCanvasPdfPageAnalyzer()).toBeInstanceOf(PdfPageAnalyzer);
   });
 });
 

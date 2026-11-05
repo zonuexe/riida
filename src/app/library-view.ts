@@ -14,6 +14,7 @@ import { renderFulltextResults } from "./fulltext";
 import { destroyImageEpub } from "./image-epub-viewer";
 import { hasActiveLibraryFilter, visibleBooks } from "./library-data";
 import { loadNoteForCurrentBook, noteState, syncNoteUi } from "./notes";
+import { releaseActivePdfDocument } from "./pdf-viewer";
 import { syncViewerPageJumpUi } from "./page-jump";
 import { renderApp } from "./shell";
 import { appState, viewerState } from "./state";
@@ -163,6 +164,11 @@ export function renderMain(snapshot: LibrarySnapshot) {
       frame.hidden = false;
       frame.dataset.filePath = "";
     }
+    // Back in the library the document is closed, not just hidden: its
+    // worker, file bytes and decoded page images would otherwise stay
+    // resident until the next book is opened. Coming back re-renders anyway,
+    // since the viewer's DOM is cleared here.
+    releaseActivePdfDocument();
     if (pdfjsViewerEl) {
       pdfjsViewerEl.innerHTML = "";
       pdfjsViewerEl.hidden = true;

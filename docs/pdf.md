@@ -390,7 +390,9 @@ planner を使って同じ半径でウィンドウ描画します。spread の�
 `releaseActivePdfDocument()` ([src/app/pdf-viewer.ts](../src/app/pdf-viewer.ts)) が
 `appState.activePdfRenderSession` のクリアと loading task の `destroy()` をまとめて
 行い、PDF ビューアを離れる経路すべて（別の本、EPUB、画像 EPUB、native
-レンダラ）がここを通ります。`pdfRenderToken` の加算も同じ関数に入れて、
+レンダラ、ライブラリ一覧へ戻る）がここを通ります。ライブラリ一覧に戻るときは
+ビューアの DOM を消すだけで以前はドキュメントを開いたままにしていたため、
+次の本を開くまで worker とデコード済み画像が残っていました。`pdfRenderToken` の加算も同じ関数に入れて、
 破棄中のドキュメントに進行中のレンダーが触れないようにしています。
 
 `destroy()` は保留中のページ要求を reject するので、**破棄されたセッション
@@ -425,6 +427,12 @@ pdf.js はページのデコード済み画像を `PDFPageProxy.objs` に置き�
 `innerHTML = ""` で DOM から外しただけでは、WKWebView は canvas の
 ImageBuffer を要素が回収されるまで抱えます。捨てる前に
 `canvas.width = canvas.height = 0` を入れると即座に解放されます。
+
+キープ半径から外れたスプレッドだけでなく、セッションごと捨てるときも同じです。
+アプリ内ビューアはリサイズ・ズーム・ビューア設定の変更のたびに
+`renderPdfJsBook` で作り直すので、`releaseActivePdfDocument()` は描画済みの
+全スプレッドを `releasePdfRenderPlan` に通してから DOM を手放します（自炊本で
+1 回あたり最大 5 スプレッド、約 85 MB）。
 
 サイズの決め方も 2 系統で違います。アプリ内ビューアは `baseScale` を
 ビューアの寸法（fit-width / fit-height）から出すので、canvas は元から

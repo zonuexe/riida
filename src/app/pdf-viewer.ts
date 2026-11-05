@@ -203,10 +203,26 @@ async function renderPdfJsLinks(
  *
  * Bumping the render token first stops any in-flight render from touching the
  * document while it is being torn down.
+ *
+ * The painted spreads go back too. Every caller is about to drop the viewer's
+ * DOM (a re-render after a resize, zoom or settings change, another book, the
+ * library view), and a canvas that is only detached keeps its backing store
+ * until WebKit collects it — on a scanned book up to five spreads, ~85MB, per
+ * re-render.
  */
 export function releaseActivePdfDocument() {
   pdfRenderToken += 1;
+  const session = appState.activePdfRenderSession;
   appState.activePdfRenderSession = null;
+  // An abandoned render never reaches the `finally` that clears this, since
+  // the token no longer matches; left set, it keeps the stage's scroll
+  // handler muted until some later PDF render clears it.
+  appState.pdfRenderInProgress = false;
+  if (session) {
+    for (const plan of session.plans) {
+      releasePdfRenderPlan(plan);
+    }
+  }
   const task = activePdfLoadingTask;
   activePdfLoadingTask = null;
   // destroy() rejects pending page requests; those rejections belong to work

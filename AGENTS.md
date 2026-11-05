@@ -223,7 +223,10 @@ measurements: [docs/pdf.md](docs/pdf.md#メモリ使用量).
 
 - **The loading task.** `releaseActivePdfDocument()` in
   [src/app/pdf-viewer.ts](src/app/pdf-viewer.ts) clears the session, bumps `pdfRenderToken` and
-  calls `loadingTask.destroy()`; every path that leaves a PDF goes through it.
+  calls `loadingTask.destroy()`; every path that leaves a PDF goes through it,
+  including the return to the library view and the re-render a resize, zoom or
+  settings change triggers. It also releases every painted spread first, since
+  those callers drop the viewer DOM next.
   Because `destroy()` rejects the page requests an abandoned render is
   awaiting, the `catch` in `renderCurrentPage` and in
   `updatePdfRenderWindow` must stay silent when the token has moved on —

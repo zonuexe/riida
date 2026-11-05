@@ -48,8 +48,8 @@ export let pdfZoomScale = 1;
 
 // How far around the reading position spreads are painted, and how far a
 // painted one stays. Both cost memory — a spread of a 300dpi book scan is
-// about 17MB of canvas plus 32MB of decoded image — so the window is kept
-// narrow. The render radius is one spread of prefetch, which is what paged
+// about 17MB of canvas (its decoded images are released once painted) — so
+// the window is kept narrow. The render radius is one spread of prefetch, which is what paged
 // reading consumes. The keep radius is deliberately the larger of the two:
 // spreads between the two radii stay painted without being maintained, so
 // stepping back through the book is instant rather than a repaint.
@@ -236,10 +236,9 @@ function releasePdfRenderPlan(plan: PdfRenderPlan) {
   }
 
   for (const page of plan.renderedPages.values()) {
-    // Returns false while a render task is still running on the page; the
-    // window update never releases a group it is painting, so that only
-    // happens if a render was left in flight, and the page then keeps its
-    // images until the document is closed.
+    // A fully painted page released its images right after painting; this
+    // catches the pages whose render was abandoned part-way. While a render
+    // task is still running, pdf.js defers the cleanup until it ends.
     page.cleanup();
   }
   plan.renderedPages.clear();
@@ -332,6 +331,13 @@ async function renderPdfRenderPlan(session: PdfRenderSession, plan: PdfRenderPla
       transform: content.canvas,
       viewport,
     }).promise;
+    // The canvas now holds the pixels, so the decoded images behind them —
+    // ~16MB a page on a 300dpi book scan — have done their job. Keeping them
+    // would only speed up a repaint, and the page is never repainted while it
+    // stays in the window: leaving the window releases it anyway, and a zoom,
+    // resize or settings change rebuilds the whole document. The text layer
+    // and annotations below come from their own requests, not from `objs`.
+    page.cleanup();
 
     const textLayer = new TextLayer({
       textContentSource: page.streamTextContent(),

@@ -194,9 +194,9 @@ function pdfCanvasBudget(): PdfCanvasBudget {
 }
 
 // How far around the reading position spreads are painted, and how far they
-// stay painted. Every painted page holds a canvas backing store plus, inside
-// PDF.js, the page's decoded images, so the window is bounded rather than
-// spanning the document. The radii match the in-app viewer's, including the
+// stay painted. Every painted page holds a canvas backing store (its decoded
+// images are released once it is painted), so the window is bounded rather
+// than spanning the document. The radii match the in-app viewer's, including the
 // asymmetry: spreads between the two stay painted without being maintained, so
 // stepping back through the book does not repaint.
 const PDF_RENDER_RADIUS = 1;
@@ -260,6 +260,11 @@ async function renderPdfPageCanvas(
       viewport,
       transform: content.canvas,
     }).promise;
+    // Painted, so the decoded images have done their job; this window never
+    // repaints a page that stays in the render window, so keeping them would
+    // only cost memory (~16MB a page on a 300dpi scan). Annotations below come
+    // from their own request.
+    page.cleanup();
   }
 
   const linkLayer = await buildPdfLinkLayer(
@@ -1698,7 +1703,8 @@ async function renderPdfDocument(
 
   // Give back both halves of a spread's memory: the canvas backing stores,
   // which WebKit holds until the detached elements are collected unless they
-  // are resized to nothing first, and the pages' decoded images. The spread
+  // are resized to nothing first, and the decoded images of any page whose
+  // render was cut short (a painted page released its own already). The spread
   // element keeps its 100vh height either way, so the scroll layout is
   // unaffected and the spread repaints when it comes back into the window.
   const releaseSpread = (groupIndex: number): void => {

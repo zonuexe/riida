@@ -230,9 +230,11 @@ measurements: [docs/pdf.md](docs/pdf.md#メモリ使用量).
   without that, a window resize paints the previous render's rejection over
   the new one.
 - **Decoded page images.** `PDFPageProxy.cleanup()` is the only way to drop
-  `page.objs`. `PdfRenderPlan.renderedPages` keeps the proxies so
-  `releasePdfRenderPlan` can release a spread that leaves the keep window,
-  and the trim pre-pass (`resolvePdfTrimBoxes`) releases each page it samples.
+  `page.objs`. Both viewers call it as soon as a page is painted: the canvas
+  holds the pixels, and a painted page is never repainted while it stays in
+  the render window. `PdfRenderPlan.renderedPages` keeps the proxies so
+  `releasePdfRenderPlan` also catches pages whose render was cut short, and
+  the trim pre-pass (`resolvePdfTrimBoxes`) releases each page it samples.
 - **Canvas backing stores.** Set `canvas.width = canvas.height = 0` before
   detaching; WKWebView holds the ImageBuffer until collection otherwise. Their
   size is display-driven in both viewers: the in-app one gets it from

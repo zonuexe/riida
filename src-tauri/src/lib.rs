@@ -62,6 +62,10 @@ static PDFIUM_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
 // watcher instead of leaving the old one rescanning with a stale root list.
 static LIBRARY_WATCHER_GENERATION: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(0);
+// Wake-up handle of the running watcher thread. The thread blocks on its event
+// channel with no timeout (an idle app must not wake up periodically), so
+// retiring it means sending it a message rather than waiting for a poll.
+static LIBRARY_WATCHER_WAKE: Mutex<Option<mpsc::Sender<notify::Result<Event>>>> = Mutex::new(None);
 
 fn should_allow_internal_navigation(url: &Url) -> bool {
     match url.scheme() {
@@ -401,6 +405,12 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
     let generation =
         LIBRARY_WATCHER_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
 
+    if let Ok(mut wake) = LIBRARY_WATCHER_WAKE.lock() {
+        if let Some(previous) = wake.take() {
+            let _ = previous.send(Err(notify::Error::generic("library watcher retired")));
+        }
+    }
+
     if config
         .library_roots
         .iter()
@@ -410,6 +420,9 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
     }
 
     let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
+    if let Ok(mut wake) = LIBRARY_WATCHER_WAKE.lock() {
+        *wake = Some(tx.clone());
+    }
 
     thread::spawn(move || {
         let excluded_patterns = match compile_exclude_patterns(&config) {
@@ -443,14 +456,7 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
             }
         }
 
-        loop {
-            let result = match rx.recv_timeout(Duration::from_secs(2)) {
-                Ok(result) => result,
-                Err(mpsc::RecvTimeoutError::Timeout) if library_watcher_is_current(generation) => {
-                    continue
-                }
-                Err(_) => break,
-            };
+        while let Ok(result) = rx.recv() {
             if !library_watcher_is_current(generation) {
                 break;
             }

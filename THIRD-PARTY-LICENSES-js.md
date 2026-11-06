@@ -8,7 +8,7 @@ _Regenerate with `npm run generate:third-party-licenses` inside the Nix developm
 
 ## npm Dependencies
 
-### @babel/helper-string-parser 7.29.11
+### @babel/helper-string-parser 7.29.13
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -41,40 +41,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/helper-string-parser 7.29.11
-
-- License: MIT
-- Authors: The Babel Team (https://babel.dev/team)
-- Source: https://github.com/babel/babel.git
-
-#### LICENSE
-
-```text
-MIT License
-
-Copyright (c) 2014-present Sebastian McKenzie and other contributors
-
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the
-"Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
-
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-```
-
-### @babel/helper-validator-identifier 7.29.7
+### @babel/helper-string-parser 7.29.13
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -140,7 +107,40 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### @babel/parser 7.29.11
+### @babel/helper-validator-identifier 7.29.7
+
+- License: MIT
+- Authors: The Babel Team (https://babel.dev/team)
+- Source: https://github.com/babel/babel.git
+
+#### LICENSE
+
+```text
+MIT License
+
+Copyright (c) 2014-present Sebastian McKenzie and other contributors
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+### @babel/parser 7.29.13
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -170,7 +170,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @babel/parser 7.29.11
+### @babel/parser 7.29.13
 
 - License: MIT
 - Authors: The Babel Team (https://babel.dev/team)
@@ -517,7 +517,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @lezer/common 1.5.4
+### @lezer/common 1.5.5
 
 - License: MIT
 - Authors: Marijn Haverbeke <marijn@haverbeke.berlin>
@@ -581,7 +581,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @lezer/lr 1.4.11
+### @lezer/lr 1.4.12
 
 - License: MIT
 - Authors: Marijn Haverbeke <marijn@haverbeke.berlin>
@@ -1358,7 +1358,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### @napi-rs/canvas 1.0.13
+### @napi-rs/canvas 1.1.0
 
 - License: MIT
 - Source: git+https://github.com/Brooooooklyn/canvas.git
@@ -1423,7 +1423,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### @ocavue/utils 1.9.0
+### @ocavue/utils 1.11.0
 
 - License: MIT
 - Authors: ocavue <ocavue@gmail.com>
@@ -1516,7 +1516,7 @@ PackageDownloadLocation: git+ssh://github.com/tauri-apps/tauri.git
 Creator: Person: Daniel Thompson-Yvetot
 ```
 
-### @tauri-apps/plugin-dialog 2.8.3
+### @tauri-apps/plugin-dialog 2.8.4
 
 - License: MIT OR Apache-2.0
 - Authors: Tauri Programme within The Commons Conservancy
@@ -1809,7 +1809,7 @@ _No local license or notice file was found in the installed package._
     SOFTWARE
 ```
 
-### @vue/compiler-core 3.5.44
+### @vue/compiler-core 3.5.45
 
 - License: MIT
 - Authors: Evan You
@@ -1841,7 +1841,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/compiler-dom 3.5.44
+### @vue/compiler-dom 3.5.45
 
 - License: MIT
 - Authors: Evan You
@@ -1873,7 +1873,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/compiler-sfc 3.5.44
+### @vue/compiler-sfc 3.5.45
 
 - License: MIT
 - Authors: Evan You
@@ -1905,7 +1905,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/compiler-ssr 3.5.44
+### @vue/compiler-ssr 3.5.45
 
 - License: MIT
 - Authors: Evan You
@@ -1937,7 +1937,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/reactivity 3.5.44
+### @vue/reactivity 3.5.45
 
 - License: MIT
 - Authors: Evan You
@@ -1969,7 +1969,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/runtime-core 3.5.44
+### @vue/runtime-core 3.5.45
 
 - License: MIT
 - Authors: Evan You
@@ -2001,7 +2001,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/runtime-dom 3.5.44
+### @vue/runtime-dom 3.5.45
 
 - License: MIT
 - Authors: Evan You
@@ -2033,7 +2033,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/server-renderer 3.5.44
+### @vue/server-renderer 3.5.45
 
 - License: MIT
 - Authors: Evan You
@@ -2065,7 +2065,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### @vue/shared 3.5.44
+### @vue/shared 3.5.45
 
 - License: MIT
 - Authors: Evan You
@@ -3123,34 +3123,30 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### event-emitter 0.3.5
+### event-emitter 0.3.7
 
-- License: MIT
+- License: ISC
 - Authors: Mariusz Nowak <medyk@medikoo.com> (http://www.medikoo.com/)
-- Source: git://github.com/medikoo/event-emitter.git
+- Source: git+https://github.com/medikoo/event-emitter.git
 
 #### LICENSE
 
 ```text
-Copyright (C) 2012-2015 Mariusz Nowak (www.medikoo.com)
+ISC License
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Copyright (c) 2012-2026, Mariusz Nowak, @medikoo, medikoo.com
 
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
+OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
 ```
 
 ### ext 1.7.0
@@ -4169,7 +4165,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### markdown-table 3.0.4
+### markdown-table 3.1.0
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -4441,7 +4437,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### mdast-util-gfm-table 2.0.0
+### mdast-util-gfm-table 2.0.1
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -4452,7 +4448,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```text
 (The MIT License)
 
-Copyright (c) 2020 Titus Wormer <tituswormer@gmail.com>
+Copyright (c) Titus Wormer <tituswormer@gmail.com>
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -4541,7 +4537,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### mdast-util-to-markdown 2.2.1
+### mdast-util-to-markdown 2.2.2
 
 - License: MIT
 - Authors: Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)
@@ -5753,7 +5749,7 @@ THE SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### pdfjs-dist 6.4.299
+### pdfjs-dist 6.5.438
 
 - License: Apache-2.0
 - Source: git+https://github.com/mozilla/pdf.js.git
@@ -5848,7 +5844,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.**
 ```
 
-### prosemirror-changeset 2.4.4
+### prosemirror-changeset 2.4.6
 
 - License: MIT
 - Source: git+https://code.haverbeke.berlin/prosemirror/prosemirror-changeset.git
@@ -6144,10 +6140,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### prosemirror-schema-list 1.5.1
+### prosemirror-schema-list 1.6.0
 
 - License: MIT
-- Source: git://github.com/prosemirror/prosemirror-schema-list.git
+- Source: git+https://code.haverbeke.berlin/prosemirror/prosemirror-schema-list.git
 
 #### LICENSE
 
@@ -6231,7 +6227,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### prosemirror-transform 1.12.4
+### prosemirror-transform 1.12.5
 
 - License: MIT
 - Source: git+https://code.haverbeke.berlin/prosemirror/prosemirror-transform.git
@@ -6260,7 +6256,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### prosemirror-view 1.42.8
+### prosemirror-view 1.42.9
 
 - License: MIT
 - Source: git+https://code.haverbeke.berlin/prosemirror/prosemirror-view.git
@@ -7551,7 +7547,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### vue 3.5.44
+### vue 3.5.45
 
 - License: MIT
 - Authors: Evan You

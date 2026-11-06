@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.9.4] - 2026-11-07
+## [0.9.5] - 2026-11-07
 
-Reading a large PDF holds less memory, and a PDF that hits a read error no longer freezes on the page you are looking at.
+Reading a large PDF holds less memory, and a PDF that hits a read error no longer freezes on the page you are looking at. It also carries everything that was prepared for 0.9.4, which was skipped (see below).
 
 ### Changed
 
@@ -21,7 +21,14 @@ Reading a large PDF holds less memory, and a PDF that hits a read error no longe
 
 - A PDF whose data could not be read for a moment, for example while a cloud-synced file was being updated, no longer leaves the viewer frozen. riida retries the read and, if it still fails, reopens the book once.
 - If a PDF is replaced on disk while it is open, riida now stops reading from it instead of mixing pages from the old and new versions.
+- The Linux, macOS and Windows release builds work again. They stopped resolving the app version after the workspace split, so the release workflow failed before building anything.
 - Resizing the window or changing a viewer setting while "余白をトリミングする" or the tilt correction is measuring pages no longer makes those pages permanently skip the correction, and no longer saves a wrong crop for the book.
+
+## [0.9.4] - 2026-11-07 (skipped)
+
+This version number was skipped. Its changes shipped in [0.9.5](#095---2026-11-07) instead.
+
+The 0.9.4 release build failed on all three platforms because `tauri-action` could not resolve the app version, so no 0.9.4 binaries exist. See [#39](https://github.com/zonuexe/riida/pull/39) for the version bump and [#40](https://github.com/zonuexe/riida/pull/40) for the release-build fix.
 
 ## [0.9.3] - 2026-11-02
 
@@ -529,8 +536,9 @@ Thanks to [@i999rri](https://github.com/i999rri), Windows builds work again star
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.9.4...HEAD
-[0.9.4]: https://github.com/zonuexe/riida/compare/v0.9.3...v0.9.4
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.9.5...HEAD
+[0.9.5]: https://github.com/zonuexe/riida/compare/v0.9.3...v0.9.5
+[0.9.4]: https://github.com/zonuexe/riida/pull/39
 [0.9.3]: https://github.com/zonuexe/riida/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/zonuexe/riida/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/zonuexe/riida/compare/v0.9.0...v0.9.1

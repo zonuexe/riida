@@ -2,7 +2,7 @@
 
 This file was generated from the production Rust dependencies used by riida. Dev-only crates are excluded.
 
-- Rust dependencies: 540
+- Rust dependencies: 538
 
 _Regenerate with `npm run generate:third-party-licenses` inside the Nix development shell._
 
@@ -63,7 +63,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### aes 0.9.3
+### aes 0.9.4
 
 - License: MIT OR Apache-2.0
 - Authors: RustCrypto Developers
@@ -327,7 +327,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### async-executor 1.14.0
+### async-executor 1.14.1
 
 - License: Apache-2.0 OR MIT
 - Authors: Stjepan Glavina <stjepang@gmail.com>, John Nunley <dev@notgull.net>
@@ -403,7 +403,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### async-lock 3.4.2
+### async-lock 3.5.0
 
 - License: Apache-2.0 OR MIT
 - Authors: Stjepan Glavina <stjepang@gmail.com>
@@ -1831,7 +1831,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### cc 1.10.0
+### cc 1.11.0
 
 - License: MIT OR Apache-2.0
 - Source: https://github.com/rust-lang/cc-rs
@@ -2739,7 +2739,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### crc32fast 1.5.3
+### crc32fast 1.5.4
 
 - License: MIT OR Apache-2.0
 - Authors: Sam Rijs <srijs@airpost.net>, Alex Crichton <alex@alexcrichton.com>
@@ -3923,7 +3923,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### ctutils 0.4.6
+### ctutils 0.4.8
 
 - License: Apache-2.0 OR MIT
 - Authors: RustCrypto Developers
@@ -5489,7 +5489,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### encoding_rs 0.8.42
+### encoding_rs 0.8.44
 
 - License: (Apache-2.0 OR MIT) AND BSD-3-Clause
 - Authors: Henri Sivonen <hsivonen@hsivonen.fi>
@@ -7529,7 +7529,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### globset 0.4.20
+### globset 0.4.21
 
 - License: Unlicense OR MIT
 - Authors: Andrew Gallant <jamslam@gmail.com>
@@ -9252,7 +9252,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### jiff 0.2.38
+### jiff 0.2.39
 
 - License: Unlicense OR MIT
 - Authors: Andrew Gallant <jamslam@gmail.com>
@@ -9292,7 +9292,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### jiff-core 0.1.1
+### jiff-core 0.1.2
 
 - License: Unlicense OR MIT
 - Authors: Andrew Gallant <jamslam@gmail.com>
@@ -9617,7 +9617,7 @@ SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### libbz2-rs-sys 0.2.5
+### libbz2-rs-sys 0.2.6
 
 - License: bzip2-1.0.6
 - Source: https://github.com/trifectatechfoundation/libbzip2-rs
@@ -10065,7 +10065,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### log 0.4.34
+### log 0.4.35
 
 - License: MIT OR Apache-2.0
 - Authors: The Rust Project Developers
@@ -10168,7 +10168,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### lzma-rust2 0.23.0
+### lzma-rust2 0.25.0
 
 - License: Apache-2.0
 - Source: https://github.com/hasenbanck/lzma-rust2/
@@ -10447,7 +10447,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### mime 0.3.17
+### mime 0.3.18
 
 - License: MIT OR Apache-2.0
 - Authors: Sean McArthur <sean@seanmonstar.com>
@@ -11070,7 +11070,7 @@ For these and/or other purposes and motivations, and without any expectation of 
      d. Affirmer understands and acknowledges that Creative Commons is not a party to this document and has no duty or obligation with respect to this CC0 or use of the Work.
 ```
 
-### notify-types 2.1.0
+### notify-types 2.2.0
 
 - License: MIT OR Apache-2.0
 - Authors: Daniel Faust <hessijames@gmail.com>
@@ -12071,7 +12071,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### pdfium-render 0.9.4
+### pdfium-render 0.9.5
 
 - License: MIT OR Apache-2.0
 - Authors: Alastair Carey <alastair@alastaircarey.com>
@@ -13819,7 +13819,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### rfd 0.16.1
+### rfd 0.17.2
 
 - License: MIT
 - Authors: Poly <marynczak.bartlomiej@gmail.com>
@@ -16476,7 +16476,7 @@ SOFTWARE.
 
 _No local license or notice file was found in the installed package._
 
-### tauri-plugin-dialog 2.8.3
+### tauri-plugin-dialog 2.8.4
 
 - License: Apache-2.0 OR MIT
 - Authors: Tauri Programme within The Commons Conservancy
@@ -17299,7 +17299,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### toml 1.1.8+spec-1.1.0
+### toml 1.2.0+spec-1.1.0
 
 - License: MIT OR Apache-2.0
 - Source: https://github.com/toml-rs/toml
@@ -17473,7 +17473,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### toml_edit 0.25.17+spec-1.1.0
+### toml_edit 0.25.18+spec-1.1.0
 
 - License: MIT OR Apache-2.0
 - Source: https://github.com/toml-rs/toml
@@ -17539,7 +17539,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### toml_writer 1.1.3+spec-1.1.0
+### toml_writer 1.2.0+spec-1.1.0
 
 - License: MIT OR Apache-2.0
 - Source: https://github.com/toml-rs/toml
@@ -18202,7 +18202,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### ureq 3.5.0
+### ureq 3.5.1
 
 - License: MIT OR Apache-2.0
 - Authors: Martin Algesten <martin@algesten.se>, Jacob Hoffman-Andrews <ureq@hoffman-andrews.com>
@@ -18238,7 +18238,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### ureq-proto 0.6.5
+### ureq-proto 0.7.1
 
 - License: MIT OR Apache-2.0
 - Authors: Martin Algesten <martin@algesten.se>
@@ -18332,6 +18332,46 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+### utf_types 1.0.0
+
+- License: Apache-2.0 OR MIT
+- Authors: Henri Sivonen <hsivonen@hsivonen.fi>
+- Source: https://github.com/hsivonen/utf_types
+
+#### LICENSE-APACHE
+
+_See the [full text of the Apache License 2.0](#apache-20)._
+
+#### LICENSE-MIT
+
+```text
+Copyright Mozilla Foundation
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
 ### utf16string 0.2.0
 
 - License: MIT OR Apache-2.0
@@ -18375,7 +18415,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### utf8_iter 1.0.4
+### utf8_iter 1.1.0
 
 - License: Apache-2.0 OR MIT
 - Authors: Henri Sivonen <hsivonen@hsivonen.fi>
@@ -19204,41 +19244,6 @@ _See the [full text of the Apache License 2.0](#apache-20)._
     SOFTWARE
 ```
 
-### windows_x86_64_msvc 0.53.1
-
-- License: MIT OR Apache-2.0
-- Source: https://github.com/microsoft/windows-rs
-
-#### license-apache-2.0
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### license-mit
-
-```text
-    MIT License
-
-    Copyright (c) Microsoft Corporation.
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-
-    The above copyright notice and this permission notice shall be included in all
-    copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-    SOFTWARE
-```
-
 ### windows-collections 0.3.2
 
 - License: MIT OR Apache-2.0
@@ -19590,42 +19595,6 @@ _See the [full text of the Apache License 2.0](#apache-20)._
     SOFTWARE
 ```
 
-### windows-sys 0.60.2
-
-- License: MIT OR Apache-2.0
-- Authors: Microsoft
-- Source: https://github.com/microsoft/windows-rs
-
-#### license-apache-2.0
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### license-mit
-
-```text
-    MIT License
-
-    Copyright (c) Microsoft Corporation.
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-
-    The above copyright notice and this permission notice shall be included in all
-    copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-    SOFTWARE
-```
-
 ### windows-sys 0.61.2
 
 - License: MIT OR Apache-2.0
@@ -19665,41 +19634,6 @@ _See the [full text of the Apache License 2.0](#apache-20)._
 
 - License: MIT OR Apache-2.0
 - Authors: Microsoft
-- Source: https://github.com/microsoft/windows-rs
-
-#### license-apache-2.0
-
-_See the [full text of the Apache License 2.0](#apache-20)._
-
-#### license-mit
-
-```text
-    MIT License
-
-    Copyright (c) Microsoft Corporation.
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-
-    The above copyright notice and this permission notice shall be included in all
-    copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-    SOFTWARE
-```
-
-### windows-targets 0.53.5
-
-- License: MIT OR Apache-2.0
 - Source: https://github.com/microsoft/windows-rs
 
 #### license-apache-2.0
@@ -19830,7 +19764,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-### winnow 1.0.4
+### winnow 1.0.5
 
 - License: MIT
 - Source: https://github.com/winnow-rs/winnow
@@ -20074,7 +20008,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### xattr 1.6.1
+### xattr 1.7.0
 
 - License: MIT OR Apache-2.0
 - Authors: Steven Allen <steven@stebalien.com>
@@ -20336,7 +20270,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### zcheapstr 1.1.0
+### zcheapstr 1.2.0
 
 - License: MIT
 - Authors: Zeeshan Ali Khan <zeeshanak@gnome.org>
@@ -20765,7 +20699,7 @@ Portions of ICU4X may have been adapted from ICU4C and/or ICU4J.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 ```
 
-### zip 9.1.2
+### zip 9.4.1
 
 - License: MIT
 - Authors: Mathijs van de Nes <git@mathijs.vd-nes.nl>, Marli Frost <marli@frost.red>, Ryan Levick <ryan.levick@gmail.com>, Chris Hennick <hennickc@amazon.com>

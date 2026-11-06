@@ -402,26 +402,31 @@ fn library_watcher_is_current(generation: u64) -> bool {
 
 fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String> {
     // Retire the previous watcher even when this config has nothing to watch.
-    let generation =
-        LIBRARY_WATCHER_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+    let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
 
-    if let Ok(mut wake) = LIBRARY_WATCHER_WAKE.lock() {
-        if let Some(previous) = wake.take() {
+    // Bump the generation, retire the previous thread and install this one's
+    // wake-up handle in a single critical section, so overlapping calls cannot
+    // retire each other's thread or strand an old one.
+    let generation = {
+        let mut wake = LIBRARY_WATCHER_WAKE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let generation =
+            LIBRARY_WATCHER_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        if let Some(previous) = wake.replace(tx.clone()) {
             let _ = previous.send(Err(notify::Error::generic("library watcher retired")));
         }
-    }
+        generation
+    };
 
+    // Nothing to watch: the previous watcher is retired above, and this
+    // call's handle is dropped with `tx`/`rx`.
     if config
         .library_roots
         .iter()
         .all(|root| !Path::new(root).exists())
     {
         return Ok(());
-    }
-
-    let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
-    if let Ok(mut wake) = LIBRARY_WATCHER_WAKE.lock() {
-        *wake = Some(tx.clone());
     }
 
     thread::spawn(move || {
@@ -466,6 +471,12 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
                     thread::sleep(Duration::from_millis(750));
 
                     while rx.try_recv().is_ok() {}
+
+                    // The drain may have swallowed the retire message; the
+                    // generation is bumped before it is sent, so it shows here.
+                    if !library_watcher_is_current(generation) {
+                        break;
+                    }
 
                     if let Err(error) = emit_library_snapshot(&app, &config) {
                         let _ = app.emit("library-watch-error", error);

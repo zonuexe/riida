@@ -35,7 +35,7 @@ Update these files together:
 - `src-tauri/Cargo.toml`
 - `src-tauri/Cargo.lock`
 - `src-tauri/tauri.conf.json`
-- `src/main.ts`
+- `src/app/about.ts`
 
 The Rust version lives once, in `[workspace.package]` of
 `src-tauri/Cargo.toml`; both `riida` and `riida-core` inherit it.

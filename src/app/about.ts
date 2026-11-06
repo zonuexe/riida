@@ -4,7 +4,7 @@ import { getName, getVersion } from "@tauri-apps/api/app";
 import { viewerState } from "./state";
 
 let cachedAppName = "riida";
-let cachedAppVersion = "0.9.4";
+let cachedAppVersion = "0.9.5";
 const buildDate = __BUILD_DATE__;
 let cachedLicenseText = "Loading license text...";
 let cachedThirdPartyRustText = "Loading Rust notices...";

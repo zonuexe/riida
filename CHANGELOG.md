@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-11-07
+
+Reading a large PDF holds less memory, and a PDF that hits a read error no longer freezes on the page you are looking at.
+
+### Changed
+
+- Large PDFs give back memory sooner. Each page's decoded images are released as soon as the page is drawn, and a PDF is fully released when you leave it, so a long scanned book no longer keeps hundreds of megabytes while you read the next one.
+- riida no longer wakes up every two seconds while it sits idle in the library, a PDF or an EPUB. The wake-up only existed to notice that the library folder watcher had been replaced.
+- Updated the bundled Rust and npm dependencies, including PDF.js 6.5.
+
+### Fixed
+
+- A PDF whose data could not be read for a moment, for example while a cloud-synced file was being updated, no longer leaves the viewer frozen. riida retries the read and, if it still fails, reopens the book once.
+- If a PDF is replaced on disk while it is open, riida now stops reading from it instead of mixing pages from the old and new versions.
+- Resizing the window or changing a viewer setting while "余白をトリミングする" or the tilt correction is measuring pages no longer makes those pages permanently skip the correction, and no longer saves a wrong crop for the book.
+
 ## [0.9.3] - 2026-11-02
 
 Getting started no longer begins in Settings: a new welcome screen takes the folder your ebooks are in, dropped straight into the window.
@@ -513,7 +529,8 @@ Thanks to [@i999rri](https://github.com/i999rri), Windows builds work again star
 
 - Reading progress counters and page-tracking UI were removed in favor of position restore only.
 
-[Unreleased]: https://github.com/zonuexe/riida/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/zonuexe/riida/compare/v0.9.4...HEAD
+[0.9.4]: https://github.com/zonuexe/riida/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/zonuexe/riida/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/zonuexe/riida/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/zonuexe/riida/compare/v0.9.0...v0.9.1

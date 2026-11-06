@@ -3888,7 +3888,7 @@ dependencies = [
 
 [[package]]
 name = "riida"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "directories",
  "notify",
@@ -3908,7 +3908,7 @@ dependencies = [
 
 [[package]]
 name = "riida-core"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "globset",
  "lindera",

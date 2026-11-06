@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createPdfRangeTransport,
   fetchByteRange,
+  parseContentRangeStart,
+  PdfRangeSourceChangedError,
   parseContentRangeTotal,
   PDF_RANGE_MAX_BYTES,
   probePdfRangeSource,
@@ -65,6 +67,17 @@ describe("parseContentRangeTotal", () => {
 
   it("rejects a zero total", () => {
     expect(parseContentRangeTotal("bytes 0-0/0")).toBeNull();
+  });
+});
+
+describe("parseContentRangeStart", () => {
+  it("reads the first offset and the total", () => {
+    expect(parseContentRangeStart("bytes 64-127/4096")).toEqual({ first: 64, total: 4096 });
+  });
+
+  it("rejects what is not a served range", () => {
+    expect(parseContentRangeStart("bytes */4096")).toBeNull();
+    expect(parseContentRangeStart(null)).toBeNull();
   });
 });
 
@@ -211,6 +224,37 @@ describe("fetchByteRange", () => {
     await expect(fetchByteRange("u", 0, 8, fetchImpl)).rejects.toThrow("empty response");
   });
 
+  it("refuses an error response instead of copying its body into the PDF", async () => {
+    const fetchImpl: FetchLike = async () => rangeResponse(new Uint8Array(8).fill(9), null, 404);
+
+    await expect(fetchByteRange("u", 0, 8, fetchImpl)).rejects.toThrow("unexpected status 404");
+  });
+
+  it("refuses a range that does not start where it was asked to", async () => {
+    const fetchImpl: FetchLike = async () => rangeResponse(new Uint8Array(8), "bytes 16-23/4096");
+
+    await expect(fetchByteRange("u", 0, 8, fetchImpl, undefined, 4096)).rejects.toBeInstanceOf(
+      PdfRangeSourceChangedError,
+    );
+  });
+
+  it("refuses bytes from a file whose size changed since it was opened", async () => {
+    const fetchImpl: FetchLike = async () => rangeResponse(new Uint8Array(8), "bytes 0-7/5000");
+
+    await expect(fetchByteRange("u", 0, 8, fetchImpl, undefined, 4096)).rejects.toBeInstanceOf(
+      PdfRangeSourceChangedError,
+    );
+    await expect(fetchByteRange("u", 0, 8, fetchImpl)).resolves.toHaveLength(8);
+  });
+
+  it("refuses a whole-file answer of a different size", async () => {
+    const fetchImpl: FetchLike = async () => rangeResponse(new Uint8Array(20), null, 200);
+
+    await expect(fetchByteRange("u", 4, 8, fetchImpl, undefined, 4096)).rejects.toBeInstanceOf(
+      PdfRangeSourceChangedError,
+    );
+  });
+
   it("makes no request for an empty range", async () => {
     const fetchImpl = vi.fn<FetchLike>(async () => rangeResponse(new Uint8Array(1), null));
 
@@ -255,6 +299,63 @@ describe("createPdfRangeTransport", () => {
     await vi.waitFor(() => expect(warn).toHaveBeenCalled());
 
     expect(transport.received).toHaveLength(0);
+    warn.mockRestore();
+  });
+
+  it("retries a transient failure and then delivers the range", async () => {
+    let calls = 0;
+    const fetchImpl: FetchLike = async () => {
+      calls += 1;
+      if (calls < 3) throw new Error("flaky");
+      return rangeResponse(new Uint8Array(64).fill(5), "bytes 0-63/4096");
+    };
+    const onFailure = vi.fn<(error: unknown) => void>();
+    const transport = createPdfRangeTransport(FakeTransport, "u", source, fetchImpl, {
+      retryDelayMs: 1,
+      onFailure,
+    });
+
+    transport.requestDataRange(0, 64);
+    await vi.waitFor(() => expect(transport.received).toHaveLength(1));
+
+    expect(calls).toBe(3);
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("calls onFailure once after the attempts run out", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchImpl = vi.fn<FetchLike>(async () => {
+      throw new Error("down");
+    });
+    const onFailure = vi.fn<(error: unknown) => void>();
+    const transport = createPdfRangeTransport(FakeTransport, "u", source, fetchImpl, {
+      attempts: 2,
+      retryDelayMs: 1,
+      onFailure,
+    });
+
+    transport.requestDataRange(0, 64);
+    await vi.waitFor(() => expect(onFailure).toHaveBeenCalledTimes(1));
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+
+  it("does not retry when the file changed under the reader", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchImpl = vi.fn<FetchLike>(async () =>
+      rangeResponse(new Uint8Array(64), "bytes 0-63/9999"),
+    );
+    const onFailure = vi.fn<(error: unknown) => void>();
+    const transport = createPdfRangeTransport(FakeTransport, "u", source, fetchImpl, {
+      retryDelayMs: 1,
+      onFailure,
+    });
+
+    transport.requestDataRange(0, 64);
+    await vi.waitFor(() => expect(onFailure).toHaveBeenCalledTimes(1));
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });
 

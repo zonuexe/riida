@@ -81,6 +81,25 @@ export function parseContentRangeTotal(header: string | null | undefined): numbe
   return Number.isSafeInteger(total) && total > 0 ? total : null;
 }
 
+/** First byte offset and total from a served `Content-Range`, or `null`. */
+export function parseContentRangeStart(
+  header: string | null | undefined,
+): { first: number; total: number } | null {
+  const match = /^bytes\s+(\d+)-(\d+)\/(\d+)$/.exec((header ?? "").trim());
+  if (!match) {
+    return null;
+  }
+  const first = Number(match[1]);
+  const total = Number(match[3]);
+  return Number.isSafeInteger(first) && Number.isSafeInteger(total) ? { first, total } : null;
+}
+
+/**
+ * The bytes on offer are no longer the document PDF.js started reading: the
+ * file was replaced or rewritten while it was open. Retrying cannot help.
+ */
+export class PdfRangeSourceChangedError extends Error {}
+
 /** The `Range` header value for PDF.js's half-open `[begin, end)` request. */
 export function rangeHeaderValue(begin: number, end: number): string {
   return `bytes=${begin}-${Math.max(end - 1, begin)}`;
@@ -141,6 +160,7 @@ export async function fetchByteRange(
   end: number,
   fetchImpl: FetchLike,
   signal?: AbortSignal,
+  expectedTotal?: number,
 ): Promise<Uint8Array> {
   const total = Math.max(end - begin, 0);
   const buffer = new Uint8Array(total);
@@ -152,8 +172,31 @@ export async function fetchByteRange(
       headers: { Range: rangeHeaderValue(from, to) },
       signal,
     });
+    // Only a served range or a whole-file answer carries document bytes; an
+    // error page must never be copied into the PDF buffer.
+    if (response.status !== 200 && response.status !== 206) {
+      throw new Error(`unexpected status ${response.status} for bytes ${from}-${to - 1}`);
+    }
+    if (response.status === 206) {
+      // The document is read lazily for as long as it is open, so check that
+      // this is still the same file and the same extent that was asked for.
+      const served = parseContentRangeStart(response.headers.get("content-range"));
+      if (served && served.first !== from) {
+        throw new PdfRangeSourceChangedError(`range starts at ${served.first}, asked for ${from}`);
+      }
+      if (served && expectedTotal !== undefined && served.total !== expectedTotal) {
+        throw new PdfRangeSourceChangedError(
+          `document is now ${served.total} bytes, was ${expectedTotal}`,
+        );
+      }
+    }
     const part = new Uint8Array(await response.arrayBuffer());
     if (response.status === 200) {
+      if (expectedTotal !== undefined && part.length !== expectedTotal) {
+        throw new PdfRangeSourceChangedError(
+          `document is now ${part.length} bytes, was ${expectedTotal}`,
+        );
+      }
       // The range was ignored and the whole file came back, so the body starts
       // at 0 rather than at `from`; take the slice that was asked for.
       return part.slice(begin, end);
@@ -177,12 +220,29 @@ export async function fetchByteRange(
  * tracked so `abort()` — PDF.js closing the document — cancels the ones still
  * in flight instead of leaving them to resolve into a dead transport.
  */
+export type PdfRangeTransportOptions = {
+  /** Attempts per range before giving up; transient read errors are retried. */
+  attempts?: number;
+  /** Base delay between attempts; attempt `n` waits `n * retryDelayMs`. */
+  retryDelayMs?: number;
+  /**
+   * Called once when a range cannot be read. PDF.js has no way to be told, so
+   * it keeps waiting for that range; the caller must tear the document down or
+   * re-open it, otherwise rendering stalls for good.
+   */
+  onFailure?: (error: unknown) => void;
+};
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 export function createPdfRangeTransport<T extends PdfRangeTransportLike>(
   Transport: PdfRangeTransportConstructor<T>,
   url: string,
   source: PdfRangeSource,
   fetchImpl: FetchLike,
+  options: PdfRangeTransportOptions = {},
 ): T {
+  const { attempts = 3, retryDelayMs = 250, onFailure } = options;
   const transport = new Transport(source.length, source.initialChunk, true);
   const pending = new Set<AbortController>();
   let aborted = false;
@@ -195,17 +255,38 @@ export function createPdfRangeTransport<T extends PdfRangeTransportLike>(
     pending.add(controller);
     void (async () => {
       try {
-        const chunk = await fetchByteRange(url, begin, end, fetchImpl, controller.signal);
-        if (!aborted) {
-          transport.onDataRange(begin, chunk);
+        for (let attempt = 1; ; attempt += 1) {
+          try {
+            const chunk = await fetchByteRange(
+              url,
+              begin,
+              end,
+              fetchImpl,
+              controller.signal,
+              source.length,
+            );
+            if (!aborted) {
+              transport.onDataRange(begin, chunk);
+            }
+            return;
+          } catch (error) {
+            if (aborted) {
+              return;
+            }
+            if (error instanceof PdfRangeSourceChangedError || attempt >= attempts) {
+              throw error;
+            }
+            await sleep(attempt * retryDelayMs);
+            if (aborted) {
+              return;
+            }
+          }
         }
       } catch (error) {
-        // PDF.js has no way to be told a range failed; it waits on the reader
-        // for this range, so the document stalls rather than showing a wrong
-        // page. Report it so the cause is visible in the console.
-        if (!aborted) {
-          console.warn(`[riida] PDF range ${begin}-${end} failed:`, error);
-        }
+        // PDF.js waits on the reader for this range and cannot be told it
+        // failed, so the document would stall rather than show a wrong page.
+        console.warn(`[riida] PDF range ${begin}-${end} failed:`, error);
+        onFailure?.(error);
       } finally {
         pending.delete(controller);
       }

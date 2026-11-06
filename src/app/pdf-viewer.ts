@@ -37,6 +37,20 @@ import {
 const pdfPageAnalyzer = createCanvasPdfPageAnalyzer();
 
 let pdfRenderToken = 0;
+// A range that cannot be read leaves PDF.js waiting forever, so the document is
+// re-opened once (a fresh transport and a fresh read of the file). The guard
+// keeps a file that stays unreadable from re-opening in a loop.
+const RANGE_RECOVERY_COOLDOWN_MS = 30_000;
+let lastRangeRecoveryAt = -Infinity;
+
+function recoverFromRangeFailure(token: number): void {
+  const now = performance.now();
+  if (token !== pdfRenderToken || now - lastRangeRecoveryAt < RANGE_RECOVERY_COOLDOWN_MS) {
+    return;
+  }
+  lastRangeRecoveryAt = now;
+  void renderCurrentPage();
+}
 
 // The open document's PDF.js loading task. Destroying it is the only way to
 // give back the worker, the file bytes it holds and every decoded page image;
@@ -617,7 +631,11 @@ export async function renderPdfJsBook(
     }
     const documentTask = getDocument({
       ...(rangeSource
-        ? { range: createPdfRangeTransport(PDFDataRangeTransport, sourceUrl, rangeSource, fetch) }
+        ? {
+            range: createPdfRangeTransport(PDFDataRangeTransport, sourceUrl, rangeSource, fetch, {
+              onFailure: () => recoverFromRangeFailure(currentToken),
+            }),
+          }
         : { url: sourceUrl }),
       disableAutoFetch: true,
       cMapUrl: "/pdfjs/cmaps/node_modules/pdfjs-dist/cmaps/",

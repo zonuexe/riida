@@ -122,6 +122,18 @@ export type PdfPageAnalysis = {
   height: number;
 };
 
+/**
+ * Whether a failed sample render was cut short by teardown (PDF.js cancels its
+ * render tasks and rejects requests when the document is destroyed) rather than
+ * by the page itself being unrenderable.
+ */
+function isAbandonedRenderError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return error.name === "RenderingCancelledException" || /destroyed/i.test(error.message);
+}
+
 const EMPTY_ANALYSIS: PdfPageAnalysis = { angleDeg: null, inkBox: null, width: 0, height: 0 };
 
 export function analyzePageSample(image: GrayImage): PdfPageAnalysis {
@@ -160,15 +172,21 @@ export class PdfPageAnalyzer {
       this.surface = this.createSurface();
     }
     let analysis = EMPTY_ANALYSIS;
+    let abandoned = false;
     if (this.surface) {
       try {
         analysis = analyzePageSample(await renderPageSample(page, this.surface));
       } catch (error) {
-        console.warn("[riida] page analysis failed:", error);
+        abandoned = isAbandonedRenderError(error);
+        if (!abandoned) {
+          console.warn("[riida] page analysis failed:", error);
+        }
       }
     }
-    // Guard against a different document having been opened meanwhile.
-    if (this.filePath === filePath) {
+    // Guard against a different document having been opened meanwhile. A
+    // render that was cancelled or whose document was destroyed measured
+    // nothing about the page, so it must not be remembered as unmeasurable.
+    if (this.filePath === filePath && !abandoned) {
       this.pages.set(pageNumber, analysis);
     }
     return analysis;

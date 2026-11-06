@@ -137,6 +137,37 @@ describe("PdfPageAnalyzer", () => {
   });
 });
 
+describe("PdfPageAnalyzer teardown", () => {
+  it("does not remember a render cut short by teardown as unmeasurable", async () => {
+    const analyzer = new PdfPageAnalyzer(() =>
+      fakeSurface((width, height) => horizontalTextPage(1, width, height)),
+    );
+    const cancelled = Object.assign(new Error("Rendering cancelled"), {
+      name: "RenderingCancelledException",
+    });
+    const cancelledPage = fakePage(1000, 1400, () => Promise.reject(cancelled));
+    expect((await analyzer.analyze(cancelledPage, "scan.pdf", 1)).inkBox).toBeNull();
+
+    const livePage = fakePage(1000, 1400);
+    await analyzer.analyze(livePage, "scan.pdf", 1);
+    expect(livePage.renders).toHaveLength(1);
+  });
+
+  it("does not remember a page request rejected by a destroyed document", async () => {
+    const analyzer = new PdfPageAnalyzer(() =>
+      fakeSurface((width, height) => horizontalTextPage(1, width, height)),
+    );
+    const destroyedPage = fakePage(1000, 1400, () =>
+      Promise.reject(new Error("Worker was destroyed")),
+    );
+    await analyzer.analyze(destroyedPage, "scan.pdf", 1);
+
+    const livePage = fakePage(1000, 1400);
+    await analyzer.analyze(livePage, "scan.pdf", 1);
+    expect(livePage.renders).toHaveLength(1);
+  });
+});
+
 describe("resolvePdfTrimBoxes", () => {
   function memoryStorage(): TrimStorage & { map: Map<string, string> } {
     const map = new Map<string, string>();

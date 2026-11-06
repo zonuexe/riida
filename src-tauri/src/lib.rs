@@ -62,6 +62,10 @@ static PDFIUM_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
 // watcher instead of leaving the old one rescanning with a stale root list.
 static LIBRARY_WATCHER_GENERATION: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(0);
+// Wake-up handle of the running watcher thread. The thread blocks on its event
+// channel with no timeout (an idle app must not wake up periodically), so
+// retiring it means sending it a message rather than waiting for a poll.
+static LIBRARY_WATCHER_WAKE: Mutex<Option<mpsc::Sender<notify::Result<Event>>>> = Mutex::new(None);
 
 fn should_allow_internal_navigation(url: &Url) -> bool {
     match url.scheme() {
@@ -398,9 +402,25 @@ fn library_watcher_is_current(generation: u64) -> bool {
 
 fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String> {
     // Retire the previous watcher even when this config has nothing to watch.
-    let generation =
-        LIBRARY_WATCHER_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+    let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
 
+    // Bump the generation, retire the previous thread and install this one's
+    // wake-up handle in a single critical section, so overlapping calls cannot
+    // retire each other's thread or strand an old one.
+    let generation = {
+        let mut wake = LIBRARY_WATCHER_WAKE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let generation =
+            LIBRARY_WATCHER_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        if let Some(previous) = wake.replace(tx.clone()) {
+            let _ = previous.send(Err(notify::Error::generic("library watcher retired")));
+        }
+        generation
+    };
+
+    // Nothing to watch: the previous watcher is retired above, and this
+    // call's handle is dropped with `tx`/`rx`.
     if config
         .library_roots
         .iter()
@@ -408,8 +428,6 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
     {
         return Ok(());
     }
-
-    let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
 
     thread::spawn(move || {
         let excluded_patterns = match compile_exclude_patterns(&config) {
@@ -443,14 +461,7 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
             }
         }
 
-        loop {
-            let result = match rx.recv_timeout(Duration::from_secs(2)) {
-                Ok(result) => result,
-                Err(mpsc::RecvTimeoutError::Timeout) if library_watcher_is_current(generation) => {
-                    continue
-                }
-                Err(_) => break,
-            };
+        while let Ok(result) = rx.recv() {
             if !library_watcher_is_current(generation) {
                 break;
             }
@@ -460,6 +471,12 @@ fn start_library_watcher(app: AppHandle, config: AppConfig) -> Result<(), String
                     thread::sleep(Duration::from_millis(750));
 
                     while rx.try_recv().is_ok() {}
+
+                    // The drain may have swallowed the retire message; the
+                    // generation is bumped before it is sent, so it shows here.
+                    if !library_watcher_is_current(generation) {
+                        break;
+                    }
 
                     if let Err(error) = emit_library_snapshot(&app, &config) {
                         let _ = app.emit("library-watch-error", error);
